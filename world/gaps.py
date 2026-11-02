@@ -232,10 +232,15 @@ def _skeleton(cid, scene, subject, since, until, frame_id=None):
 
         # Legacy fallback: released stories may contain fired scheduled rows
         # from before world_events had a writer. Do not duplicate rows already
-        # promoted into the spine.
+        # promoted into the spine. The window is in STORY SECONDS, and an
+        # `authored_event` row's `due_at` is a TURN NUMBER
+        # (`story.authored_events`), so that kind is never windowed here
+        # (world_offscreen_time F16, audit 2026-11-01: turn 5 read as five
+        # seconds into the story, saved only by the owner filters below).
         for row in q(
             "SELECT event_id,kind,location_id,payload FROM scheduled_events "
-            "WHERE chat_id=? AND status='fired' AND due_at>? AND due_at<=? "
+            "WHERE chat_id=? AND status='fired' AND kind != 'authored_event' "
+            "AND due_at>? AND due_at<=? "
             "ORDER BY due_at", (cid, since_seconds, now_seconds),
         ):
             if str(row["event_id"]) in promoted_sources:

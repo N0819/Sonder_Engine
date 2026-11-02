@@ -774,9 +774,12 @@ def test_the_towns_rows_carry_what_only_the_stage_knows(story, monkeypatch):
 
 
 def test_company_reaches_each_observer_as_its_doing_never_its_why():
-    """Two minds in one room -- or at one off-map label -- over time that
-    overlaps each receive the other's `doing`, named as the OBSERVER knows
-    them; never the other's `why`; and nobody reaches a mind asleep."""
+    """Two minds in one room -- or at one off-map label, each naming the
+    other in its own `with` -- over time that overlaps each receive the
+    other's `doing`, named as the OBSERVER knows them; never the other's
+    `why`; and nobody reaches a mind asleep. (The label alone was enough
+    until 2026-11-01; world_offscreen_time F1 measured two minds each "home"
+    told each other's doings, so D and E now name each other.)"""
     def row(start, end, room=None, away=None, doing="", why="", asleep=False):
         return {"from_s": start, "until_s": end, "room": room, "away": away,
                 "where_text": room or away or "", "doing": doing, "why": why,
@@ -787,8 +790,10 @@ def test_company_reaches_each_observer_as_its_doing_never_its_why():
             "B": [row(50, 150, room="kitchen", doing="reads the log",
                       why="looking for the March entry")],
             "C": [row(0, 100, room="hall", doing="sweeps")],
-            "D": [row(0, 100, away="The Harbour Pub", doing="drinks")],
-            "E": [row(0, 100, away="the harbour pub", doing="listens"),
+            "D": [dict(row(0, 100, away="The Harbour Pub", doing="drinks"),
+                       **{"with": ["E"]})],
+            "E": [dict(row(0, 100, away="the harbour pub", doing="listens"),
+                       **{"with": ["D"]}),
                   row(100, 200, room="kitchen", asleep=True, doing="sleeps")]}
     known = {"A": {"B"}, "B": set(), "D": {"E"}, "E": set()}
     itin.share_company(logs, lambda o, other: other if other in known.get(o, ())
@@ -837,12 +842,15 @@ def test_the_stage_shares_company_by_each_observers_recognition(story, monkeypat
     by_elias = [s for s in seen_by_nell if s["who"] == ELIAS]
     assert by_elias and all("Pell" not in s["doing"] for s in by_elias)
     assert all("have it out" not in json.dumps(r["seen"]) for r in nell)
-    # At the harbour pub, an off-map label, Pell and Nell are strangers.
+    # At the harbour pub, an off-map label, Pell and Nell are strangers who
+    # never named each other: the same words for a place the world does not
+    # hold are no evidence they stood in one place (world_offscreen_time F1,
+    # 2026-11-01 -- this asserted the label rule, under which two minds each
+    # "home" were told each other's doings).
     pub = [s for r in nell if r["away"] == "the harbour pub" for s in r["seen"]]
-    assert pub and all(s["who"] != PELL for s in pub)
-    assert any(s["doing"] == "plays dominoes" for s in pub)
-    assert any(s["doing"] == "nurses a cider" and s["who"] != NELL
-               for r in pell for s in r["seen"])
+    assert pub == []
+    assert not any(s["doing"] == "nurses a cider"
+                   for r in pell for s in r["seen"])
     # The player is not placed by this account, so "with Rhona" is Elias's
     # own side of it: she is in nobody's log.
     assert all(s["who"] != PLAYER for r in elias for s in r["seen"])

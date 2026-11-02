@@ -41,6 +41,7 @@ from __future__ import annotations
 
 import re
 
+import language_runtime as _lr
 from world.spatial import contacts_of, room_of, scene_names_body
 
 # The absolute ceiling on world-contributed comfort, shared with
@@ -119,6 +120,88 @@ _POSTURE_MANNERS = frozenset({"lie", "sit"})
 _SUPPORT_MANNERS = _SUPPORTING_CONTACT_MANNERS | _POSTURE_MANNERS
 
 
+# --- the story's own words ---------------------------------------------------
+#
+# THE TEXT THESE SETS ARE READ AGAINST IS AUTHORED PROSE IN THE STORY'S
+# LANGUAGE -- entity names and descriptions, anchor descriptions, a pose's
+# free-text posture -- so the tokens are the script-aware words of
+# `language_runtime.fold_words`, and each closed category takes the story
+# pack's words for it (`linguistics["world.comfort"][<SET NAME>]`) BESIDE the
+# engine's own, never in their place: an imported card's "bed" is still a bed
+# in a Japanese story. The tokenizer this replaces, `re.split("[^a-z0-9]+")`,
+# DELETED every letter outside ASCII: a body lying (`posture: "横になっている"`)
+# on an entity named 布団 scored `(0.0, "")` and no rest where its English
+# twin scored `(0.3, "bed")` -- no comfort floor, no passive stamina recovery
+# (`survival.tick_vitals`), no `here_affords` in a Japanese story -- and
+# "café" read as "caf" (world_misc_causal F12, audit 2026-11-01). A pack that
+# carries no table for a category leaves the engine's set as it was.
+
+
+#: (story language, module, set name, engine set) -> the merged set. A pack
+#: miss is an exception inside `linguistic` and costs ~10 us, and these sets
+#: are asked for per body per beat, so the answer is kept per language and
+#: dropped whenever the packs reload (`on_packs_reloaded`).
+_VOCABULARY: dict = {}
+
+
+def _forget_vocabulary():
+    _VOCABULARY.clear()
+
+
+def vocabulary(module, name, base):
+    """`base` -- the engine's own words for one closed category -- with the
+    active story pack's words for it beside them
+    (`linguistics[module][name]`, folded as tokens are), when the pack has
+    them."""
+    key = (_lr.current_language_id.get(), module, name, base)
+    cached = _VOCABULARY.get(key)
+    if cached is not None:
+        return cached
+    _lr.on_packs_reloaded(_forget_vocabulary)
+    try:
+        extra = _lr.linguistic(module, name)
+    except _lr.LanguagePackError:
+        extra = ()
+    if isinstance(extra, str):
+        extra = (extra,)
+    words = frozenset(_lr.fold_text(word).strip() for word in extra or ()
+                      if str(word or "").strip())
+    merged = (base | words) if words else base
+    _VOCABULARY[key] = merged
+    return merged
+
+
+def _vocab(name, base):
+    return vocabulary("world.comfort", name, base)
+
+
+#: vocabulary -> its words written in a script that does not space its
+#: words, found once per set rather than once per question.
+_UNSPACED_WORDS: dict = {}
+
+
+def _unspaced_words(vocab):
+    found = _UNSPACED_WORDS.get(vocab)
+    if found is None:
+        if len(_UNSPACED_WORDS) >= 512:
+            _UNSPACED_WORDS.clear()
+        found = _UNSPACED_WORDS[vocab] = tuple(
+            word for word in vocab if _lr.UNSPACED_SCRIPT.search(word))
+    return found
+
+
+def contains_word(tokens, vocab):
+    """Does a token list (`fold_words`' output for one field) hold a word of
+    `vocab`? Exactly, token for token -- "fur" never fires on "furnace" --
+    and, for a word written in a script that does not space its words, as a
+    whole word inside the run it is written in (`find_names`: 布団 inside
+    羽毛布団), since such a script writes compounds as one run."""
+    if any(t in vocab for t in tokens):
+        return True
+    unspaced = _unspaced_words(frozenset(vocab))
+    return bool(unspaced) and bool(_lr.find_names("".join(tokens), unspaced))
+
+
 def _tokens(*texts):
     """One flat token stream. For membership questions only."""
     out = []
@@ -127,8 +210,17 @@ def _tokens(*texts):
     return out
 
 
+#: `fold_words` on ASCII input is exactly this split (`language_runtime`
+#: pins it), and the split is several times cheaper than the per-character
+#: walk an unspaced script needs.
+_ASCII_WORDS = re.compile(r"[a-z0-9]+")
+
+
 def _field_tokens(text):
-    return [t for t in re.split(r"[^a-z0-9]+", str(text or "").casefold()) if t]
+    text = str(text or "")
+    if text.isascii():
+        return _ASCII_WORDS.findall(text.casefold())
+    return _lr.fold_words(text)
 
 
 def _fields(*texts):
@@ -146,14 +238,18 @@ def _fields(*texts):
 
 
 def _soft(fields):
-    return any(t in SOFT_SUPPORT_TOKENS for field in fields for t in field)
+    vocab = _vocab("SOFT_SUPPORT_TOKENS", SOFT_SUPPORT_TOKENS)
+    return any(contains_word(field, vocab) for field in fields)
 
 
 def _warm(fields):
+    vocab = _vocab("WARMTH_TOKENS", WARMTH_TOKENS)
+    qualifiers = _vocab("WARM_QUALIFIERS", _WARM_QUALIFIERS)
+    media = _vocab("WARM_MEDIA", _WARM_MEDIA)
     for field in fields:
-        if any(t in WARMTH_TOKENS for t in field):
+        if contains_word(field, vocab):
             return True
-        if any(a in _WARM_QUALIFIERS and b in _WARM_MEDIA
+        if any(a in qualifiers and b in media
                for a, b in zip(field, field[1:])):
             return True
     return False
@@ -215,10 +311,12 @@ def _posture_of(scene, name):
     pose = next((value for key, value in poses.items()
                  if _ci_eq(key, name) and isinstance(value, dict)), {}) \
         if isinstance(poses, dict) else {}
+    lying = _vocab("LYING_TOKENS", _LYING_TOKENS)
+    sitting = _vocab("SITTING_TOKENS", _SITTING_TOKENS)
     pose_tokens = _tokens(pose.get("posture"))
-    if any(t in _LYING_TOKENS for t in pose_tokens):
+    if contains_word(pose_tokens, lying):
         return "lying"
-    if any(t in _SITTING_TOKENS for t in pose_tokens):
+    if contains_word(pose_tokens, sitting):
         return "sitting"
 
     _eid, ent = _entity_record(scene, name)
@@ -229,10 +327,11 @@ def _posture_of(scene, name):
     # whichever of the two it reaches for, and the live record that led here
     # was `position: "seated_on_bed_edge"` -- already in this vocabulary, and
     # never looked at. Same exact-token pass, still never the description.
-    tokens = _tokens(state.get("posture"), state.get("position"))
-    if any(t in _LYING_TOKENS for t in tokens):
+    if any(contains_word(_tokens(text), lying)
+           for text in (state.get("posture"), state.get("position"))):
         return "lying"
-    if any(t in _SITTING_TOKENS for t in tokens):
+    if any(contains_word(_tokens(text), sitting)
+           for text in (state.get("posture"), state.get("position"))):
         return "sitting"
     return ""
 

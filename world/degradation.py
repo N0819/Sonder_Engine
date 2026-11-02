@@ -39,7 +39,10 @@ function of the claim and the hop count alone.
 
 from __future__ import annotations
 
+import logging
 import re
+
+_log = logging.getLogger(__name__)
 
 #: Specificity is lost in this order, one tier per hop. See the module note for
 #: why the name outlives the count and the place.
@@ -53,6 +56,15 @@ TIER_NAMES = 3
 #: criers" failure mode, where every NPC recites news forever.
 EXHAUSTED_HOPS = TIER_NAMES + 1
 
+#: THE WORDS ARE THE LANGUAGE'S. These three, `_ARTICLE` and `_COUNT` are
+#: the ENGLISH defaults; a story pack states its own under
+#: `linguistics["world.degradation"]` (`VAGUE_COUNT`, `VAGUE_PLACE`,
+#: `VAGUE_PERSON`, `ARTICLE`, `COUNT`) and `_language` reads them there.
+#: Measured (world_misc_causal F2, audit 2026-11-01): 「ミラ・ホルトが門の通路で
+#: 衛兵を三人殺した」 came back word for word at hops 1, 2 and 3 -- `\b` never
+#: falls between two characters of an unspaced script, so the caller's name
+#: and place never matched, and neither 三 nor 三人 is an English count -- and
+#: then `is_exhausted` stopped it: the rumour travelled exact until it died.
 VAGUE_COUNT = "several"
 VAGUE_PLACE = "some place"
 VAGUE_PERSON = "a stranger"
@@ -68,42 +80,81 @@ _ARTICLE = r"(?:\b(?:the|a|an)\s+)?"
 #: "one man" is already about as vague as a count gets, and rewriting it to
 #: "several man" would be additive -- it would claim more people than the
 #: witnessed surface ever said, which is the one thing subtraction must never
-#: do.
+#: do. NUMBERS, never idioms or vague quantities: "score", "couple", "few" and
+#: "handful" were here, and "settled the score" became "settled the several",
+#: "a couple of the guards saw a handful of riders" "a several of the guards
+#: saw a several of riders" -- broken grammar, which the module note says
+#: reads as an engine fault, for words that were never a count to lose
+#: (world_misc_causal F3, audit 2026-11-01).
 _PLURAL_NUMBER_WORDS = (
     "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten",
     "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen",
     "seventeen", "eighteen", "nineteen", "twenty", "thirty", "forty", "fifty",
-    "sixty", "seventy", "eighty", "ninety", "hundred", "thousand",
-    "dozen", "score", "couple", "few", "handful",
+    "sixty", "seventy", "eighty", "ninety", "hundred", "thousand", "dozen",
 )
 
 #: A run of digits, or a hyphenated/spaced number phrase like "thirty-seven"
 #: or "two hundred". Matched as a whole so "thirty-seven dockworkers" collapses
-#: to one word rather than to "several-several".
+#: to one word rather than to "several-several". An indefinite article before
+#: it goes with it ("a dozen guards" -> "several guards", never "a several
+#: guards"), and a digit run that is half of a clock reading is a time, not a
+#: count ("at 10:30" stayed "at several:several").
 _COUNT = re.compile(
-    r"\b(?:\d[\d,]*|(?:%s)(?:[\s-]+(?:%s))*)\b"
+    r"(?:\b(?:a|an)\s+)?"
+    r"(?:(?<![\d:])\b\d[\d,]*(?![\d:])|\b(?:%s)(?:[\s-]+(?:%s))*\b)"
     % ("|".join(_PLURAL_NUMBER_WORDS), "|".join(_PLURAL_NUMBER_WORDS)),
     re.IGNORECASE,
 )
+
+#: (language, name) pairs already reported missing from a pack, so the log
+#: says it once per process rather than once per rumour.
+_REPORTED: set = set()
+
+
+def _language(name):
+    """One of the five language-owned values: the active story pack's
+    (`linguistics["world.degradation"][name]`), else the English default
+    above. A non-English story whose pack does not carry it is told once in
+    the log: its rumours still lose their name, place and count, in English
+    words, until the pack says them in its own."""
+    from language_runtime import (DEFAULT_LANGUAGE, LanguagePackError,
+                                  current_language_id, linguistic)
+    try:
+        return linguistic("world.degradation", name)
+    except LanguagePackError:
+        language = current_language_id.get()
+        if language != DEFAULT_LANGUAGE and (language, name) not in _REPORTED:
+            _REPORTED.add((language, name))
+            _log.warning("language pack %r carries no linguistics "
+                         "world.degradation.%s; rumours degrade with the "
+                         "English default", language, name)
+    return {"COUNT": _COUNT, "ARTICLE": _ARTICLE, "VAGUE_COUNT": VAGUE_COUNT,
+            "VAGUE_PLACE": VAGUE_PLACE, "VAGUE_PERSON": VAGUE_PERSON}[name]
 
 
 def _collapse(text):
     return " ".join(str(text or "").split())
 
 
-def _replace_phrases(text, phrases, replacement):
+def _replace_phrases(text, phrases, replacement, article=_ARTICLE):
     """Swap each known phrase for one vaguer word, longest first.
 
     Longest-first matters: replacing "Gate" before "Gate Passage" would leave
     "somewhere Passage" behind, which is neither the original claim nor a
     vaguer one -- it is a sentence nobody wrote, and inventing wording is the
     exact thing this module exists to make impossible.
+
+    A phrase is matched as a WHOLE name in whatever script it is written
+    (`language_runtime.name_boundary_pattern`): `\b` never falls between two
+    characters of an unspaced script, so a Japanese name or place was never
+    matched at all (world_misc_causal F2).
     """
+    from language_runtime import name_boundary_pattern
     out = text
     for phrase in sorted({_collapse(p) for p in phrases if _collapse(p)},
                          key=len, reverse=True):
-        out = re.sub(r"%s\b%s\b" % (_ARTICLE, re.escape(phrase)), replacement,
-                     out, flags=re.IGNORECASE)
+        out = re.sub(str(article or "") + name_boundary_pattern(phrase),
+                     lambda _m: replacement, out, flags=re.IGNORECASE)
     return _collapse(out)
 
 
@@ -127,12 +178,18 @@ def degrade(claim, hops, *, names=(), places=()):
         hops = max(0, int(hops))
     except (TypeError, ValueError):
         hops = 0
+    article = _language("ARTICLE")
+    article = getattr(article, "pattern", article)   # a pack may compile it
     if hops >= TIER_COUNTS:
-        text = _collapse(_COUNT.sub(VAGUE_COUNT, text))
+        vague = _language("VAGUE_COUNT")
+        count = _language("COUNT")
+        if isinstance(count, str):                    # ...or write it plain
+            count = re.compile(count, re.IGNORECASE)
+        text = _collapse(count.sub(lambda _m: vague, text))
     if hops >= TIER_PLACES:
-        text = _replace_phrases(text, places, VAGUE_PLACE)
+        text = _replace_phrases(text, places, _language("VAGUE_PLACE"), article)
     if hops >= TIER_NAMES:
-        text = _replace_phrases(text, names, VAGUE_PERSON)
+        text = _replace_phrases(text, names, _language("VAGUE_PERSON"), article)
     return text
 
 

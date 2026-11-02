@@ -43,7 +43,9 @@ is decided by how often, and for what, this returns one -- against real
 occasions, not against every row in a table.
 
 Never guesses: every match is exact after casefold (rooms: after
-``normalize_room_id``, the registry's own dedup convention), and an ambiguous
+``normalize_room_id``, the registry's own dedup convention, or after
+``language_runtime.fold_key`` -- the same slug for ASCII, and the letters of
+every other script, which ``normalize_room_id`` folds to ""), and an ambiguous
 spelling -- two cast rows, two entities, two lore entries -- resolves to
 nothing, with the ambiguity in the reason. Two beings folded into one is
 strictly worse than two spellings of one.
@@ -234,19 +236,33 @@ def _resolve_character(cid, scene, kind, spelling, frame_id=None):
 # room
 # ---------------------------------------------------------------------------
 
+def _room_keys(text):
+    """Every key a room label is compared under: the registry's own ASCII
+    slug (`normalize_room_id`) and the script-aware one
+    (`language_runtime.fold_key(text, "_")`, the same string for ASCII). An
+    empty key is no key.
+
+    `normalize_room_id` alone folds 広場, 石段 and 船着き場 all to "", so every
+    room spelled by its Japanese name answered "is not a scene room" here --
+    in `gaps.gap_for`, the living world's place resolution and the off-screen
+    subject check (world_misc_causal F13, audit 2026-11-01)."""
+    from language_runtime import fold_key
+    raw = str(text or "")
+    return {normalize_room_id(raw), fold_key(raw, "_")} - {""}
+
+
 def _scene_room_matches(scene, spelling):
-    slug = normalize_room_id(str(spelling or ""))
-    if not slug:
+    keys = _room_keys(spelling)
+    if not keys:
         return []
     hits = []
     for rid, rdef in ((scene or {}).get("rooms") or {}).items():
-        labels = {normalize_room_id(str(rid))}
+        labels = _room_keys(rid)
         if isinstance(rdef, dict):
-            labels.add(normalize_room_id(str(rdef.get("name") or "")))
-            labels.update(
-                normalize_room_id(str(a or "")) for a in (rdef.get("aliases") or []))
-        labels.discard("")
-        if slug in labels:
+            labels |= _room_keys(rdef.get("name"))
+            for alias in rdef.get("aliases") or []:
+                labels |= _room_keys(alias)
+        if keys & labels:
             hits.append((str(rid), (rdef or {}).get("name") if isinstance(rdef, dict) else ""))
     return hits
 
@@ -254,9 +270,9 @@ def _scene_room_matches(scene, spelling):
 def _registry_room_matches(cid, spelling, *, retired):
     """Registry rows answering to `spelling` under `normalize_room_id` -- the
     same convention the registry's own dedup index uses, so no new matching
-    vocabulary is minted here."""
-    slug = normalize_room_id(str(spelling or ""))
-    if not slug:
+    vocabulary is minted here -- or under its script-aware twin (`_room_keys`)."""
+    keys = _room_keys(spelling)
+    if not keys:
         return []
     clause = "IS NOT NULL" if retired else "IS NULL"
     hits = []
@@ -269,11 +285,10 @@ def _registry_room_matches(cid, spelling, *, retired):
             aliases = json.loads(row["aliases"] or "[]")
         except Exception:
             aliases = []
-        labels = {normalize_room_id(str(row["room_uid"]))}
-        labels.add(normalize_room_id(str(row["name"] or "")))
-        labels.update(normalize_room_id(str(a or "")) for a in aliases)
-        labels.discard("")
-        if slug in labels:
+        labels = _room_keys(row["room_uid"]) | _room_keys(row["name"])
+        for alias in aliases:
+            labels |= _room_keys(alias)
+        if keys & labels:
             hits.append((str(row["room_uid"]), str(row["name"] or "")))
     return hits
 

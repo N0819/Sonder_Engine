@@ -1,9 +1,12 @@
-"""Pure compilation of specialist transforms into one chronological diff.
+"""Pure compilation of typed transforms into one chronological diff.
 
-The Director decides causality and routes spans. Specialists describe state
-changes. This module is the boundary between those two model-authored layers
-and the world: it accepts every valid transform, orders them by the engine's
-chronology, and reduces them without making a narrative judgement.
+The Director writes prose; one encoder writes the beat as ordered events
+carrying typed transforms, and `director._run_specialists` splits those
+transforms by channel owner (the five specialist model calls this module was
+written beside were deleted on 2026-09-27). This module is the boundary
+between the model-authored transforms and the world: it accepts every valid
+transform, orders them by the engine's chronology, and reduces them without
+making a narrative judgement.
 """
 
 from __future__ import annotations

@@ -8,8 +8,9 @@ they shouldn't be rendered in the world. The world just renders them in the
 order declared and what isn't permanent is gone after perception rolls."
 
 So this is the world's record of WHAT HAPPENED THIS BEAT AND IN WHAT ORDER --
-the chronology the causality recompiler reassembled after the Director
-dissected the input and five hands resolved it in parallel. It is the missing
+the chronology the causality recompiler reassembled from the encoder's
+ordered events (the five parallel hands it once reassembled were deleted on
+2026-09-27). It is the missing
 half of "perception should only be reading the world": a position, a pose, an
 attire row all live in the scene and perception reads them there, but the
 beat's own acts lived only in the declarations, so the one thing perception

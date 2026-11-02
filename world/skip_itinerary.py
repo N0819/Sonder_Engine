@@ -35,8 +35,9 @@ THREE PARTS, each a pure function of its inputs:
     cannot be done without (`judge_without`; no answer never fails it); a
     stretch the
     world cannot carry out fails with a typed reason, and its row says what
-    failed (`missing`, `meant`); two minds in the same room, or at the same off-map
-    label, over overlapping time each receive the other's `doing` -- never
+    failed (`missing`, `meant`); two minds in the same room -- or at the same
+    off-map label, each naming the other in its own `with` -- over
+    overlapping time each receive the other's `doing` -- never
     the other's `why`, and named only as the observer knows them; each
     stretch carries the sky where the mind stood, the weather walked once per
     drift window (`weather.weather_course`).
@@ -1966,9 +1967,50 @@ def _place_key(row):
     return ("away", folded) if folded else None
 
 
+def _names_mind(entries, name):
+    """Does one of a row's `with` entries -- the mind's own words for whom it
+    meant to be with -- name the mind `name`? Its whole name, or a whole name
+    within it ("Pell" for "Pell Hardacre"), in whatever script either is
+    written (`language_runtime.find_names`, `fold_key`). Never the name
+    inside a longer entry: "Nell's brother" is somebody else, and a wrong
+    yes here hands one mind another's doings."""
+    from language_runtime import find_names, fold_key
+    whole = fold_key(name)
+    for entry in entries or ():
+        text = str(entry or "").strip()
+        if not text:
+            continue
+        if whole and fold_key(text) == whole:
+            return True
+        if find_names(name, [text]):
+            return True
+    return False
+
+
+def _kept_company(row, observer, theirs, other):
+    """Were these two rows -- at one place key, over overlapping time -- two
+    minds together?
+
+    A ROOM the world holds is one place for everyone standing in it. An
+    OFF-MAP LABEL is a mind's own words for where it was, and the same words
+    from two minds are not evidence of one place: a place named relative to
+    its speaker -- home, my room, bed, work -- is a different place for every
+    speaker. Measured (world_offscreen_time F1, audit 2026-11-01): two cast
+    members who each spent a skip "home" were each handed the other's doings
+    as company, and `skip_memories` turned that into a memory of watching
+    them. So off the map two minds kept company only where each also names
+    the other in its own `with` -- both meant to be together, at what both
+    call the same place -- never on the label alone."""
+    if row.get("room"):
+        return True
+    return (_names_mind(row.get("with"), other)
+            and _names_mind(theirs.get("with"), observer))
+
+
 def share_company(logs, label_for, scrub=None):
     """Co-presence, written into each observer's own log rows: every other
-    body in the same room -- or at the same off-map label -- over time that
+    body in the same room -- or at the same off-map label, where each of the
+    two names the other in its own `with` (`_kept_company`) -- over time that
     overlaps an observer's waking stretch reaches it as `{who, doing}`.
 
     PER OBSERVER, THE FIREWALL'S SHAPE. `who` is the name the OBSERVER knows
@@ -1990,6 +2032,8 @@ def share_company(logs, label_for, scrub=None):
                 continue
             for other, theirs in by_place.get(key, ()):
                 if other == observer:
+                    continue
+                if not _kept_company(row, observer, theirs, other):
                     continue
                 overlap = (min(row["until_s"], theirs["until_s"])
                            - max(row["from_s"], theirs["from_s"]))

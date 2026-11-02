@@ -145,8 +145,11 @@ def test_a_room_that_becomes_an_interior_stops_being_open():
 
 
 def test_two_scenes_sharing_a_room_id_do_not_share_an_answer():
-    """Two stories name a room `hall`; the memo is not keyed on that name."""
-    outdoors = _scene(rooms={"hall": {"name": "Hall", "desc": "An open courtyard."}})
+    """Two stories name a room `hall`; the memo is not keyed on that name.
+    (The outdoor one is NAMED a courtyard: since 2026-11-01 a description
+    alone never puts a room under the sky -- world_offscreen_time F3.)"""
+    outdoors = _scene(rooms={"hall": {"name": "Courtyard",
+                                      "desc": "An open courtyard."}})
     indoors = _scene(rooms={"hall": {"name": "Hall", "desc": "A cellar below."}})
     assert room_exposure(outdoors, "hall") == "open"
     assert room_exposure(indoors, "hall") == "enclosed"

@@ -327,14 +327,22 @@ class TestTheReadersMoved:
         phrase, and the SAME string the `simulation_clock` beside it carried
         as `display` -- to the one hand that owns the `time` channel. A
         payload teaching the model to write the defect back."""
+        # CHANGED 2026-11-01 (L7a, director core E1/E2): the positive half pinned `"time_of_day": sc.get("time_of_day")` in both stages' staging payloads, which no model call received; it now reads the encoder's spatial slice, the payload the `time` channel's writer DOES receive.
         import inspect
+        from types import SimpleNamespace
 
         from agents import director
 
         for fn in (director.director_interpret, director.director_resolve):
             src = inspect.getsource(fn)
             assert '"time": sc.get("time")' not in src
-            assert '"time_of_day": sc.get("time_of_day")' in src
+        scene = {"time_of_day": "dusk", "time": "moments later", "rooms": {},
+                 "positions": {}, "entities": {}}
+        payload = director._specialist_payload(
+            "spatial", SimpleNamespace(chat={"id": 0}), scene,
+            {"player": "Mara", "cast": []}, {})
+        assert payload["time_of_day"] == "dusk"
+        assert "moments later" not in str(payload)
 
     def test_a_background_presence_is_told_the_time_of_day(self, temp_db):
         """`_place_block`'s own docstring: "every field is something anyone

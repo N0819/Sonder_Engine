@@ -132,6 +132,13 @@ CLOCK_READING = re.compile(
     r"|(?<![-+\d])(\d{2})(\d{2})(?=\s*(?:hours|hrs|h\b))"
 )
 PM_MARKER = re.compile(r"^[^a-z0-9]{0,3}(?:\d{1,2}\s*)?p\.?\s?m\.?")
+#: The a.m. half of the same marker. A reading needs it only in the twelve
+#: o'clock hour, which is the hour AFTER MIDNIGHT under an a.m. marker:
+#: "Late night, 12:40 AM" read as 12:40 -- midday -- with the p.m. rule alone,
+#: and every reader of a label (the opening anchor, a declared re-anchor, a
+#: skip "until 12:30 am", the itinerary windows) landed twelve hours off
+#: (world_offscreen_time F4, audit 2026-11-01).
+AM_MARKER = re.compile(r"^[^a-z0-9]{0,3}(?:\d{1,2}\s*)?a\.?\s?m\.?")
 
 #: Which phase a written label names. Categories, not vocabulary: each row
 #: is the handful of ways English names one part of the day, checked in an
@@ -293,8 +300,11 @@ def clock_reading_hour(text, day_length=DAY_LENGTH_HOURS_DEFAULT):
         hour, minute = int(found[0]), int(found[1])
         if minute > 59:
             continue
-        if hour < 12 and PM_MARKER.match(text[match.end():match.end() + 12]):
+        tail = text[match.end():match.end() + 12]
+        if hour < 12 and PM_MARKER.match(tail):
             hour += 12
+        elif hour == 12 and AM_MARKER.match(tail):
+            hour = 0
         if hour >= length:
             continue
         return float(hour) + float(minute) / 60.0

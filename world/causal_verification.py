@@ -8,6 +8,7 @@ unresolved receipts until their own commit boundary can verify them.
 """
 
 import re
+import threading
 from copy import deepcopy
 
 
@@ -61,11 +62,56 @@ def _subset(desired, actual):
     return desired == _without_metadata(actual)
 
 
+#: Each world's subject map, built once per `verify_patch` call.
+#:
+#: world_misc_causal E1 (audit 2026-11-01): `_same` asked
+#: `spatial.canonical_subject` for both sides of every comparison, and every
+#: ask rebuilt the whole `canonical_subject_map` (O(names x aliases)) -- 904
+#: rebuilds in one `verify_patch` of positions and stations over 30 entities
+#: with aliases, 624 ms; 7.6 s at 100 -- on a path that runs per step inside
+#: every `merge_scene_with_diff(..., causal_worlds=...)`. The worlds a span
+#: is checked against are fixed for the call ("never mutate inputs"), so the
+#: memo lives exactly as long as one call: `verify_patch` opens it and
+#: closes it on the way out, and keeps the scene object beside its map so a
+#: recycled id can never answer for another world. Outside a call nothing is
+#: kept and every comparison folds afresh, exactly as before. Per THREAD
+#: rather than a contextvar: it is never meant to ride anywhere, and a
+#: background job's copied context must not inherit one.
+_SUBJECT_MAPS = threading.local()
+
+
+def _build_subject_map(scene):
+    from world.spatial import canonical_subject_map
+    return canonical_subject_map(scene)
+
+
+def _subject_map(scene):
+    memo = getattr(_SUBJECT_MAPS, "maps", None)
+    if memo is not None:
+        entry = memo.get(id(scene))
+        if entry is not None and entry[0] is scene:
+            return entry[1]
+    built = _build_subject_map(scene)
+    if memo is not None:
+        memo[id(scene)] = (scene, built)
+    return built
+
+
+def _canonical(mapping, name):
+    """`spatial.canonical_subject` against a map already built: one spelling
+    for one being, or the name unchanged when the scene has nothing better."""
+    text = str(name or "").strip()
+    if not text:
+        return text
+    return mapping.get(text.casefold(), text)
+
+
 def _same(scene, left, right):
-    from world.spatial import canonical_subject
-    return bool(left and right) and (
-        canonical_subject(scene, left).casefold()
-        == canonical_subject(scene, right).casefold())
+    if not (left and right):
+        return False
+    mapping = _subject_map(scene)
+    return (_canonical(mapping, left).casefold()
+            == _canonical(mapping, right).casefold())
 
 
 def _record(scene, channel, subject):
@@ -1119,7 +1165,24 @@ def verify_patch(before, after, patch, *, item_id=None, chrono_id=None, speciali
     domain projections such as attire. Comparing the beginning and end of a
     whole beat would incorrectly acquit intermediate changes. Each unresolved
     receipt remains outstanding even when another effect in the row succeeds.
+
+    Each world's subject spellings are folded once for the call
+    (`_SUBJECT_MAPS`), not once per comparison.
     """
+    opened = getattr(_SUBJECT_MAPS, "maps", None) is None
+    if opened:
+        _SUBJECT_MAPS.maps = {}
+    try:
+        return _verify_patch(before, after, patch, item_id=item_id,
+                             chrono_id=chrono_id, specialist=specialist,
+                             verification_context=verification_context)
+    finally:
+        if opened:
+            _SUBJECT_MAPS.maps = None
+
+
+def _verify_patch(before, after, patch, *, item_id=None, chrono_id=None,
+                  specialist="", verification_context=None):
     context = patch if verification_context is None else verification_context
     receipts = []
     for channel, changes in (patch.items() if isinstance(patch, dict) else []):

@@ -143,7 +143,13 @@ def test_onset_preview_applies_surface_changes_once_to_a_scene_copy(chronologica
         applications.append(deepcopy(incoming))
         merge(world, incoming)
 
-    monkeypatch.setattr(commit, "_merge_overlays", record_apply)
+    # Every holder, not the facade alone: `persist/commit_scene_state.py`
+    # defines `_merge_overlays` and calls it there, while this path reads it
+    # through the facade at call time (`agents/common_beat.py`) -- a patch
+    # on one binding is right for one reader only
+    # (project_check.check_facade_patch_targets, 2026-11-01).
+    from tests.helpers import patch_seam
+    patch_seam(monkeypatch, "persist.commit", "_merge_overlays", record_apply)
     worlds = []
     preview = preview_player_state_assertions(before, diff, causal_worlds=worlds)
     assert (before, diff) == saved

@@ -320,21 +320,49 @@ def program_from_history(history, ledgers=(), stage="resolve", requirements=()):
     return [groups[key] for key in sorted(groups)]
 
 
+_PROVENANCE = frozenset({"from_event", "source_event_id", "phase_sources"})
+
+
 def _content(value):
     """Provenance is engine metadata, not a change to a domain record."""
     if isinstance(value, dict):
         return {k: _content(v) for k, v in value.items()
-                if k not in {"from_event", "source_event_id", "phase_sources"}}
+                if k not in _PROVENANCE}
     if isinstance(value, list):
         return [_content(v) for v in value]
     return value
+
+
+def _strip_to(record, kept):
+    """Remove from an EARLIER write of a record every field -- nested fields
+    included -- that the corrected record `kept` no longer carries.
+
+    A record is folded field by field across the steps that wrote it
+    (`causality._merge_record`), so a correction landed on the LAST write
+    alone leaves an earlier write's field to be replayed: a floor that pops a
+    walker's `at` from `sd["stations"]` after the steps were built
+    (`director_movement`'s fall-short floor) found `at` back in the merged
+    scene whenever two spans had written that walker's station
+    (world_misc_causal F7, audit 2026-11-01). A field the correction still
+    carries is left where it was written, so the chronology survives; a
+    value the correction changed is overruled by the last write as before.
+    Provenance is never stripped: it is metadata, not the record."""
+    for field in list(record):
+        if field in _PROVENANCE:
+            continue
+        if field not in kept:
+            record.pop(field)
+        elif isinstance(record[field], dict) and isinstance(kept[field], dict):
+            _strip_to(record[field], kept[field])
 
 
 def program_steps(diff):
     """Reconcile deterministic edits into the executable program.
 
     A removed map key is refused throughout; a corrected record replaces its
-    last write. Operation lists are matched with multiplicity, so removed ops
+    last write, and every earlier write of it loses the fields the correction
+    removed (`_strip_to`), so a replay cannot put them back. Operation lists
+    are matched with multiplicity, so removed ops
     never replay and surviving duplicates still execute twice. New engine
     writes land in a final step. Explicit blocked spans are handled *before*
     this projection comparison by ``prune_program``.
@@ -365,6 +393,10 @@ def program_steps(diff):
                     if remaining:
                         places[-1][key].extend(deepcopy(remaining))
                 elif _content(old[key]) != _content(new[key]):
+                    if isinstance(new[key], dict):
+                        for table in places[:-1]:
+                            if isinstance(table.get(key), dict):
+                                _strip_to(table[key], new[key])
                     places[-1][key] = deepcopy(new[key])
             extra = {k: v for k, v in new.items() if k not in old}
             if extra:

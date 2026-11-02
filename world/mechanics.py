@@ -64,6 +64,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 
 from core import jobs
 from world.spatial import (apply_transit_dock_edges, journey_pace,
@@ -173,6 +174,26 @@ TIME_METADATA_KEYS = frozenset({
 TIME_DIFF_KEYS = TIME_CLAIM_KEYS | TIME_METADATA_KEYS
 
 
+def _finite(value):
+    """`float(value)`, refused unless the number is FINITE.
+
+    NaN and the infinities parse -- `float("NaN")`, `float("Infinity")`, a
+    JSON `NaN` -- and measure nothing. Read as a claim, one moved the story
+    clock to NaN, where every `due_at > elapsed` is False: every pending
+    consequence, news arrival and transit arrival fired on the next sweep, and
+    the clock stayed NaN for good (`nan + d`); an infinite duration aged a
+    body by forever (world_offscreen_time F14, audit 2026-11-01). Raises
+    ValueError, so each reader's own `except (TypeError, ValueError)` treats
+    it exactly as it treats a word: a claim this vocabulary cannot act on.
+    `beat_time_from_spans` already dropped a non-finite span; this is the
+    same rule for the block readers that must agree with it.
+    """
+    number = float(value)
+    if not math.isfinite(number):
+        raise ValueError("not a finite number of seconds: %r" % (value,))
+    return number
+
+
 def clock_elapsed(clock):
     """Where the STORED simulation clock stands, from its own dict.
 
@@ -259,7 +280,7 @@ def read_time_diff(prev_elapsed, time_diff):
     duration_claimed = False
     if "duration_seconds" in td:
         try:
-            duration = max(0.0, float(td.get("duration_seconds") or 0.0))
+            duration = max(0.0, _finite(td.get("duration_seconds") or 0.0))
             duration_claimed = True
         except (TypeError, ValueError):
             duration = 0.0
@@ -269,7 +290,7 @@ def read_time_diff(prev_elapsed, time_diff):
         if td.get(key) is None:
             continue
         try:
-            claim = float(td[key])
+            claim = _finite(td[key])
             break
         except (TypeError, ValueError):
             claim = None
@@ -284,7 +305,7 @@ def read_time_diff(prev_elapsed, time_diff):
     anchor = None
     if td.get("start_seconds") is not None:
         try:
-            anchor = float(td["start_seconds"])
+            anchor = _finite(td["start_seconds"])
         except (TypeError, ValueError):
             anchor = None
 
@@ -535,7 +556,7 @@ def time_diff_claims(time_diff) -> bool:
     td = time_diff if isinstance(time_diff, dict) else {}
     if "duration_seconds" in td:
         try:
-            float(td.get("duration_seconds") or 0.0)
+            _finite(td.get("duration_seconds") or 0.0)
             return True
         except (TypeError, ValueError):
             pass
@@ -543,7 +564,7 @@ def time_diff_claims(time_diff) -> bool:
         if td.get(key) is None:
             continue
         try:
-            float(td[key])
+            _finite(td[key])
             return True
         except (TypeError, ValueError):
             continue
@@ -626,11 +647,11 @@ def time_diff_duration(time_diff):
     td = time_diff if isinstance(time_diff, dict) else {}
     if "duration_seconds" in td:
         try:
-            return max(0.0, float(td.get("duration_seconds") or 0.0))
+            return max(0.0, _finite(td.get("duration_seconds") or 0.0))
         except (TypeError, ValueError):
             pass
     try:
-        return max(0.0, float(td["end_seconds"]) - float(td["start_seconds"]))
+        return max(0.0, _finite(td["end_seconds"]) - _finite(td["start_seconds"]))
     except (KeyError, TypeError, ValueError):
         return 0.0
 
@@ -697,8 +718,7 @@ def _era_stamp(payload):
 
 
 def _fire_due_events(scene, elapsed, frame_id, pending, *, turn_idx=None,
-                     player_room=None, surface_consequences=True,
-                     town=None, presence_rooms=()):
+                     player_room=None, town=None, presence_rooms=()):
     """Pass (a). Returns (event_ops, notices, counts, pending_arrivals):
     the last is `{entity id: row}` for this frame's transit arrivals not yet
     due, which pass (b) reads to time each journey once.
@@ -726,15 +746,10 @@ def _fire_due_events(scene, elapsed, frame_id, pending, *, turn_idx=None,
     fuse's location as it lands (walking in on it); everywhere else the
     fired row waits to be read at contact (residue, gap skeleton). That
     presence gate is the §0.2 firewall: an event elsewhere is never told,
-    only encountered.
-
-    ``surface_consequences`` is the story's own `scheduled_consequence`
-    depth, and it gates THAT NOTICE — the surface — never the firing
-    (A82, review 2026-09-07). Every declared fuse is minted and fires on
-    its clock, because a Director-adjudicated cause is truth and a story
-    that switches the mechanism on later must not find the world had
-    forgotten its own causes; what "off" buys is that no such landing is
-    ever put in front of the party.
+    only encountered. No setting gates the notice: the
+    `scheduled_consequence` depth that once did was retired on 2026-09-20
+    (see `mechanics_sweep`), and every declared fuse is minted and fires on
+    its clock whatever any setting says (A82).
     """
     event_ops = []
     notices = []
@@ -775,7 +790,7 @@ def _fire_due_events(scene, elapsed, frame_id, pending, *, turn_idx=None,
             walked_in = bool(player_room) and where == str(player_room)
             if not walked_in and record_in == frame_id:
                 walked_in = where in set(presence_rooms or ())
-            if surface_consequences and walked_in:
+            if walked_in:
                 notices.append(
                     "Falling due here, now: "
                     f"{payload.get('what') or 'a scheduled consequence'} "
@@ -1313,11 +1328,7 @@ def _tick_conditions(scene, conditions, elapsed):
         except (TypeError, ValueError):
             event_ops.append(("tick_condition", cid, elapsed + interval))
             continue
-        try:
-            expires = None if cond.get("expires_at") is None \
-                else float(cond["expires_at"])
-        except (TypeError, ValueError):
-            expires = None
+        expires = _condition_expires_at(cond)
 
         fires = 0
         while t <= elapsed and fires < _TICK_FIRE_CAP:
@@ -1566,14 +1577,37 @@ def unanswered_hazard_subjects(scene, conditions, bodies, state_diff):
     return out
 
 
+def _condition_expires_at(cond):
+    """A `world_conditions` row's end on the story clock, or None for a row
+    whose end this sweep cannot read -- absent, a word, empty, not finite.
+
+    ONE READER FOR BOTH PASSES. The tick pass (c1) guarded this column and
+    the expiry pass (c2) did not: SQLite's REAL affinity keeps a value that
+    is not a number as TEXT, the sweep is the FIRST domain inside the commit
+    transaction, so a single row written `""` or `"dawn"` raised in (c2),
+    rolled that beat back, and every beat after it, until a hand edited the
+    row (world_offscreen_time F2, audit 2026-11-01; 0 of 538 live rows today).
+    An unreadable end is no end: the row stays until something that can be
+    read ends it, exactly as (c1) already treated it. Coercing the value at
+    the WRITE is the storage side's (`persist/commit_entities`).
+    """
+    raw = (cond or {}).get("expires_at") if isinstance(cond, dict) else None
+    if raw is None or isinstance(raw, bool):
+        return None
+    try:
+        return _finite(raw)
+    except (TypeError, ValueError):
+        return None
+
+
 def _expire_conditions(conditions, elapsed):
     """Pass (c2): active conditions whose expires_at has passed on this
     frame's clock. world_conditions is chat-scoped (no frame column); the
     committing frame's clock is used, matching how started_at is written."""
     event_ops = []
     for cond in conditions or []:
-        expires = cond.get("expires_at")
-        if expires is not None and float(expires) <= elapsed:
+        expires = _condition_expires_at(cond)
+        if expires is not None and expires <= elapsed:
             event_ops.append(("expire_condition", cond["condition_id"]))
     return event_ops
 
@@ -1611,23 +1645,18 @@ def mechanics_sweep(scene, clock, frame_id, pending, *,
 
     # (a) fire due events for this frame. A fuse FIRES whatever the story's
     # settings say -- it is adjudicated causality, and truth accumulates
-    # (A82) -- but whether its landing is put in front of the party is the
-    # `scheduled_consequence` depth's to decide. Read here, once, from the
-    # chat this sweep belongs to; a sweep with no chat behind it (a pure
-    # fixture) surfaces, exactly as it did before the gate existed, and so
-    # does a config that will not read: a knowledge surface must fail toward
-    # telling the player about their own world.
-    # ALWAYS SURFACED since 2026-09-20. This read the `scheduled_consequence`
-    # switch, which the settings panel described as a GENERATION policy -- "what
-    # happens, not who gets to know it" -- while what it actually gated was
-    # whether the player was told. The event fired either way, so the switch
-    # could only ever hide a fact the world had already committed. The ladder is
-    # retired; the telling is not a setting.
-    surface_consequences = True
+    # (A82) -- and its landing is put in front of whoever walks in on it.
+    # ALWAYS SURFACED since 2026-09-20: the `scheduled_consequence` switch
+    # this once read was described in the settings panel as a GENERATION
+    # policy -- "what happens, not who gets to know it" -- while what it
+    # actually gated was whether the player was told. The event fired either
+    # way, so the switch could only ever hide a fact the world had already
+    # committed. The ladder is retired; the telling is not a setting, and the
+    # parameter that carried it is gone with it (review 2026-11-01,
+    # world_offscreen_time F13: it was passed `True` by its one caller).
     event_ops, notices, counts, pending_arrivals = _fire_due_events(
         scene, elapsed, frame_id, pending or [],
         turn_idx=turn_idx, player_room=player_room,
-        surface_consequences=surface_consequences,
         town=town, presence_rooms=presence_rooms)
 
     # (b) schedule new arrivals.

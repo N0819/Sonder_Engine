@@ -94,15 +94,25 @@ STAGE_THRESHOLDS = (0.0, 0.25, 0.5, 0.75)
 # perception.py, not narration.py, not director.py's payload. A live
 # playtest confirmed the paradox escalates and marks rooms consumed
 # entirely silently, invisible to the player unless an operator inspects
-# the DB directly. Fixed the cheap way -- reuse the EXISTING room.notes
-# field that perception_act/perception_outcome already read verbatim
-# into room_notes, rather than adding a new payload field anywhere. The
-# marker text is deliberately distinctive so _restore_consumed can strip
-# exactly this and nothing else on resolution.
+# the DB directly. Fixed the cheap way -- the wound is written into the
+# room's own prose rather than into a new payload field. The marker text is
+# deliberately distinctive so _restore_consumed can strip exactly this and
+# nothing else on resolution.
+#
+# AT THE HEAD OF THE FIELD THE VIEW READS (`_wound_room`). The view takes a
+# room's `notes`, else its `desc`, else its `description`, cut to whole
+# sentences within `ROOM_PROSE_CHARS` (`agents.common_rooms.room_prose`).
+# The wound used to be APPENDED to `notes`, so a room described only by
+# `desc` -- 268 of 1,093 live rooms -- was told to every mind as the wound
+# sentence alone, and a room whose notes ran past 600 characters lost the
+# wound to the cut (world_misc_causal F4, audit 2026-11-01). Still English
+# in every pack (registered, UNBUILT_IDENTITY).
 _HAZARD_WOUND_NOTE = (
-    " Something about this place feels wrong now -- thin, unstable, as if "
+    "Something about this place feels wrong now -- thin, unstable, as if "
     "reality itself is straining to reject an impossibility that happened here."
 )
+#: The prose fields a room is described by, in the order the view reads them.
+_ROOM_PROSE_FIELDS = ("notes", "desc", "description")
 
 
 DEFAULT_ESCALATION_RATE = 1.0
@@ -157,10 +167,11 @@ def fixed_points(chat_id):
 
 def add_fixed_point(chat_id, *, entity_id, frame_id, required_exists, label, mode=None):
     """Declares that `entity_id` must (required_exists=True) or must not
-    (required_exists=False) exist as of `frame_id`. Existence is checked
-    as simple row presence in world_entities -- commit_world_entities
-    already deletes a row outright on `remove_entities`, there is no
-    "retired" flag actually written anywhere to check instead."""
+    (required_exists=False) exist as of `frame_id`. Existence is an entity
+    record under that id in the scene the check runs beside, or a row in
+    world_entities, its chat-wide projection (`_entity_exists`) --
+    commit_world_entities deletes a row outright on `remove_entities`, there
+    is no "retired" flag actually written anywhere to check instead."""
     if frame_id is not None and get_frame(frame_id) is None:
         raise ValueError(f"frame {frame_id} not found")
     if mode is not None and mode not in MODES:
@@ -181,15 +192,43 @@ def remove_fixed_point(chat_id, anchor_id):
     wset(chat_id, "fixed_points", points)
 
 
-def _entity_exists(chat_id, entity_id):
+def _projected(chat_id, entity_id):
+    """Does `world_entities` -- the scene's derived projection -- hold a row
+    for this id? The ROW question, which `_project_entity_row` asks to choose
+    between an UPDATE and an INSERT."""
     return bool(q(
         "SELECT 1 FROM world_entities WHERE chat_id=? AND entity_id=?",
         (chat_id, entity_id), one=True,
     ))
 
 
-def _anchor_satisfied(chat_id, anchor):
-    return _entity_exists(chat_id, anchor["entity_id"]) == anchor["required_exists"]
+def _entity_exists(chat_id, entity_id, scene=None):
+    """Does the being an anchor names exist?
+
+    THE SCENE FIRST, when the caller holds it: the frame-scoped scene blob is
+    the single runtime source of truth for entity state, and `world_entities`
+    is a projection of it that only the commit's own pass keeps in step. A
+    scene writer outside that pass -- the World Browser, a presence handover
+    -- left the projection behind, and every lag became a spurious wound (an
+    anchor requiring a being the scene held) or a missed one (world_misc_causal,
+    audit 2026-11-01). An entity record under exactly this id is existence.
+    The projection still answers beside it, because it is CHAT-WIDE where the
+    scene in hand is one frame's: a being another era's scene holds still
+    exists for an anchor (the flat chat-wide reading `check_and_apply_paradox`
+    documents). What this does not yet answer is a being the projection
+    still lists after its scene dropped it -- whether existence becomes
+    per-frame is the open question registered with the frame partitioning
+    (UNBUILT_WORLD § 6.13).
+    """
+    entities = scene.get("entities") if isinstance(scene, dict) else None
+    if isinstance(entities, dict) and entity_id in entities:
+        return True
+    return _projected(chat_id, entity_id)
+
+
+def _anchor_satisfied(chat_id, anchor, scene=None):
+    return _entity_exists(chat_id, anchor["entity_id"], scene) == \
+        anchor["required_exists"]
 
 
 # ---- Paradox state ----
@@ -249,10 +288,43 @@ def _clear_paradox(chat_id, frame_id):
         wset(chat_id, "paradoxes", all_paradoxes)
 
 
+def _wound_room(room):
+    """Write the wound at the HEAD of the prose field the view reads -- the
+    room's `notes`, else its `desc`, else its `description`, else a fresh
+    `notes` -- so the room keeps its own description beside the wound, and
+    the wound survives the view's cut to whole sentences (see
+    `_HAZARD_WOUND_NOTE`). Once per room: a room already wounded is left."""
+    field = next((name for name in _ROOM_PROSE_FIELDS
+                  if str(room.get(name) or "").strip()), "notes")
+    text = str(room.get(field) or "").strip()
+    if text.startswith(_HAZARD_WOUND_NOTE):
+        return
+    room[field] = (_HAZARD_WOUND_NOTE + " " + text) if text else _HAZARD_WOUND_NOTE
+
+
+def _unwound_room(room):
+    """Strip the wound from whichever prose field carries it, and nothing
+    else: at the head where `_wound_room` writes it, or at the tail where a
+    wound opened before 2026-11-01 appended it."""
+    legacy = " " + _HAZARD_WOUND_NOTE
+    for field in _ROOM_PROSE_FIELDS:
+        text = room.get(field)
+        if not isinstance(text, str):
+            continue
+        if text.startswith(_HAZARD_WOUND_NOTE):
+            room[field] = text[len(_HAZARD_WOUND_NOTE):].lstrip()
+        elif text.endswith(legacy):
+            room[field] = text[:-len(legacy)]
+
+
 def _restore_consumed(chat_id, state):
-    """Undoes HAZARD's room consumption on resolution -- consumed rooms
-    were only ever flagged impassable in the scene blob, never deleted,
-    so this is a pure scene-blob edit."""
+    """Undoes HAZARD's room consumption on resolution: the rooms were only
+    ever FLAGGED in the scene blob, never deleted, so this is a pure
+    scene-blob edit. The flag (`paradox_consumed`) is a record of the
+    consumption and nothing more: no movement floor reads it, so a consumed
+    room was never impassable, whatever this docstring once said
+    (world_misc_causal F4) -- whether it should become so is the Writers'
+    Room's question under the 2026-09-21 ruling, not this module's."""
     sc = wget(chat_id, "scene", None)
     if not isinstance(sc, dict):
         return
@@ -261,9 +333,7 @@ def _restore_consumed(chat_id, state):
         room = rooms.get(room_id)
         if isinstance(room, dict):
             room.pop("paradox_consumed", None)
-            notes = room.get("notes") or ""
-            if notes.endswith(_HAZARD_WOUND_NOTE):
-                room["notes"] = notes[:-len(_HAZARD_WOUND_NOTE)]
+            _unwound_room(room)
     wset(chat_id, "scene", sc)
 
 
@@ -292,7 +362,7 @@ def _apply_hazard_stage(chat_id, state, stage):
     if stage >= 2 and epicenter not in consumed["rooms"]:
         consumed["rooms"].append(epicenter)
         rooms[epicenter]["paradox_consumed"] = True
-        rooms[epicenter]["notes"] = (rooms[epicenter].get("notes") or "") + _HAZARD_WOUND_NOTE
+        _wound_room(rooms[epicenter])
     if stage >= 3:
         # Escalate outward one adjacency ring per stage past the second --
         # reuses the room graph's own adjacency list, no new topology.
@@ -306,7 +376,7 @@ def _apply_hazard_stage(chat_id, state, stage):
         for room_id in newly:
             consumed["rooms"].append(room_id)
             rooms[room_id]["paradox_consumed"] = True
-            rooms[room_id]["notes"] = (rooms[room_id].get("notes") or "") + _HAZARD_WOUND_NOTE
+            _wound_room(rooms[room_id])
     wset(chat_id, "scene", sc)
 
 
@@ -384,7 +454,7 @@ def _project_entity_row(chat_id, entity_id, entity_def):
     kind = str(entity_def.get("kind") or "object")
     subtype = str(entity_def.get("subtype") or "")
     name = str(entity_def.get("name") or entity_id)
-    if _entity_exists(chat_id, entity_id):
+    if _projected(chat_id, entity_id):
         qi(
             "UPDATE world_entities SET kind=?,subtype=?,name=?,payload=? "
             "WHERE entity_id=? AND chat_id=?",
@@ -502,11 +572,24 @@ def _trigger_paradox(chat_id, anchor, frame_id):
     return state
 
 
-def _advance_paradox(chat_id, state):
+def _advance_paradox(chat_id, state, scene=None):
     policy = get_policy(chat_id)
     anchor = next((p for p in fixed_points(chat_id) if p["anchor_id"] == state["anchor_id"]), None)
 
-    if anchor and _anchor_satisfied(chat_id, anchor):
+    if anchor is None:
+        # THE FIXED POINT WAS WITHDRAWN (the host deleted it: web/app.py's
+        # `fixed_points_delete` only ever removes the declaration). A wound
+        # guards an anchor, and with none left it guards nothing -- it
+        # resolves now, as a satisfied anchor resolves. Before this a deleted
+        # anchor was never "satisfied", so the wound escalated to its ceiling
+        # for a constraint the host had withdrawn; in `toll` mode every stage
+        # decayed memory confidence irreversibly (world_misc_causal F5,
+        # CORRUPTION, reproduced on a scratch db 2026-11-01).
+        _restore_consumed(chat_id, state)
+        _clear_paradox(chat_id, state.get("frame_id"))
+        return {**state, "resolved": True, "withdrawn": True}
+
+    if _anchor_satisfied(chat_id, anchor, scene):
         _restore_consumed(chat_id, state)
         _clear_paradox(chat_id, state.get("frame_id"))
         return {**state, "resolved": True}
@@ -525,8 +608,7 @@ def _advance_paradox(chat_id, state):
         # call that reverted the wound -- invisible for rooms, which the
         # restore un-consumes, but a toll decay is irreversible and a
         # spawned warden outlives its own resolved wound.
-        if anchor:
-            _force_restore_anchor(chat_id, anchor, state)
+        _force_restore_anchor(chat_id, anchor, state)
         _restore_consumed(chat_id, state)
         _clear_paradox(chat_id, state.get("frame_id"))
         return {**state, "resolved": True, "forced": True}
@@ -562,8 +644,8 @@ def _force_restore_anchor(chat_id, anchor, state=None):
     somewhere nobody was standing.
     """
     eid = anchor["entity_id"]
-    exists = _entity_exists(chat_id, eid)
     sc = wget(chat_id, "scene", None)
+    exists = _entity_exists(chat_id, eid, sc)
     if anchor["required_exists"] and not exists:
         entity_def = {"kind": "person", "name": eid}
         if isinstance(sc, dict):
@@ -647,9 +729,15 @@ def check_and_apply_paradox(ctx, nonce):
         return {"active": False, "skipped": "spatial"}
 
     active = get_paradox(chat_id, frame_id)
+    points = fixed_points(chat_id)
+    if not active and not points:
+        return {"active": False}
+    # The scene this commit just wrote, read once: an anchor's existence is
+    # the scene's to answer first (`_entity_exists`).
+    scene = wget(chat_id, "scene", None)
     if active:
-        return _advance_paradox(chat_id, active)
-    for anchor in fixed_points(chat_id):
-        if not _anchor_satisfied(chat_id, anchor):
+        return _advance_paradox(chat_id, active, scene)
+    for anchor in points:
+        if not _anchor_satisfied(chat_id, anchor, scene):
             return _trigger_paradox(chat_id, anchor, frame_id)
     return {"active": False}

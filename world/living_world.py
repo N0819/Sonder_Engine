@@ -611,8 +611,8 @@ def owed_history(cid, entry_uid, cap=OBLIGATION_HONOR_CAP):
 def attach_owed_history(cid, lore_hits, config=None):
     """Annotate location lore hits with what the place owes, for mapping.
 
-    Returns copies; never mutates the input. Gated by the D setting HERE —
-    this is the surface, and surfaces are what settings gate. Attached to
+    Returns copies; never mutates the input. UNCONDITIONAL since 2026-09-20
+    (see the comment below): no setting gates this surface. Attached to
     location entries with an ``entry_uid``. Accrual stops by construction
     once a place is generated (``resolve_subject`` then answers ``room``,
     so new fuses land on the room id) — but old obligations stay attached

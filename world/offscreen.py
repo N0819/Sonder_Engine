@@ -1550,14 +1550,17 @@ def schedule_profile_ticks(ctx, epoch=None):
             since_by_subject[cand["id"]] = 0
 
     def _produce(job):
-        # The job thread starts with a FRESH contextvars context --
-        # threading.Thread does not inherit the submitting turn's -- so
-        # every frame-scoped wget/wset below (append_offscreen_log's
-        # read-modify-write above all) resolved `active_frame_id` to its
-        # default, and a tick scheduled from a nested frame's turn landed
-        # in the PRESENT frame's log. Pin the scheduling turn's frame for
-        # the duration; copying the whole context instead would also drag
-        # the turn's token_sink/cancel_event into background model calls.
+        # PINNED EXPLICITLY, though the inherited context already carries it:
+        # `core.jobs.submit` runs the producer in a COPY of the submitting
+        # context (`contextvars.copy_context()`), and `_clear_turn_scoped_
+        # context` clears only the turn's sinks and cancel event -- not
+        # `active_frame_id`, because every job producer sets it, this one
+        # included. Every frame-scoped wget/wset below
+        # (append_offscreen_log's read-modify-write above all) must land in
+        # the scheduling turn's frame, so the frame is stated here rather
+        # than trusted to the copy. (The comment this replaces described the
+        # fresh context `jobs.submit` stopped creating; world_offscreen_time
+        # F12, audit 2026-11-01.)
         from core.db import active_frame_id
         token = active_frame_id.set(frame_id)
         try:
@@ -1675,8 +1678,6 @@ def agent_context(cid, entry, *, frame_id=None, clock=None, turn_idx=None):
     in from the turn, and there is deliberately no `scene` parameter to forget
     to leave out.
     """
-    from core.db import q
-
     from story.character_schema import character_identity
 
     sheet = entry.get("sheet") or {}
@@ -1696,13 +1697,25 @@ def agent_context(cid, entry, *, frame_id=None, clock=None, turn_idx=None):
         # asking for a `summary` column the table has never had, and every
         # test exercised it with char_id=None -- so the query that crashes
         # on any real candidate looked measured and was not.
-        memories = [
-            {"summary": r["content"], "turn_idx": r["turn_idx"]}
-            for r in q("SELECT content, turn_idx FROM memories "
-                       "WHERE chat_id=? AND char_id=? AND archived=0 "
-                       "ORDER BY turn_idx DESC LIMIT 12",
-                       (cid, char_id)) or []
-        ]
+        #
+        # THROUGH THE SEAM, never plain SQL (review 2026-11-01, mind_memory
+        # F2): this read took the newest twelve rows by play order, any era
+        # and any turn, so a native played in a flash-forward at turns 50-60
+        # carried those rows into a present-era tick -- the "how did he know
+        # that" this function exists to prevent, beside a ledger it already
+        # filtered by frame. The tick runs after `turn_idx` committed, so that
+        # turn's rows are the mind's own; a later one is a rerun's outcome.
+        from mind.memory import visible_memory_rows
+
+        rows = visible_memory_rows(
+            cid, char_id,
+            before_turn_idx=(None if turn_idx is None else int(turn_idx) + 1),
+            viewer_frame_id=frame_id, include_archived=False)
+        rows.sort(key=lambda r: (r["turn_idx"] is not None,
+                                 r["turn_idx"] if r["turn_idx"] is not None else 0,
+                                 r["id"]), reverse=True)
+        memories = [{"summary": r["content"], "turn_idx": r["turn_idx"]}
+                    for r in rows[:12]]
 
     plans = [p for p in (_plans_for(cid, frame_id) or [])
              if isinstance(p, dict)
@@ -2239,9 +2252,10 @@ def schedule_agent_ticks(ctx, epoch=None):
     clock = wget(cid, "simulation_clock", {}) or {}
 
     def _produce(job):
-        # Same frame pin as the profile producer: the job thread's fresh
-        # contextvars context would otherwise land frame-scoped writes in
-        # the present frame's world.
+        # Same explicit frame pin as the profile producer: the copied context
+        # already carries the frame, and the frame-scoped writes below are
+        # stated to land in the scheduling turn's frame rather than trusted
+        # to the copy (world_offscreen_time F12).
         from core.db import active_frame_id
         from world.mechanics import stable_event_key
 

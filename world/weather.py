@@ -32,7 +32,20 @@ module has none, so `room_exposure` falls back to a deliberately small keyword
 pass over the room's own name and description -- and defaults to `enclosed`
 when it sees nothing it recognises. That default is the conservative direction:
 an unrecognised room quietly gets no weather, rather than rain appearing
-indoors.
+indoors. Two rules keep the keywords from darkening a room
+(world_offscreen_time F3, measured read-only on the owner's db, 2026-11-01):
+
+* A keyword counts only as a WHOLE WORD of the room's own text, singular or
+  plural (`_says`, through `language_runtime.name_boundary_pattern`), never
+  as letters inside another word. Matched as substrings, "wood" in "wooden",
+  "roof" in "soundproof", "road"/"yard" in "broad"/"Halyard's" misread 41 of
+  the 666 live rooms that author no exposure.
+* UNDER THE SKY IS THE NAME'S TO SAY. A description may take a room indoors
+  (a cellar, a covered arcade, a cave) but never out under the sky, because
+  an indoor room's description names what its windows look out on. Of the 14
+  distinct rooms the description alone read `open`, 9 were indoors -- a
+  washroom facing the mountain, a tavern room over the street, a ship's
+  lounge with a bank of viewports -- and every one went dark at night.
 
 AND THE FALLBACK IS READ BY A RULE A MIND ACTS ON, which this paragraph denied
 until E28 (2026-09-07). `world/spatial_light.room_light` asks `room_exposure`
@@ -42,9 +55,14 @@ be in the dark in. That use is the owner's, recorded in `docs/UNBUILT.md`
 § 2.28, and what makes it safe is the DEFAULT rather than the coverage -- an
 unrecognised room reads `enclosed`, and an `enclosed` room keeps its declared
 light untouched, so the failure direction is "a square that should have gone
-dark stayed lit" and never a room darkened by a keyword. Widen the lists with
-that direction in mind, and read `docs/UNBUILT.md` § 1.18 first: `exposure` is
-authored on 13.6% of live rooms, so the fallback is not the fallback.
+dark stayed lit" and never a room darkened by a keyword. Measured on the same
+666 rooms against the substring reading: no room reads darker, 52 records read
+`enclosed` that read `open` (12 distinct indoor rooms put right, 6 outdoor ones
+-- a boatyard, a shoreline, a harbour apron -- left lit, which is the direction
+this rule accepts), and one station deck reads `enclosed` that read
+`sheltered`. Widen the lists with that direction in mind, and read
+`docs/UNBUILT.md` § 1.18 first: `exposure` is authored on 13.6% of live rooms,
+so the fallback is not the fallback.
 
 **3. Weather drifts deterministically, or it never moves.** A field only the
 Director writes is a field that changes about once a story: it has no reason to
@@ -69,6 +87,7 @@ from __future__ import annotations
 
 import hashlib
 import re
+from functools import lru_cache
 
 # --- what weather IS, and what weather DOES --------------------------------
 #
@@ -227,9 +246,10 @@ def _engine_sky_name(air, cloud, electrical):
     return {"clear": "clear", "broken": "fair", "covered": "overcast"}[cloud]
 
 # Words that mean a place is under the open sky, standing beneath something
-# that only half covers it, or indoors. Checked longest-list-first in that
-# order because a "covered market" is sheltered and not open, and a
-# "underground car park" is enclosed even though "park" is outdoors.
+# that only half covers it, or indoors. Checked in that order because a
+# "covered market" is sheltered and not open, and a "underground car park" is
+# enclosed even though "park" is outdoors. Each is read as a WHOLE WORD of the
+# room's own text (`_says`), never inside another word -- see rule 2.
 _ENCLOSED_WORDS = (
     "cellar", "basement", "vault", "tunnel", "corridor", "hallway", "cabin",
     "bedroom", "bathroom", "kitchen", "office", "bridge", "engine room",
@@ -433,6 +453,37 @@ def _weather_from_prose(text):
     return out
 
 
+#: What a sky record normalises to, memoised on the record's CONTENT.
+#:
+#: world_offscreen_time E1 (audit 2026-11-01): `weather_for_room` re-ran
+#: `normalize_weather` on every call -- 94 call sites, per observer x room x
+#: channel per beat -- measured 10 us for a record in the engine's own words
+#: and 228 us for a story-named sky or synonym axis words (the A88 design's
+#: intended case), because the fold and synonym loops ran every time. The
+#: answer is a pure function of the record when nothing is written over a
+#: standing sky (`base`), so it is kept here keyed by the record's items
+#: WITH their types (`True` and `1` are different declarations of
+#: `electrical`), handed out as a copy, and cleared whole when full -- the
+#: `_ROOM_FACTS` pattern below: objective world state, no observer, nothing
+#: that can carry one mind's view to another, and an edited record is a
+#: different key the next time it is asked.
+_SKY_RECORDS: dict = {}
+_SKY_RECORDS_MAX = 256
+
+
+def _sky_key(value):
+    """The memo key for a record, or None for one this memo will not hold
+    (a value that cannot be hashed -- a nested dict a model wrote)."""
+    if isinstance(value, str):
+        return ("str", value)
+    if not isinstance(value, dict):
+        return None
+    try:
+        return frozenset((key, type(item), item) for key, item in value.items())
+    except TypeError:
+        return None
+
+
 def normalize_weather(value, base=None):
     """A weather record as a NAME plus the axes it acts on, or {} for nothing.
 
@@ -454,7 +505,26 @@ def normalize_weather(value, base=None):
     cannot read is not evidence that the weather has cleared. Without a base a
     missing field still defaults, so a first declaration remains complete.
     See `_SYNONYMS` for the failure that made this necessary.
+
+    Memoised per distinct record when no `base` is given (`_SKY_RECORDS`):
+    the caller gets its own copy, so an edit to the answer reaches nobody.
     """
+    if base:
+        return _normalize_weather_record(value, base)
+    key = _sky_key(value)
+    if key is None:
+        return _normalize_weather_record(value)
+    cached = _SKY_RECORDS.get(key)
+    if cached is None:
+        cached = _normalize_weather_record(value)
+        if len(_SKY_RECORDS) >= _SKY_RECORDS_MAX:
+            _SKY_RECORDS.clear()
+        _SKY_RECORDS[key] = cached
+    return dict(cached)
+
+
+def _normalize_weather_record(value, base=None):
+    """`normalize_weather`'s derivation, unmemoised: see its docstring."""
     if isinstance(value, str):
         value = _weather_from_prose(value)
     if not isinstance(value, dict) or not value:
@@ -697,6 +767,40 @@ def _room_facts(room):
     return facts
 
 
+@lru_cache(maxsize=64)
+def _word_pattern(words):
+    """One compiled alternation over a keyword tuple, each keyword matched as
+    a WHOLE word in whatever script it is written
+    (`language_runtime.name_boundary_pattern`: no letter of a spaced script
+    beside a Latin edge, the script's own rule beside an unspaced one), the
+    longest first so "cave mouth" is tried before "cave". Keyed by the tuple,
+    so each of this module's lists compiles once.
+
+    A keyword ending in a Latin letter also matches its English plural: the
+    lists are English nouns, a place is named in the plural as often as not
+    (the Catacombs, the Woods, the Rose Gardens), and the substring test this
+    replaced caught those by accident -- a whole word has to say so."""
+    from language_runtime import name_boundary_pattern, script_of
+    forms = set()
+    for word in words:
+        text = str(word or "")
+        if not text:
+            continue
+        forms.add(text)
+        if text[-1].isalpha() and not script_of(text[-1]):
+            forms.update((text + "s", text + "es"))
+    ordered = sorted(forms, key=len, reverse=True)
+    return re.compile("|".join(name_boundary_pattern(form) for form in ordered)
+                      or r"(?!)")
+
+
+def _says(haystack, words):
+    """Does the (casefolded) `haystack` use one of `words` as a word of its
+    own? Never a substring: "wood" is not in "wooden", "mine" is not in
+    "mineral" (world_offscreen_time F3)."""
+    return _word_pattern(tuple(words)).search(haystack) is not None
+
+
 def _derive_room_facts(room):
     haystack = ("%s %s" % (room.get("name") or "",
                            room.get("desc") or "")).casefold()
@@ -720,19 +824,24 @@ def _derive_exposure(room, haystack):
     declared = _pick(room.get("exposure"), EXPOSURES, "")
     if declared:
         return declared
-    if any(word in haystack for word in _ENCLOSED_WORDS):
+    if _says(haystack, _ENCLOSED_WORDS):
         return "enclosed"
     # Sheltered BEFORE deep, so "Cave Mouth" is the overhang it is rather than
     # being swallowed by the "cave" in its name.
-    if any(word in haystack for word in _SHELTERED_WORDS):
+    if _says(haystack, _SHELTERED_WORDS):
         return "sheltered"
     # Deep places are enclosed places, and this check has to come BEFORE the
     # open words: a cave is routinely described by the landscape it is in
     # ("Cave System — deep below the ridge"), and "ridge" alone made it read as
     # open ground, standing the player out in the rain inside a mountain.
-    if any(word in haystack for word in _DEEP_WORDS):
+    if _says(haystack, _DEEP_WORDS):
         return "enclosed"
-    if any(word in haystack for word in _OPEN_WORDS):
+    # UNDER THE SKY IS THE NAME'S TO SAY (rule 2). The description has been
+    # read above for what can only take a room indoors; it is never read for
+    # the open sky, because an indoor room's description names what its
+    # windows look out on -- 9 of the 14 distinct live rooms the description
+    # alone read `open` were indoors and went dark at night (2026-11-01).
+    if _says(str(room.get("name") or "").casefold(), _OPEN_WORDS):
         return "open"
     return "enclosed"
 
@@ -744,7 +853,8 @@ def room_exposure(scene, room_id):
     described in rule 2 -- present because no existing scene has the field, and
     conservative by construction: a room whose text says nothing recognisable
     is treated as indoors, so weather appears in fewer places than it should
-    rather than in places it should not.
+    rather than in places it should not. A keyword is read only as a whole word
+    of the room's own text (`_says`).
     """
     return _room_facts(
         (((scene or {}).get("rooms") or {}).get(room_id) or {}))[1]
@@ -868,7 +978,7 @@ def _matches(scene, room_id, words):
     # text is casefolded once per record, not once per word list asked about.
     haystack = _room_facts(
         (((scene or {}).get("rooms") or {}).get(room_id) or {}))[0]
-    return any(word in haystack for word in words)
+    return _says(haystack, words)
 
 
 def weather_depth(scene, room_id):
@@ -970,7 +1080,7 @@ def anchor_exposure(anchor):
         return declared
     haystack = ("%s %s %s" % (anchor.get("name") or "", anchor.get("desc") or "",
                               anchor.get("kind") or "")).casefold()
-    if any(word in haystack for word in _SHELTERED_WORDS):
+    if _says(haystack, _SHELTERED_WORDS):
         return "sheltered"
     return ""
 

@@ -97,13 +97,15 @@ verbatim, so no schema, remap, or archive change is needed
 
 from __future__ import annotations
 
-import re
 from collections import deque
 
+import language_runtime as _lr
 from world.comfort import SOFT_SUPPORT_TOKENS, WARMTH_TOKENS
-from world.comfort import rest_affording
-from world.spatial import (_LIGHT_SIGHT, effective_light, hiding_holders_of,
-                           room_of, scene_names_body)
+from world.comfort import (_field_tokens, contains_word, rest_affording,
+                           vocabulary)
+from world.spatial import (_LIGHT_SIGHT, PositionsIndex, effective_light,
+                           hiding_holders_of, room_of, room_of_record,
+                           scene_names_body)
 from world.survival import vitals_of
 from mind.theory_of_mind import belief_credence
 
@@ -203,10 +205,73 @@ _CLAIM_LEXICON = {
 
 
 def _tokens(*texts):
+    """The script-aware words of `texts`, in order (`fold_words`). The
+    `[^a-z0-9]+` split this replaces deleted every letter outside ASCII, so
+    a place named in Japanese carried no assumption and a Japanese room
+    echoed nothing (world_misc_causal F12, audit 2026-11-01; the reasoning
+    lives beside `comfort.vocabulary`)."""
     out = []
     for text in texts:
-        out.extend(t for t in re.split(r"[^a-z0-9]+",
-                                       str(text or "").casefold()) if t)
+        out.extend(_field_tokens(text))
+    return out
+
+
+#: (story language, lexicon name) -> the merged lexicon, dropped whenever the
+#: packs reload -- `comfort.vocabulary`'s reasoning.
+_LEXICONS: dict = {}
+
+
+def _forget_lexicons():
+    _LEXICONS.clear()
+
+
+def _lexicon(name, build):
+    key = (_lr.current_language_id.get(), name)
+    cached = _LEXICONS.get(key)
+    if cached is None:
+        _lr.on_packs_reloaded(_forget_lexicons)
+        cached = _LEXICONS[key] = build()
+    return cached
+
+
+def _keyed_lexicon(name, base):
+    """`base` ({affordance: words}) with the story pack's words for each
+    purpose beside the engine's (`linguistics["world.place_purpose"][name]`,
+    same shape), restricted to `AFFORDANCES`."""
+    try:
+        table = _lr.linguistic("world.place_purpose", name)
+    except _lr.LanguagePackError:
+        return base
+    if not isinstance(table, dict):
+        return base
+    out = dict(base)
+    for aff, words in table.items():
+        if aff not in AFFORDANCES:
+            continue
+        words = (words,) if isinstance(words, str) else (words or ())
+        folded = frozenset(_lr.fold_text(w).strip() for w in words
+                           if str(w or "").strip())
+        out[aff] = frozenset(out.get(aff, frozenset())) | folded
+    return out
+
+
+def _name_lexicon():
+    """`_NAME_LEXICON` with the story pack's place-name words beside it
+    (`linguistics["world.place_purpose"]["NAME_LEXICON"]`: {word:
+    [affordance, ...]})."""
+    try:
+        table = _lr.linguistic("world.place_purpose", "NAME_LEXICON")
+    except _lr.LanguagePackError:
+        return _NAME_LEXICON
+    if not isinstance(table, dict):
+        return _NAME_LEXICON
+    out = dict(_NAME_LEXICON)
+    for word, affs in table.items():
+        key = _lr.fold_text(word).strip()
+        affs = (affs,) if isinstance(affs, str) else (affs or ())
+        kept = tuple(a for a in affs if a in AFFORDANCES)
+        if key and kept:
+            out[key] = kept
     return out
 
 
@@ -217,10 +282,25 @@ def assumed_affords(node_name):
     character's own graph, where a name exists only because they walked the
     room, saw into it, or were told of it."""
     out = {}
-    for token in _tokens(node_name):
-        for aff in _NAME_LEXICON.get(token, ()):
+    lexicon = _lexicon("NAME_LEXICON", _name_lexicon)
+    tokens = _tokens(node_name)
+    for token in tokens:
+        for aff in lexicon.get(token, ()):
             out.setdefault(aff, {"basis": "assumed",
                                  "note": f"the name says '{token}'"})
+    # A word written in a script that does not space its words is found
+    # inside the run it is written in (宿屋 in 港宿屋), as `comfort` finds one.
+    unspaced = _lexicon("NAME_LEXICON:unspaced", lambda: tuple(
+        word for word in lexicon if _lr.UNSPACED_SCRIPT.search(word)))
+    joined = "".join(tokens)
+    for word in unspaced:
+        affs = lexicon.get(word, ())
+        if word in tokens or all(aff in out for aff in affs):
+            continue
+        if _lr.find_names(joined, [word]):
+            for aff in affs:
+                out.setdefault(aff, {"basis": "assumed",
+                                     "note": f"the name says '{word}'"})
     return out
 
 
@@ -246,10 +326,16 @@ def here_affords(scene, name):
     if _LIGHT_SIGHT.get(effective_light(scene, rid), "none") != "full":
         return []
     found = {}
+    lexicon = _lexicon("HERE_LEXICON", lambda: _keyed_lexicon("HERE_LEXICON", {
+        **_HERE_LEXICON,
+        "rest": vocabulary("world.comfort", "SOFT_SUPPORT_TOKENS",
+                           SOFT_SUPPORT_TOKENS),
+        "warmth": vocabulary("world.comfort", "WARMTH_TOKENS", WARMTH_TOKENS),
+    }))
 
     def consider(tokens, display):
-        for aff, vocab in _HERE_LEXICON.items():
-            if aff not in found and any(t in vocab for t in tokens):
+        for aff, vocab in lexicon.items():
+            if aff not in found and contains_word(tokens, vocab):
                 found[aff] = str(display or "").strip()
 
     room = (scene.get("rooms") or {}).get(rid) or {}
@@ -259,11 +345,25 @@ def here_affords(scene, name):
                    or "").strip()
         consider(_tokens(aid, desc),
                  desc or str(aid).replace("_", " "))
+    # ONE INDEX OF WHERE THINGS STAND, read per entity under every spelling
+    # its record owns (`room_of_record`). Asking `room_of` for each entity's
+    # name and id re-resolved the name against every entity on a miss --
+    # quadratic: 30 entities 4.4 ms, 100 -> 50 ms, 300 -> 394 ms per
+    # character payload build (world_misc_causal E3, audit 2026-11-01).
+    index = PositionsIndex(scene.get("positions") or {})
     for eid, ent in (scene.get("entities") or {}).items():
         if not isinstance(ent, dict):
             continue
         label = str(ent.get("name") or eid)
-        if room_of(scene, label) != rid and room_of(scene, str(eid)) != rid:
+        if room_of_record(scene, eid, ent, index=index) != rid:
+            continue
+        # What would this thing answer? Only a thing that answers something
+        # still unanswered is worth the body and concealment questions below,
+        # which each resolve the name against every entity.
+        tokens = _tokens(eid, ent.get("kind"), ent.get("name"),
+                         ent.get("description"))
+        if not any(aff not in found and contains_word(tokens, vocab)
+                   for aff, vocab in lexicon.items()):
             continue
         # A PERSON IS NOT AN AFFORDANCE, asked of the one body predicate
         # (`spatial.scene_names_body`, review 2026-09-07 A56 rework) rather
@@ -275,8 +375,7 @@ def here_affords(scene, name):
             continue
         if hiding_holders_of(scene, label) or hiding_holders_of(scene, str(eid)):
             continue
-        consider(_tokens(eid, ent.get("kind"), ent.get("name"),
-                         ent.get("description")), label)
+        consider(tokens, label)
     return [f"{aff} (the {found[aff]})" if not found[aff].casefold().startswith(("the ", "a ", "an "))
             else f"{aff} ({found[aff]})"
             for aff in AFFORDANCES if aff in found]
@@ -358,9 +457,11 @@ def witness_affords(state, scene, name, turn_idx):
 
 
 def _claim_affords(claim):
-    tokens = set(_tokens(claim))
+    tokens = _tokens(claim)
+    lexicon = _lexicon("CLAIM_LEXICON",
+                       lambda: _keyed_lexicon("CLAIM_LEXICON", _CLAIM_LEXICON))
     return [aff for aff in AFFORDANCES
-            if tokens & _CLAIM_LEXICON.get(aff, frozenset())]
+            if contains_word(tokens, lexicon.get(aff, frozenset()))]
 
 
 def mirror_told_affords(state, turn_idx, elapsed_seconds=None):
