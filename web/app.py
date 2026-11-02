@@ -8,12 +8,14 @@ code_version.take_snapshot()
 from core import updates
 from contextlib import asynccontextmanager, contextmanager
 from fastapi import FastAPI, Body, HTTPException, Query, Request
+from starlette.concurrency import run_in_threadpool
 from starlette.datastructures import Headers
 from fastapi.responses import (StreamingResponse, JSONResponse, FileResponse,
                                HTMLResponse, Response)
 from fastapi.staticfiles import StaticFiles
 
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from story import attire
 import extension_runtime
@@ -68,6 +70,7 @@ from agents import (
 )
 from story.character_schema import (
     EXTRA_PART_ASPECTS,
+    authored_uid,
     character_card_warnings,
     character_export_document,
     character_initial_outfit,
@@ -106,6 +109,7 @@ from persist.commit import (promotable_background_presences,
                     recognition_roster,
                     seed_mutual_recognition,
                     sync_room_registry_with_scene,
+                    sync_world_entities_with_scene,
                     # The gate itself, not a second reading of the same
                     # setting. `"" != "0"` is True, so an unset setting read
                     # as ON here and OFF at the gate -- see get_auto_promote.
@@ -163,6 +167,13 @@ from web.world_routes import doorways_router as world_doorways_router
 from web.world_routes import map_router as world_map_router
 from web.world_routes import regions_router as world_regions_router
 from web.world_routes import router as world_router
+# The chat row, or the 404 a missing story is -- the World Browser's helper,
+# one rule for both route modules. A chat-scoped writer that wrote first and
+# let the foreign key object answered a missing story with an unhandled 500
+# (audit 2026-11-01, web_app F15: `style_guide_put`, `bg_cfg_put`,
+# `frames_create`, and every unchecked `wset` caller -- `world.chat_id`
+# references `chats`).
+from web.world_routes import _chat_or_404
 from web.auth_routes import (
     GUEST_ALLOWED_API_PATHS,
     GUEST_COOKIE,
@@ -693,11 +704,109 @@ def login_page():
     # and sign-in, then redirects into the SPA once a session cookie is set.
     return FileResponse(STATIC_ROOT / "login.html")
 
+#: FastAPI's own schema and docs pages. They describe every route and its
+#: parameters, so they are the host's, behind the same cookie as /api/* --
+#: they were served to anyone who could reach the port (audit 2026-11-01,
+#: web_app F16: 214 paths with no cookie).
+_HOST_ONLY_PAGES = frozenset(
+    url for url in (app.openapi_url, app.docs_url, app.redoc_url,
+                    app.swagger_ui_oauth2_redirect_url) if url)
+
+#: The methods that write. A read needs no origin rule: with no CORS headers
+#: (see "App setup") a page on another origin cannot read the answer.
+_WRITE_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
+
+
+def _write_from_another_origin(request) -> bool:
+    """True for a write a browser sent from a page on another origin.
+
+    SameSite is per SITE, not per origin: a page on another port of the host
+    string the host browses with (a dev server, a notebook rendering
+    untrusted HTML) is the same site, so the Strict host cookie rides along
+    -- and a type-less body sends no preflight. That drove a blind
+    `extensions/install` + `enable`, an extension's Python run in this
+    process (audit 2026-11-01, web_routes_extensions F1).
+
+    `Sec-Fetch-Site` is written by the browser and a page cannot forge it;
+    it decides whenever it is sent. Only where it is absent (an older
+    browser) is `Origin` compared with the Host this request was sent to.
+    A caller that sends neither is not a browser page, and is unchanged.
+    """
+    if request.method not in _WRITE_METHODS:
+        return False
+    site = request.headers.get("sec-fetch-site")
+    if site is not None:
+        return site.strip().lower() not in ("same-origin", "none")
+    origin = request.headers.get("origin")
+    if origin is None:
+        return False
+    return urlsplit(origin.strip()).netloc.lower() \
+        != request.headers.get("host", "").strip().lower()
+
+
+#: Names, besides an address and `localhost`, at which this machine's host
+#: may complete first-run setup -- a comma-separated list, for a host who
+#: browses their own machine by its hostname. Empty by default.
+SETUP_HOSTS_ENV = "SONDER_SETUP_HOSTS"
+
+
+def _setup_at_a_foreign_name(request) -> bool:
+    """True for a first-run setup a browser sent to a name this machine never
+    declared -- the shape of a DNS-rebinding claim.
+
+    While no account exists, `/api/auth/setup` is public and its one gate is
+    `request_is_local`, the TCP peer. A page at `evil.example:8008` rebound to
+    127.0.0.1 IS a loopback peer, from the host's own browser: it claimed the
+    instance, held a cookie same-origin to itself, and the owner was told
+    "Account already exists" (audit 2026-11-01, web_routes_extensions F2).
+    A rebinding page cannot choose the Host its browser sends -- it is the
+    page's own name -- so a network request must name an address,
+    `localhost` (RFC 6761: never resolved through DNS), or a name the host
+    declared. An in-process transport or a unix socket has no browser to
+    rebind and is not asked.
+    """
+    peer = request.client.host if request.client else ""
+    try:
+        ipaddress.ip_address(peer)
+    except ValueError:
+        return False
+    host = (urlsplit("//" + request.headers.get("host", "").strip()).hostname
+            or "").rstrip(".").lower()
+    if not host or host == "localhost" or host.endswith(".localhost"):
+        return False
+    try:
+        ipaddress.ip_address(host)
+        return False
+    except ValueError:
+        pass
+    declared = {name.strip().rstrip(".").lower()
+                for name in os.environ.get(SETUP_HOSTS_ENV, "").split(",")
+                if name.strip()}
+    return host not in declared
+
+
 @app.middleware("http")
 async def access_control(request: Request, call_next):
     path = request.url.path
+    if path in _HOST_ONLY_PAGES:
+        if guest.verify_host_session(request.cookies.get(HOST_COOKIE)):
+            return await call_next(request)
+        return JSONResponse({"detail": "Unauthorized"}, status_code=401)
     if not path.startswith("/api/"):
         return await call_next(request)
+    # Before the cookie and before the public paths: the login, setup and
+    # join pages post from this origin with `fetch`, so the rule costs them
+    # nothing, and a forged write is refused whoever's cookie it carries.
+    if _write_from_another_origin(request):
+        return JSONResponse({"detail": "A write from another origin was refused."},
+                            status_code=403)
+    # Refused like `auth_setup`'s own peer check, naming no address, and
+    # without consuming the one-time claim.
+    if path == "/api/auth/setup" and _setup_at_a_foreign_name(request):
+        return JSONResponse(
+            {"detail": "First-run setup can only be completed from the "
+                       "machine running Sonder, at its own address."},
+            status_code=403)
     if path in PUBLIC_API_PATHS:
         return await call_next(request)
 
@@ -725,7 +834,8 @@ def _require_chat_idle(chat_id: int, allow=()):
     """Whole-chat exclusivity: no frame's pipeline may be running. Used
     for every operation that isn't safely frame-local under Stage A's
     concurrency model -- recompute (reroll/rerun/resume/step edit/step
-    activate/turn delete), branch, export/import, and lorebook
+    activate/turn delete), branch, export (`_IdleExportArchiveService`;
+    an import makes a new chat, which no run can be writing), and lorebook
     attach/detach (which touches checkpoints spanning every frame).
 
     `allow` are frames whose running beat the caller's rewind takes back and
@@ -975,12 +1085,24 @@ def _stream(gen):
         # When the producer is slower than the consumer the inner loop finds
         # the queue empty and each event still goes out immediately, so
         # latency to first byte of any event is untouched.
+        # JOINED ONLY ONCE THE RUN IS OVER. A client that leaves mid-turn
+        # closes this generator, and Starlette closes it ON THE EVENT LOOP:
+        # a join there waited out the rest of the turn on the loop, and every
+        # other request hung until it committed (audit 2026-11-01, web_app F1:
+        # a 2.5 s stall for a 2.8 s remainder, 0.09 s with no disconnect).
+        # The run needs nothing from this side to finish -- it drains on its
+        # own thread and releases its slot in `run_pipeline`'s own `finally`,
+        # exactly as a `_detach`ed run does -- so a closed stream just stops
+        # listening. After DONE the thread is already on its way out, and the
+        # join costs nothing.
+        over = False
         try:
             if notice:
                 yield json.dumps(notice) + "\n"
             while True:
                 evt = evt_queue.get()
                 if evt is DONE:
+                    over = True
                     return
                 batch = [evt]
                 while True:
@@ -989,12 +1111,14 @@ def _stream(gen):
                     except queue.Empty:
                         break
                     if nxt is DONE:
+                        over = True
                         yield "".join(json.dumps(e) + "\n" for e in batch)
                         return
                     batch.append(nxt)
                 yield "".join(json.dumps(e) + "\n" for e in batch)
         finally:
-            thread.join()
+            if over:
+                thread.join()
     return StreamingResponse(w(), media_type="application/x-ndjson")
 
 def _player_input(body: dict) -> str:
@@ -1305,41 +1429,25 @@ def _branch_protected_identity_ids(chat_id, persona_id):
 
 
 def _build_world_id_remap(blob, protected_ids=None):
-    """Generate fresh IDs for all world entities/conditions/events/worlds/locations
-    in a checkpoint blob. Returns a mapping of old_id -> new_id.
+    """Fresh ids for the rows of the two world tables whose primary key is
+    GLOBAL (`fiction_worlds`, `fiction_locations`), as a
+    `checkpoints.GlobalKeyRemap` that rewrites them only where those rows
+    name them. Every other world id is the story's own and is kept.
 
-    `protected_ids` are identity strings that must NOT be remapped -- chiefly
-    CHARACTER and player-persona identities (names/uids). A character positioned
-    in the scene is looked up by its stable name/uid (character_scene_keys), but
-    is ALSO projected into world_entities keyed by that same name; without this
-    guard, remapping that world_entities row's id rewrote the scene.positions
-    key from "Dr. Moon" to a fresh opaque uid, so the character no longer
-    resolved to any room after a branch ("unspecified location" on the next
-    turn). Object/entity ids remap freely; identity keys stay put."""
-    import uuid
+    It used to mint a fresh id for every world_entities / world_conditions /
+    scheduled_events / world_events id as well, and `_deep_remap_ids` then
+    rewrote every string equal to one anywhere in the world -- a remap whose
+    reason, global primary keys, those four tables lost at v14/v16/v27. An
+    entity keyed `door` turned every `barrier: "door"` into hex, a garment
+    string equal to an entity id became hex (audit 2026-11-01, persistence
+    F10), and an authored event's idempotent id became random, so the
+    Director re-asserting it minted a second copy (story_scene_schema F3).
+    The `protected_ids` guard against exactly that rewrite (characters keyed
+    in world_entities by name, the "unspecified location" branch bug) is
+    kept for a global-key id equal to an identity; nothing else needs it."""
+    from persist.checkpoints import global_key_remap
 
-    protected = {str(p) for p in (protected_ids or set()) if p}
-    remap = {}
-
-    def reg(old_id):
-        if old_id and old_id not in protected and old_id not in remap:
-            remap[old_id] = uuid.uuid4().hex[:16]
-        return remap.get(old_id) if old_id else old_id
-
-    for ent in blob.get("world_entities") or []:
-        reg(ent.get("entity_id"))
-    for cond in blob.get("world_conditions") or []:
-        reg(cond.get("condition_id"))
-    for ev in blob.get("scheduled_events") or []:
-        reg(ev.get("event_id"))
-    for ev in blob.get("world_events") or []:
-        reg(ev.get("event_id"))
-    for fw in blob.get("fiction_worlds") or []:
-        reg(fw.get("world_id"))
-    for fl in blob.get("fiction_locations") or []:
-        reg(fl.get("location_id"))
-
-    return remap
+    return global_key_remap([blob], protected=protected_ids or ())
 
 def _deep_remap_ids(obj, remap):
     """Recursively remap exact string matches and dict keys.
@@ -1358,6 +1466,12 @@ def _deep_remap_ids(obj, remap):
     """
     if not remap:
         return obj
+    # The branch's map (`_build_world_id_remap`) names global-key rows only,
+    # and is rewritten only where those rows name their ids -- never as an
+    # arbitrary equal string (audit 2026-11-01, persistence F10).
+    from persist.checkpoints import GlobalKeyRemap, remap_global_keys
+    if isinstance(remap, GlobalKeyRemap):
+        return remap_global_keys(obj, remap)
     if isinstance(obj, str):
         return remap.get(obj, obj)
     if isinstance(obj, dict):
@@ -1478,7 +1592,20 @@ def _remap_cp_blob(blob, turn_idmap, bookmap, fallback_canon,
         # first reroll after a branch or import restored SOURCE-chat frame
         # ids into this chat.
         _remap_fixed_points_frames(blob["world"], frame_idmap)
-        _remap_couple_frames(blob["world"], frame_idmap, char_idmap, persona_idmap)
+        # Every character row id the world holds, by the archive's one table
+        # (`chat_archive.remap_world_character_ids`; audit 2026-11-01,
+        # persistence F3: an imported checkpoint kept `relationships:1` for a
+        # character the import had made 6). The couple maps' casts are in
+        # that table, so the frame rescope is handed no character map. A
+        # same-install branch passes none: its characters are shared rows.
+        if char_idmap is not None:
+            from persist.chat_archive import remap_world_character_ids
+            remap_world_character_ids(blob["world"], char_idmap)
+        _remap_couple_frames(blob["world"], frame_idmap, None, persona_idmap)
+    if char_idmap is not None:
+        from persist.chat_archive import WORLD_TABLES, remap_row_character_ids
+        for key in WORLD_TABLES:
+            remap_row_character_ids(blob.get(key), char_idmap)
     if isinstance(blob.get("scheduled_events"), list):
         _remap_scheduled_event_frames(blob["scheduled_events"], frame_idmap)
 
@@ -1502,6 +1629,14 @@ def _remap_cp_blob(blob, turn_idmap, bookmap, fallback_canon,
         # cloned) or a cross-install restore FK-fails and aborts.
         if "retired_turn_id" in book:
             book["retired_turn_id"] = turn_idmap.get(book.get("retired_turn_id"))
+        # An import's books came from another install, so an `origin_id` is
+        # that install's row id: mapped through the archive's own books or
+        # gone. Left verbatim, a restore read a re-created book's foreign
+        # origin as a LIBRARY book of this install and attached that
+        # stranger instead (audit 2026-11-01, persistence F8). A same-install
+        # branch (no `char_idmap`) keeps it: the id means the same book.
+        if char_idmap is not None and book.get("origin_id") is not None:
+            book["origin_id"] = bookmap.get(book.get("origin_id"))
 
     remapped_links = []
     for link in blob.get("lorebook_links") or []:
@@ -1636,6 +1771,14 @@ def _remap_cp_blob(blob, turn_idmap, bookmap, fallback_canon,
         if "owning_book_id" in rr:
             rr["owning_book_id"] = bookmap.get(rr.get("owning_book_id"))
 
+    # A global-key row this checkpoint holds and the copy's map does not --
+    # one the branch point had lost -- is given its fresh id HERE, in the
+    # same map the caller hands every checkpoint, so it is one id wherever it
+    # appears; verbatim, a restore of this older checkpoint collided with the
+    # source chat's live row (audit 2026-11-01, persistence F9).
+    from persist.checkpoints import GlobalKeyRemap, global_key_remap
+    if isinstance(world_id_remap, GlobalKeyRemap):
+        global_key_remap([blob], remap=world_id_remap)
     if world_id_remap:
         for key in ("world_entities", "world_placements", "world_conditions",
                     "scheduled_events", "world_events", "relationship_events",
@@ -2695,10 +2838,20 @@ def extensions_list():
             "safe_mode": extension_runtime.safe_mode()}
 
 
+# THE EXTENSION SET CHANGES ONLY BETWEEN TURNS. Enable, disable, install,
+# update and remove raise `ExtensionBusy` while any beat runs -- a turn is
+# planned with the extensions live when it began, and one whose `ext:` stage
+# vanished under it died "unknown step" (web_routes_extensions F12). Each
+# route answers it as the conflict it is, 409, before its own `ExtensionError`
+# status: as 404 or 400 it told the host the extension was missing or the
+# request malformed, and `extension_disable`, with no handler, said 500.
 @app.post("/api/extensions/{eid}/enable")
 def extension_enable(eid: str):
+    ext_id = _extension_id(eid)
     try:
-        return extension_runtime.enable_extension(_extension_id(eid))
+        return extension_runtime.enable_extension(ext_id)
+    except extension_runtime.ExtensionBusy as exc:
+        raise HTTPException(409, str(exc)) from exc
     except extension_runtime.ExtensionError as exc:
         raise HTTPException(404, str(exc)) from exc
 
@@ -2718,6 +2871,8 @@ def extension_install(body: dict = Body(...)):
         raise HTTPException(400, "source is required")
     try:
         return {"extension": extension_runtime.install_extension(source)}
+    except extension_runtime.ExtensionBusy as exc:
+        raise HTTPException(409, str(exc)) from exc
     except extension_runtime.ExtensionError as exc:
         raise HTTPException(400, str(exc)) from exc
     except Exception as exc:
@@ -2737,8 +2892,11 @@ def extension_updates():
 
 @app.post("/api/extensions/{eid}/update")
 def extension_update(eid: str):
+    ext_id = _extension_id(eid)  # its own 404, never the 502 below
     try:
-        return extension_runtime.update_extension(_extension_id(eid))
+        return extension_runtime.update_extension(ext_id)
+    except extension_runtime.ExtensionBusy as exc:
+        raise HTTPException(409, str(exc)) from exc
     except extension_runtime.ExtensionError as exc:
         raise HTTPException(400, str(exc)) from exc
     except Exception as exc:
@@ -2747,15 +2905,22 @@ def extension_update(eid: str):
 
 @app.delete("/api/extensions/{eid}")
 def extension_remove(eid: str):
+    ext_id = _extension_id(eid)
     try:
-        return extension_runtime.remove_extension(_extension_id(eid))
+        return extension_runtime.remove_extension(ext_id)
+    except extension_runtime.ExtensionBusy as exc:
+        raise HTTPException(409, str(exc)) from exc
     except extension_runtime.ExtensionError as exc:
         raise HTTPException(404, str(exc)) from exc
 
 
 @app.post("/api/extensions/{eid}/disable")
 def extension_disable(eid: str):
-    return extension_runtime.disable_extension(_extension_id(eid))
+    ext_id = _extension_id(eid)
+    try:
+        return extension_runtime.disable_extension(ext_id)
+    except extension_runtime.ExtensionBusy as exc:
+        raise HTTPException(409, str(exc)) from exc
 
 
 @app.get("/api/extensions/{eid}/state")
@@ -2925,9 +3090,18 @@ async def extension_route(eid: str, path: str, request: Request):
             body = await request.json()
         except Exception:
             body = None
+    ext_id = _extension_id(eid)
     try:
-        result = extension_runtime.dispatch_route(
-            _extension_id(eid), request.method, path,
+        # ON THE THREADPOOL. This endpoint is `async` for the `await` above,
+        # and FastAPI moves only `def` endpoints off the event loop -- so the
+        # extension's handler ran on the loop, and one doing real work
+        # (`api.provision_story`'s archive import, `generate_lived_location`'s
+        # minutes) held every other request, the turn stream included (audit
+        # 2026-11-01, web_app F5). `run_in_threadpool` copies the context,
+        # as a `def` endpoint's call does.
+        result = await run_in_threadpool(
+            extension_runtime.dispatch_route,
+            ext_id, request.method, path,
             query=dict(request.query_params), body=body)
     except extension_runtime.ExtensionError as exc:
         raise HTTPException(404, str(exc)) from exc
@@ -3008,10 +3182,20 @@ def maintenance_checkpoints():
     format, plus any conversion in flight.
 
     Lives beside the update routes because that is where a host looks after
-    pulling a version whose storage format changed. Safe to poll: the status
-    scan is sizes plus a one-entry probe per blob, not a full parse.
+    pulling a version whose storage format changed.
+
+    NOT a cheap read when idle: `checkpoint_storage_status` selects and parses
+    every checkpoint blob in scope -- 49 s on the owner's store (settings UI
+    lane, 2026-11-01). So WHILE A CONVERSION RUNS it answers `{progress}`
+    alone: the maintenance card polls every second during a run and reads
+    nothing else until it ends, and a full parse per poll overlapped the
+    polls and the run they were watching. The whole report comes back once
+    the run is over, when the card wants it.
     """
-    out = {"progress": compaction_progress()}
+    progress = compaction_progress()
+    out = {"progress": progress}
+    if progress.get("running"):
+        return out
     try:
         out.update(checkpoint_storage_status())
     except Exception as exc:
@@ -3168,8 +3352,9 @@ def lorebook_link_delete(link_id: int):
 def lorebook_generate_plan(lid: int, body: dict = Body(default={})):
     _require_lorebook(lid)
     brief = str(body.get("prompt") or body.get("brief") or "").strip()
+    language = _require_story_language(body.get("language"))  # its own 400
     try:
-        with language_scope(_require_story_language(body.get("language"))):
+        with language_scope(language):
             plan = generate_lorebook_plan(
                 lid, brief,
                 mode=body.get("mode", "expand_tree"),
@@ -3497,8 +3682,14 @@ def char_create(body: dict = Body(...)):
     # The blank card is the sharpest case for this: `default_character_data`
     # ships an empty drive, no goals and an unset capacity, which is by
     # construction the exact sheet the first three warnings exist to catch.
+    # THE CARD AS WRITTEN where there is one: the structural warnings (a
+    # station with no name, too many stations, clothing at a region nothing
+    # declares) are asked of it, because normalizing is what repairs them
+    # away, and the semantic ones of its normalization (story_scene_schema
+    # F12a, audit 2026-11-01). The same in `char_edit`, `chat_char_card_put`
+    # and `confirm_promotion`, the routes that hold the author's own input.
     return {"id": cid, "sheet": sheet,
-            "warnings": character_card_warnings(sheet)}
+            "warnings": character_card_warnings(raw if raw else sheet)}
 
 @app.post("/api/characters/import")
 def char_import(body: dict = Body(...)):
@@ -3681,9 +3872,13 @@ def char_generate_greeting(cid: int, body: dict = Body(default={})):
     if not q("SELECT 1 FROM characters WHERE id=?", (cid,), one=True):
         raise HTTPException(404, "Character not found")
     brief = str(body.get("prompt") or body.get("brief") or body.get("situation") or "")
+    # The language BEFORE the `try`: inside it, `_require_story_language`'s
+    # own 400 was caught below and re-raised as a 502 "generation failed"
+    # (audit 2026-11-01, web_app F14; the same for the three fills and the
+    # lore plan).
+    language = _require_story_language(body.get("language"))
     try:
-        greeting = greetings.generate_greeting(
-            cid, brief, language=_require_story_language(body.get("language")))
+        greeting = greetings.generate_greeting(cid, brief, language=language)
     except Exception as exc:
         raise HTTPException(502, f"Greeting generation failed: {exc}") from exc
     return {"greeting": greeting}
@@ -3694,8 +3889,9 @@ def _psychology_fill(char_id, body, chat_id=None):
     The `_interior_fill` rule, applied to its sibling (A64): which row the
     answer is proposed against is the story's business, not the button's."""
     brief = str(body.get("prompt") or body.get("brief") or "").strip()
+    language = _require_story_language(body.get("language"))  # its own 400
     try:
-        with language_scope(_require_story_language(body.get("language"))):
+        with language_scope(language):
             return fill_character_psychology(char_id, brief, chat_id=chat_id)
     except ValueError as exc:
         raise HTTPException(404, str(exc)) from exc
@@ -3728,8 +3924,9 @@ def _interior_fill(char_id, body, chat_id=None):
     the author presses the button, reviews a chain, saves, and the cast row
     the engine reads is untouched."""
     brief = str(body.get("prompt") or body.get("brief") or "").strip()
+    language = _require_story_language(body.get("language"))  # its own 400
     try:
-        with language_scope(_require_story_language(body.get("language"))):
+        with language_scope(language):
             return fill_body_interior(
                 char_id, brief, draft=body.get("draft"), chat_id=chat_id)
     except ValueError as exc:
@@ -3769,8 +3966,9 @@ def _appearance_fill(kind, entity_id, body, chat_id=None):
 
     `chat_id` names the story whose card this is, the same way `_interior_fill`
     does (A64) -- a persona has no per-story card and never passes one."""
+    language = _require_story_language(body.get("language"))  # its own 400
     try:
-        with language_scope(_require_story_language(body.get("language"))):
+        with language_scope(language):
             return fill_appearance(
                 kind, entity_id,
                 str(body.get("prompt") or body.get("brief") or "").strip(),
@@ -3825,26 +4023,39 @@ def char_edit(cid: int, body: dict = Body(...)):
     # been playing under; an edit that keeps the name and uid touches
     # nothing in the stories, as before.
     old = q("SELECT sheet FROM characters WHERE id=?", (cid,), one=True)
-    if old:
-        old_sheet = normalize_character_data(json.loads(old["sheet"] or "{}"))
-        old_uid = str((old_sheet.get("identity") or {}).get("uid") or "")
-        new_uid = str((sheet.get("identity") or {}).get("uid") or "")
-        if character_name(old_sheet) != character_name(sheet) \
-                or (old_uid and old_uid != new_uid):
-            qi("UPDATE chat_chars SET sheet=? WHERE char_id=? "
-               "AND (sheet IS NULL OR TRIM(sheet)='')",
-               (old["sheet"], cid))
+    if not old:
+        # It answered {"ok": true} for a card that does not exist, having
+        # written nothing (audit 2026-11-01, web_app F15).
+        raise HTTPException(404, "Character not found")
+    old_sheet = normalize_character_data(json.loads(old["sheet"] or "{}"))
+    old_uid = str((old_sheet.get("identity") or {}).get("uid") or "")
+    new_uid = str((sheet.get("identity") or {}).get("uid") or "")
+    if character_name(old_sheet) != character_name(sheet) \
+            or (old_uid and old_uid != new_uid):
+        qi("UPDATE chat_chars SET sheet=? WHERE char_id=? "
+           "AND (sheet IS NULL OR TRIM(sheet)='')",
+           (old["sheet"], cid))
     qi(
         "UPDATE characters SET name=?,sheet=? WHERE id=?",
         (character_name(sheet), json.dumps(sheet, ensure_ascii=False), cid),
     )
+    # The card as written (see `char_create`).
     return {"ok": True, "sheet": sheet,
-            "warnings": character_card_warnings(sheet)}
+            "warnings": character_card_warnings(body.get("sheet") or sheet)}
 
 @app.delete("/api/characters/{cid}")
 def char_del(cid: int):
-    qi("DELETE FROM characters WHERE id=?", (cid,))
-    qi("DELETE FROM chat_chars WHERE char_id=?", (cid,))
+    with transaction():
+        # THE SEARCH INDEX FIRST. `memories` cascades from `characters`, but
+        # `memory_retrieval_fts` is a plain FTS5 table -- no foreign key, no
+        # trigger -- so the cascade left every index row of the deleted
+        # character behind: 1,419 orphans (7.5% of the live index) when
+        # counted, all of characters that no longer exist (audit 2026-11-01,
+        # mind_memory F8). The index stores `char_id` as text, as
+        # `persist/chat_delete.py` already sweeps it for a chat.
+        qi("DELETE FROM memory_retrieval_fts WHERE char_id=?", (str(cid),))
+        qi("DELETE FROM characters WHERE id=?", (cid,))
+        qi("DELETE FROM chat_chars WHERE char_id=?", (cid,))
     return {"ok": True}
 
 # ============================ PERSONAS ============================
@@ -3915,6 +4126,10 @@ def persona_export(pid: int):
 
 @app.put("/api/personas/{pid}")
 def persona_edit(pid: int, body: dict = Body(...)):
+    if not q("SELECT 1 FROM personas WHERE id=?", (pid,), one=True):
+        # As `char_edit`: {"ok": true} for a card that does not exist, having
+        # written nothing (audit 2026-11-01, web_app F15).
+        raise HTTPException(404, "Persona not found")
     sheet = normalize_persona_data(body.get("sheet") or {})
     qi(
         "UPDATE personas SET name=?,sheet=? WHERE id=?",
@@ -4066,8 +4281,9 @@ def lore_export(lid: int):
 @app.post("/api/lorebooks/{lid}/reinterpret")
 def lore_reinterpret_route(lid: int):
     _require_lorebook(lid)
+    language = _require_story_language(None)  # its own 400
     try:
-        with language_scope(_require_story_language(None)):
+        with language_scope(language):
             count = reinterpret_lorebook(lid)
     except Exception as exc:
         raise HTTPException(502, f"Lorebook reinterpretation failed: {exc}") from exc
@@ -4490,6 +4706,10 @@ def bind_lore(cid: int, body: dict = Body(...)):
     src = body["lorebook_id"]
     if not src:
         qi("UPDATE chats SET lorebook_id=NULL WHERE id=?", (cid,))
+        # Carried into the checkpoints as `detach_lore` carries it: without
+        # it the next reroll re-bound the canon this unbound (audit
+        # 2026-11-01, web_app F9).
+        _refresh_rewindable_checkpoints(cid)
         return {"lorebook_id": None}
     row = q("SELECT * FROM lorebooks WHERE id=?", (src,), one=True)
     if not row: raise HTTPException(404, "Lorebook not found")
@@ -4535,11 +4755,13 @@ def chat_get(cid: int, since_turn_id: int | None = None):
     out of 91,137. The transcript is what shrinks -- 124 turns to 1 -- and it
     is what grows without bound.
 
-    The rest of the payload -- cast, colours, lorebooks, frames, the bank
-    check -- is ALWAYS whole, because none of it is append-only: a character
-    is renamed, a book is detached, a frame is created. Only `turns` narrows,
-    and the reply says so (`turns_since`) so a client cannot mistake a slice
-    for the story.
+    The rest of the payload -- cast, colours, lorebooks, frames -- is ALWAYS
+    whole, because none of it is append-only: a character is renamed, a book
+    is detached, a frame is created. Only `turns` narrows, and the reply says
+    so (`turns_since`) so a client cannot mistake a slice for the story. The
+    embedding-bank check is the exception the other way: it is a provider
+    round trip, made on a whole read only (`embedding_bank` is None on a
+    slice; see below).
 
     An EDIT to an existing turn (a reroll, a prose edit, a rerun from a
     stage, a delete) is not an append and must be refetched whole: the caller
@@ -4773,15 +4995,24 @@ def chat_get(cid: int, since_turn_id: int | None = None):
         queue_fallback_rows_for_repair(cid)
     except Exception:
         pass
-    try:
-        bank = embedding_bank_status(chat_id=cid)
-        stranded = (bank["memories"]["stranded"]
-                    + bank["memory_summaries"]["stranded"]
-                    - bank["memories"].get("fallback_written", 0)
-                    - bank["memory_summaries"].get("fallback_written", 0))
-        bank = {**bank, "stranded": stranded} if stranded > 0 else None
-    except Exception:
-        bank = None
+    # A WHOLE READ ONLY. `embedding_bank_status` asks the provider what the
+    # live model is (`embed_texts_meta(["status"], retry=None)`, the one call
+    # that skips every cache), and the `?since_turn_id=` slice is the refresh
+    # after every beat: each beat paid a billed round trip, or waited out a
+    # connect failure while the endpoint was down (audit 2026-11-01, web_app
+    # E1). The page offers the rebuild when a story opens, which is a whole
+    # read; a slice answers None, which it reads as "nothing to offer".
+    bank = None
+    if since_turn_id is None:
+        try:
+            bank = embedding_bank_status(chat_id=cid)
+            stranded = (bank["memories"]["stranded"]
+                        + bank["memory_summaries"]["stranded"]
+                        - bank["memories"].get("fallback_written", 0)
+                        - bank["memory_summaries"].get("fallback_written", 0))
+            bank = {**bank, "stranded": stranded} if stranded > 0 else None
+        except Exception:
+            bank = None
 
     # INSTRUMENTATION for the "turn does not appear until I switch stories and
     # switch back" report, 2026-08-08. The transcript rendered is old because
@@ -4974,6 +5205,21 @@ def confirm_promotion(cid: int, body: dict = Body(...)):
     sheet = body.get("sheet")
     if not name or not isinstance(sheet, dict):
         raise HTTPException(400, "Missing name or sheet")
+    # A cast writer, like `chat_add_char`: the turn's commit rewrites
+    # `scene`, `background_presences` and `known` wholesale from what it
+    # prepared before its lock, so a promotion confirmed mid-turn lost her
+    # position and could leave the presence recorded beside her (audit
+    # 2026-11-01, web_app F6).
+    _require_chat_idle(cid)
+    # The confirm route takes whatever sheet the host approved, which may not
+    # be the draft `draft_promoted_character` warned about -- so it is warned
+    # about here, AS WRITTEN (see `char_create`) and BEFORE anything is
+    # written. Asked after the writer, a scalar where a mapping belongs
+    # (`"psychology": "brave"`) raised once the promotion had landed: a 500
+    # for a promotion that succeeded, and the retry refused as a name
+    # collision (audit 2026-11-01, story_scene_schema F12; the function reads
+    # such a card since).
+    warnings = character_card_warnings(sheet)
 
     memory_seeds = [str(m) for m in (body.get("memory_seeds") or []) if str(m).strip()]
     frame_id = body.get("frame_id")
@@ -4988,13 +5234,16 @@ def confirm_promotion(cid: int, body: dict = Body(...)):
                 (cid,), one=True)
     promoted_turn = int(_latest["idx"]) if _latest and _latest["idx"] is not None else 0
     with _era(cid, frame_id):
-        char_id = promote_background_character(
-            cid, name, sheet=sheet, memory_seeds=memory_seeds,
-            frame_id=frame_id, promoted_turn=promoted_turn)
-    # The confirm route takes whatever sheet the host approved, which may not
-    # be the draft `draft_promoted_character` warned about.
-    return {"ok": True, "char_id": char_id,
-            "warnings": character_card_warnings(sheet)}
+        try:
+            char_id = promote_background_character(
+                cid, name, sheet=sheet, memory_seeds=memory_seeds,
+                frame_id=frame_id, promoted_turn=promoted_turn)
+        except ValueError as exc:
+            # The writer's own refusals -- a name the story already holds, an
+            # ambiguous or unnamed presence -- say what to do; a bare
+            # ValueError reached the host as an unexplained 500.
+            raise HTTPException(409, str(exc)) from exc
+    return {"ok": True, "char_id": char_id, "warnings": warnings}
 
 @app.get("/api/auto_promote")
 def get_auto_promote():
@@ -5237,7 +5486,10 @@ def _guest_inputs_by_beat(turn_rows, frame_id, filed):
 
     A declaration this guest's frame has NOT reached yet is still pending and
     still shown under the index it was filed under, exactly as before -- no
-    beat has served it, so there is no other row to hang it on.
+    beat has served it, so there is no other row to hang it on. That holds
+    where a turn row HAS that index (another era took it); one filed under
+    an index no row holds yet has no row at all, and `guest_state` sends it
+    apart as `pending_input` (frontend_core F9, audit 2026-11-01).
 
     `turn_rows` are the chat's turns in idx order; `filed` maps a filed
     turn_idx to the line declared under it.
@@ -5262,8 +5514,40 @@ def _guest_inputs_by_beat(turn_rows, frame_id, filed):
         by_idx[i] = filed[i]
     return by_idx
 
+def _guest_stage(key):
+    """`(family, phase)`: what a guest may be told a stale step is.
+
+    The step's FAMILY (`character`, never `character:12`) and the engine's
+    own name for it (`agents.runtime.STEP_LABELS`) with nothing filled in
+    from the story -- `"Character · {name}"` is told as "Character", and a
+    family the table does not name (an extension's `ext:<id>:<key>`) as
+    nothing. The stored label is never read: a character's step is stored
+    as "Character · <true name>", and a guest whose persona knew her only
+    as "the hooded woman" was sent the name on every poll; an extension's
+    stage carried "Extension · <id> · <key>", its campaign's internals
+    (audit 2026-11-01, web_app F4 / web_routes_extensions F8). The host's
+    own payload (`chat_get`) keeps the stored label: the host is the author.
+    """
+    from agents.runtime import STEP_LABELS
+    family = str(key or "").split(":", 1)[0]
+    return family, STEP_LABELS.get(family, "").split("{", 1)[0].rstrip(" ·")
+
+
 @app.get("/api/guest/state")
-def guest_state(request: Request):
+def guest_state(request: Request, since: float | None = None):
+    """The guest's own slice of the story, polled every ten seconds.
+
+    `since` is the `mark` of the page's last answer: the creation time of the
+    newest prose it was sent. With it, a row carries `prose` only when its
+    prose was written after the mark -- a new beat, or an older one a rerun
+    rewrote -- instead of the whole transcript every poll (~199 KB a poll on
+    chat 64's 171 turns; web_routes_extensions efficiency 3, audit
+    2026-11-01). Every row still carries its flags, the guest's own line and
+    `rev`, its prose's own time: a page holding a different `rev` for a row
+    sent without `prose` (a host re-activated an older rendering) reads the
+    story again without `since`. A page that sends nothing is answered
+    whole, as it always was.
+    """
     grant = getattr(request.state, "guest_grant", None)
     if not grant:  # e.g. a signed-in HOST hitting /guest -- no guest grant set
         raise HTTPException(403, "Guest session required")
@@ -5296,7 +5580,29 @@ def guest_state(request: Request):
     # one linear walk, 0.35 ms at a thousand turns and declarations -- the
     # input table is UNIQUE(chat_id, turn_idx, persona_id), so reading it whole
     # cannot lose a row the per-beat `one=True` read returned.
-    extra_by_turn = active_mappings(cid, "narrator_extra")
+    # When each turn's prose was written: the active `narrator_extra`
+    # variant's `created`, the same row `active_mappings` reads (first step
+    # by ord, then id). Only the prose written after the page's mark is
+    # read and sent.
+    revs = {}
+    for r in q("SELECT s.turn_id AS turn_id, v.created AS created FROM turns t "
+               "CROSS JOIN steps s ON s.turn_id=t.id AND s.key='narrator_extra' "
+               "CROSS JOIN variants v ON v.step_id=s.id AND v.active=1 "
+               "WHERE t.chat_id=? ORDER BY s.turn_id, s.ord, s.id", (cid,)):
+        revs.setdefault(r["turn_id"], r["created"])
+
+    def _sends_prose(turn_id):
+        rev = revs.get(turn_id)
+        return since is None or rev is None or rev > since
+
+    fresh = [turn_id for turn_id in revs if _sends_prose(turn_id)]
+    if since is None:
+        extra_by_turn = active_mappings(cid, "narrator_extra")
+    elif fresh:
+        extra_by_turn = active_mappings(cid, "narrator_extra",
+                                        after_turn_id=min(fresh) - 1)
+    else:
+        extra_by_turn = {}
     filed = {
         r["turn_idx"]: r["input"] for r in q(
             "SELECT turn_idx, input FROM turn_player_inputs "
@@ -5309,8 +5615,26 @@ def guest_state(request: Request):
         (cid, pid), one=True,
     )
     turn_rows = q("SELECT * FROM turns WHERE chat_id=? ORDER BY idx", (cid,))
-    input_by_idx = _guest_inputs_by_beat(
-        turn_rows, station["frame_id"] if station else None, filed)
+    own_frame = station["frame_id"] if station else None
+    input_by_idx = _guest_inputs_by_beat(turn_rows, own_frame, filed)
+    # WHICH BEATS CAN STILL ARRIVE, and which of the guest's lines no beat has
+    # taken: the page could only guess "the newest turn", so every beat from
+    # before a guest joined read "Waiting…" for good, and a line filed under
+    # an index no turn row has vanished on send -- a guest who sent it again
+    # silently replaced it (frontend_core F7 and F9, audit 2026-11-01; the
+    # page reads both fields when they are present). A beat is pending until
+    # it commits, and only a beat of the guest's own era is theirs to wait
+    # for; a line is pending past this era's newest beat.
+    committed = {r["turn_id"] for r in q(
+        "SELECT s.turn_id AS turn_id FROM turns t "
+        "CROSS JOIN steps s ON s.turn_id=t.id AND s.key='commit' "
+        "CROSS JOIN variants v ON v.step_id=s.id AND v.active=1 "
+        "WHERE t.chat_id=?", (cid,))}
+    last_own = max((t["idx"] for t in turn_rows if t["frame_id"] == own_frame),
+                   default=-1)
+    held_idxs = {t["idx"] for t in turn_rows}
+    pending_input = [{"idx": i, "input": filed[i]} for i in sorted(filed)
+                     if i > last_own and i not in held_idxs]
 
     turns = []
     for t in turn_rows:
@@ -5319,20 +5643,11 @@ def guest_state(request: Request):
         my_input = input_by_idx.get(t["idx"])
         rows = stale_by_turn.get(t["id"]) or []
         earliest = min(rows, key=lambda r: r["ord"]) if rows else None
-        turns.append({
+        row = {
             "idx": t["idx"],
             "player_input": my_input,
-            "prose": entry.get("prose", ""),
             "stale": bool(rows),
-            "stale_from": (
-                {
-                    "ord": earliest["ord"],
-                    "key": earliest["key"],
-                    "label": earliest["label"],
-                }
-                if earliest
-                else None
-            ),
+            "stale_from": None,
             # The text a guest reads is narrator_extra, which is its own step
             # key (read three lines up), not the narrator step's own content.
             # Keying on "narrator" alone would key the guest's warning on a
@@ -5341,7 +5656,17 @@ def guest_state(request: Request):
             "prose_stale": any(
                 r["key"] in ("narrator", "narrator_extra") for r in rows
             ),
-        })
+            "rev": revs.get(t["id"]),
+            "pending": (t["id"] not in committed
+                        and t["frame_id"] == own_frame),
+        }
+        if earliest:
+            family, phase = _guest_stage(earliest["key"])
+            row["stale_from"] = {"ord": earliest["ord"], "key": family,
+                                 "label": phase}
+        if _sends_prose(t["id"]):
+            row["prose"] = entry.get("prose", "")
+        turns.append(row)
 
     persona = q("SELECT name FROM personas WHERE id=?", (pid,), one=True)
     # Chat-GLOBAL, and deliberately so: turn indices are play order across
@@ -5357,6 +5682,10 @@ def guest_state(request: Request):
         "persona_name": persona["name"] if persona else "Guest",
         "turns": turns,
         "next_idx": next_idx,
+        "pending_input": pending_input,
+        # The page's `since` for its next poll.
+        "mark": max((rev for rev in revs.values() if rev is not None),
+                    default=since if since is not None else 0.0),
     }
 
 @app.post("/api/guest/input")
@@ -5404,13 +5733,6 @@ def chat_char_card_put(cid: int, ch: int, body: dict = Body(...)):
     _require_chat_idle(cid)
     current = normalize_character_data(current_raw)
     sheet = normalize_character_data(body.get("sheet") or {})
-    raw_identity = (
-        current_raw.get("identity")
-        if isinstance(current_raw, dict)
-        and isinstance(current_raw.get("identity"), dict)
-        else {}
-    )
-    current_identity = current.get("identity") or {}
     identity = sheet.get("identity") or {}
     # Scene positions, recognition maps, memories, and relationship ledgers use
     # these as stable identity keys. A card edit may change psychology, voice,
@@ -5418,13 +5740,22 @@ def chat_char_card_put(cid: int, ch: int, body: dict = Body(...)):
     # a dedicated identity migration rather than a string replacement here.
     if character_name(sheet) != character_name(current):
         raise HTTPException(400, "A story character's name cannot be changed here")
-    # Very old cards may genuinely have no stored uid; the normalized editor
-    # supplies one on their first save. Once a uid exists it is immutable.
-    if (
-        raw_identity.get("uid")
-        and str(identity.get("uid") or "") != str(current_identity.get("uid") or "")
-    ):
+    # THE UID IS READ AS AUTHORED, wherever the stored card put it
+    # (`authored_uid`: the identity block, or the top level a flattened card
+    # uses -- the block alone missed that spelling). An authored uid is
+    # immutable. A card that authored none keeps none: normalization mints a
+    # fresh `char_<hex>` on every call, so the uid the editor sends back for
+    # such a card is one `GET /api/chats/{cid}` minted, and writing it rekeyed
+    # the character -- `cast_entity_id` from `character:<row id>` to the uid,
+    # `knowledge_circles.identity_key` from the name to the uid, orphaning
+    # every circle membership earned in play (audit 2026-11-01,
+    # story_scene_schema F2; 6 of 183 attachments on the owner's database
+    # read a uid-less card).
+    stored_uid = authored_uid(current_raw)
+    if stored_uid and str(identity.get("uid") or "") != stored_uid:
         raise HTTPException(400, "A story character's identity uid cannot be changed")
+    if not stored_uid:
+        identity.pop("uid", None)
 
     state = char_state(cid, ch) or {}
     # Private history already has a per-story runtime override. Keep that
@@ -5464,8 +5795,9 @@ def chat_char_card_put(cid: int, ch: int, body: dict = Body(...)):
                 "WHERE chat_id=? AND char_id=? AND frame_id=?",
                 (era_state, cid, ch, era),
             )
+    # The card as written (see `char_create`).
     return {"ok": True, "sheet": sheet, "card_source": "chat",
-            "warnings": character_card_warnings(sheet)}
+            "warnings": character_card_warnings(body.get("sheet") or sheet)}
 
 @app.get("/api/chats/{cid}/survival")
 def survival_get(cid: int):
@@ -5643,7 +5975,9 @@ def chat_char_position_put(cid: int, ch: int, body: dict = Body(...),
     `frame_id` names the era whose scene is edited -- and whose rooms the
     validation runs against; None is the present (`_era`).
     """
-    from world.spatial import room_of
+    from world.spatial import (invalidate_moved_body_place_details,
+                               invalidate_moved_body_pose_details,
+                               release_moved_body_supports, room_of)
 
     chat = q("SELECT * FROM chats WHERE id=?", (cid,), one=True)
     if not chat:
@@ -5687,6 +6021,17 @@ def chat_char_position_put(cid: int, ch: int, body: dict = Body(...),
             if folded_name and fold_identity_key(key) == folded_name
         ]
         was = {positions.get(key) for key in existing_keys} - {None, ""}
+        # The positions BEFORE the move, for the move invalidators below --
+        # under the name the move WRITES: they compare
+        # `previous_positions.get(subject)` with `positions`, so a stored key
+        # spelled otherwise ("mara quill") read as a body that had never
+        # been anywhere, and nothing it left behind was retired.
+        before = {key: where for key, where in positions.items()
+                  if key not in existing_keys}
+        left = next((positions.get(key) for key in existing_keys
+                     if positions.get(key)), None)
+        if left:
+            before[name] = left
         for key in existing_keys:
             positions.pop(key)
 
@@ -5707,6 +6052,17 @@ def chat_char_position_put(cid: int, ch: int, body: dict = Body(...),
                     if folded_name and fold_identity_key(key) == folded_name \
                             and isinstance(station, dict):
                         station.pop("cell", None)
+            # And what the old room held, by the merge's three invalidators
+            # in the merge's order (as `world_routes.body_room_put` runs
+            # them): another body's pose detail holding this one, this
+            # body's own detail naming the place it left, and a support that
+            # did not come with it. Each keys on a move INSIDE one write, so
+            # a move made here was never seen by any later beat: the body
+            # kept "standing by the hall's open ledger" in the kitchen
+            # (web_routes_extensions F10's class, audit 2026-11-01).
+            invalidate_moved_body_pose_details(scene, before)
+            invalidate_moved_body_place_details(scene, before)
+            release_moved_body_supports(scene, before)
 
         wset(cid, "scene", scene)
     return {"ok": True, "name": name, "room": room or None}
@@ -5816,6 +6172,7 @@ def pph_get(cid: int):
 
 @app.put("/api/chats/{cid}/persona_private_history")
 def pph_put(cid: int, body: dict = Body(...)):
+    _chat_or_404(cid)
     wset(cid, "persona_private_history", body.get("entries", []))
     return {"ok": True}
 
@@ -5838,17 +6195,20 @@ def world_put(cid: int, body: dict = Body(...)):
     # and rewriting them mid-turn would corrupt it. And DELETE+loop must be
     # atomic so a crash can't leave the un-rewritten keys permanently lost.
     _require_chat_idle(cid)
-    # Scene blobs (present + every frame-scoped copy) BEFORE the rewrite:
-    # the manual world editor is a scene writer like commit_scene, so the
-    # room_registry projection must be reconciled against what each blob
-    # held before vs. after -- it was the one write path that bypassed the
-    # registry (Phase 3a single-source-of-truth consolidation).
-    old_scenes = {
-        w["key"]: json.loads(w["value"])
-        for w in q("SELECT * FROM world WHERE chat_id=?", (cid,))
-        if parse_scoped_world_key(w["key"])[0] == "scene"
-    }
     with transaction():
+        # Scene blobs (present + every frame-scoped copy) BEFORE the rewrite:
+        # the manual world editor is a scene writer like commit_scene, so
+        # BOTH projections -- `room_registry` and `world_entities` -- must be
+        # reconciled against what each blob held before vs. after (Phase 3a
+        # single-source-of-truth consolidation). Read INSIDE the transaction
+        # that rewrites them: read before it, a write landing between the two
+        # was reconciled against a scene that no longer existed (the class of
+        # web_routes_extensions F5, audit 2026-11-01).
+        old_scenes = {
+            w["key"]: json.loads(w["value"])
+            for w in q("SELECT * FROM world WHERE chat_id=?", (cid,))
+            if parse_scoped_world_key(w["key"])[0] == "scene"
+        }
         qi("DELETE FROM world WHERE chat_id=?", (cid,))
         for k, v in body.items():
             wset(cid, k, v)
@@ -5857,12 +6217,17 @@ def world_put(cid: int, body: dict = Body(...)):
             if parse_scoped_world_key(k)[0] == "scene"
         }
         for key in sorted(scene_keys):
+            old_scene = old_scenes.get(key)
+            old_scene = old_scene if isinstance(old_scene, dict) else {}
             new_scene = body.get(key)
+            new_scene = new_scene if isinstance(new_scene, dict) else {}
             sync_room_registry_with_scene(
-                cid, chat["lorebook_id"],
-                old_scenes.get(key) if isinstance(old_scenes.get(key), dict)
-                else {},
-                new_scene if isinstance(new_scene, dict) else {})
+                cid, chat["lorebook_id"], old_scene, new_scene)
+            # The entity rows the editor's write adds, changes or removes
+            # (audit 2026-11-01, web_routes_extensions F4 / persist_scene_
+            # entities F3: this route reconciled the registry and never
+            # this table, so a deleted thing kept its row).
+            sync_world_entities_with_scene(cid, old_scene, new_scene)
     # The DELETE FROM world above bypassed wset, so a key the new body does
     # not carry kept its per-row read token while losing its row; after the
     # commit, invalidate every cached world-row read at once.
@@ -5940,6 +6305,7 @@ def style_guide_put(cid: int, body: dict = Body(...)):
     input degrades to "self-determine" instead of malforming the payload.
     Clearing any field (or sending a genre of 'auto'/'self-determine') restores
     engine self-determination for it."""
+    _chat_or_404(cid)
     guide = normalize_style_guide(body.get("style_guide", body))
     wset(cid, "style_guide", guide)
     return {"ok": True, "style_guide": guide}
@@ -5981,6 +6347,7 @@ def dlg_put(cid: int, body: dict = Body(...)):
     until the next time anyone pressed Save on a panel with no field for it.
     Silently, because nothing on screen had ever shown the number.
     """
+    _chat_or_404(cid)
     stored = wget(cid, "dialogue_config", None) or {}
 
     def submitted(key, default):
@@ -6100,6 +6467,8 @@ def living_world_put(cid: int, body: dict = Body(...)):
     config is returned so what actually stuck is visible immediately --
     here the default IS off, so this is the surface where a typo shows."""
     from world.living_world import LIVING_WORLD_KEY, normalize_living_world
+
+    _chat_or_404(cid)
 
     config = normalize_living_world(body.get("living_world", body))
     wset(cid, LIVING_WORLD_KEY, config)
@@ -6229,6 +6598,7 @@ def bg_cfg_put(cid: int, body: dict = Body(...)):
     SOUND (blurb theming, the §3.8.1 canon licence), which is a separate axis
     and already wired.
     """
+    _chat_or_404(cid)
     level = str(body.get("scene_life", "off")).strip().casefold()
     if level not in ("off", "ambient", "full"):
         raise HTTPException(400, "scene_life must be off, ambient or full")
@@ -6266,6 +6636,7 @@ def naming_profile_put(cid: int, body: dict = Body(...)):
     renames anyone already named: a minted name is a stored write."""
     from story.naming import set_authored_naming_profile
 
+    _chat_or_404(cid)
     if not isinstance(body, dict):
         raise HTTPException(400, "naming profile must be an object")
     return set_authored_naming_profile(cid, body)
@@ -6370,6 +6741,7 @@ def frames_list(cid: int):
 
 @app.post("/api/chats/{cid}/frames")
 def frames_create(cid: int, body: dict = Body(...)):
+    _chat_or_404(cid)
     label = str(body.get("label") or "").strip()
     if not label:
         raise HTTPException(400, "Missing label")
@@ -6449,7 +6821,32 @@ def fixed_points_delete(cid: int, anchor_id: int):
 
 from persist.chat_archive import ArchiveRemappers, ChatArchiveService
 
-_chat_archive_service = ChatArchiveService(
+
+class _IdleExportArchiveService(ChatArchiveService):
+    """The archive service, its export waiting for a running beat.
+
+    `export_chat` is about fifteen separate autocommit reads -- turns, then
+    each turn's steps and variants, then the world -- so an export taken
+    while a beat commits (off-screen beats run unprompted) could pair the
+    world after turn N with a turn N that has no narrator or commit step
+    yet, and an import reproduced the torn story. `_require_chat_idle` said
+    it guarded export and nothing called it there (audit 2026-11-01, web_app
+    F8). The service registers `self.export_chat` as its route, so the
+    override is what the route serves. Import makes a new chat, which no run
+    can be writing.
+
+    `chat_export` below is this same method, as the drive tools that borrow
+    it ("what the route does", `tools/live_drive.py`) mean it to be: an
+    export they take while an off-screen beat their run's last commit
+    scheduled is still going is refused like the host's, not torn.
+    """
+
+    def export_chat(self, cid: int):
+        _require_chat_idle(cid)
+        return super().export_chat(cid)
+
+
+_chat_archive_service = _IdleExportArchiveService(
     ArchiveRemappers(
         active_books=_remap_active_books,
         fixed_point_frames=_remap_fixed_points_frames,
@@ -7131,10 +7528,15 @@ def turn_branch(tid: int):
         # raw copy above, which mirrors the source chat's CURRENT overlay
         # rows) -- replace with the snapshot's version, remapped to this
         # branch's frame ids.
+        # A character deleted from the library since the snapshot is skipped,
+        # as the restore skips it (`checkpoints._restore_char_frames`): the
+        # blob's row outlived the cascade, and replaying it failed the whole
+        # branch on the foreign key (audit 2026-11-01, persistence F2).
         qtx("DELETE FROM chat_char_frames WHERE chat_id=?", (ncid,))
         for cf in blob.get("char_frames") or []:
             nfid = frame_idmap.get(cf.get("frame_id"))
-            if nfid is None:
+            if nfid is None or not q("SELECT 1 FROM characters WHERE id=?",
+                                     (cf.get("char_id"),), one=True):
                 continue
             qtx(
                 "INSERT INTO chat_char_frames(chat_id,char_id,frame_id,status,state) "
@@ -7566,6 +7968,12 @@ def turn_narration_select(tid: int, body: dict = Body(...)):
     # began earlier never read this prose. Only one later in play order, which
     # did, refuses -- the rule this route had before 2026-10-13 (review).
     _require_latest(turn, later_only=True)
+    # And it waits for a pipeline that could be writing THIS turn, as
+    # `edit_prose` does for the same pair of writes: a reroll's run writes
+    # this step too, so whichever `active=0` lands second wins, and the
+    # choice vanished or silenced the beat the run just produced (audit
+    # 2026-11-01, web_app F13).
+    _require_turn_idle(turn)
     step = q("SELECT * FROM steps WHERE turn_id=? AND key='narrator'",
              (tid,), one=True)
     if not step:
@@ -7856,25 +8264,13 @@ def turn_del(tid: int):
         cid, turn, running_frames=running_frames(cid))["stop"])
     decided = {}
 
-    def _decide():
-        try:
-            plan = beat_order.decide(cid, turn, running_frames(cid))
-        except beat_order.RewindRefused as refused:
-            raise HTTPException(409, str(refused))
-        if plan["blocking"]:
-            raise HTTPException(409, plan["reason"])
-        decided["plan"] = plan
-        return plan["carried"]
-
-    with transaction():
-        # The checkpoint restore must live in the SAME transaction as the
-        # deletes: restoring first and deleting after (as two separate
-        # commits) meant a failed delete left the chat rewound to the
-        # turn's start while the turn/steps still existed. The restore
-        # runs before the deletes so it can still read the checkpoint row
-        # for this idx, which the deletes below remove.
-        restore_checkpoint(cid, turn["idx"], carried=_decide)
-
+    def _take_this_turn_back(carried):
+        """This turn's rows, and every checkpoint past the newest turn the
+        delete leaves. Called under the lock of the transaction that restores
+        the world, so the rows and the world land, or roll back, together:
+        restoring first and deleting after (as two separate commits) meant a
+        failed delete left the chat rewound to the turn's start while the
+        turn/steps still existed."""
         for step in q(
             "SELECT id FROM steps WHERE turn_id=?",
             (tid,),
@@ -7892,12 +8288,49 @@ def turn_del(tid: int):
         # and after: a beat the restore took back that began BELOW this turn
         # leaves its own checkpoint, and the next turn to take that idx would
         # adopt it -- the world as it was when that beat began, not the
-        # world as the delete leaves it (review of 2026-10-13).
+        # world as the delete leaves it (review of 2026-10-13). The beats the
+        # restore takes back are still standing when this runs (`take_back`
+        # deletes them next, in the same transaction), so they are left out
+        # of "the newest turn left" here.
+        gone = [r["id"] for r in carried or ()]
+        left_out = (" AND id NOT IN (%s)" % ",".join("?" * len(gone))) if gone else ""
         qi(
             "DELETE FROM checkpoints WHERE chat_id=? AND turn_idx > "
-            "COALESCE((SELECT MAX(idx) FROM turns WHERE chat_id=?), -1)",
-            (cid, cid),
+            "COALESCE((SELECT MAX(idx) FROM turns WHERE chat_id=?" + left_out
+            + "), -1)",
+            (cid, cid, *gone),
         )
+
+    def _decide():
+        try:
+            plan = beat_order.decide(cid, turn, running_frames(cid))
+        except beat_order.RewindRefused as refused:
+            raise HTTPException(409, str(refused))
+        if plan["blocking"]:
+            raise HTTPException(409, plan["reason"])
+        decided["plan"] = plan
+        # ASKED TWICE: once with no lock, where a refusal has written
+        # nothing, and again inside the restore's own transaction, before
+        # it restores anything. That second ask is where this turn goes.
+        if db.conn().in_transaction:
+            _take_this_turn_back(plan["carried"])
+            decided["taken"] = True
+        return plan["carried"]
+
+    # THE RESTORE IS THE OUTERMOST TRANSACTION. It used to run inside one of
+    # this route's own, and what the restore does AFTER its commit -- the
+    # embedding-bank probe (a provider round trip), the `about` backfill and
+    # the world-epoch bump -- then ran with the global write lock still held.
+    # `backfill_chat` takes the chat's backfill lock, which the startup pass
+    # holds while it waits for the write lock to file its tags: the two
+    # orders crossed and every writer in the process waited forever (audit
+    # 2026-11-01, persistence_paths_schema F1, reproduced). This turn's rows
+    # ride inside the restore's transaction instead (`_decide`, above).
+    restore_checkpoint(cid, turn["idx"], carried=_decide)
+    if not decided.get("taken"):
+        # No checkpoint to restore, so nothing asked: the rows still go.
+        with transaction():
+            _take_this_turn_back(())
 
     return {"ok": True, "carried": len((decided.get("plan") or {}).get("carried") or [])}
 # ============================ SCENE BACKDROPS ============================
