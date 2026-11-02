@@ -59,6 +59,7 @@ off. It was built opt-in on 2026-09-24.
 from __future__ import annotations
 
 import copy
+import functools
 import json
 import re
 import time
@@ -274,33 +275,54 @@ def _words(text):
     return " ".join(text.split())
 
 
+#: How many versions of a draft the attribution memo keeps (`_attribution`):
+#: a stage's draft, its repaired version and the one-act lookups of
+#: `declared_gaps`, for the stages running at once. A memory bound only --
+#: a version past it is attributed again, to the same answer.
+ATTRIBUTION_MEMO_SIZE = 64
+
+
 def attribute(events, units):
     """`[[sentence id, ...] per event]`: the sentences each event's own text
     comes from, by the share of its character trigrams each sentence holds.
     Language-blind (trigrams, not words), and untroubled by the encoder
     reordering acts because each event is scored on its own. Measured on the
     owner's capture 3979 (chat 154 turn 4398): all 17 events' best sentence
-    was theirs, 15 of them at 0.87-1.00."""
-    sentence_grams = [_grams(unit["text"]) for unit in units]
+    was theirs, 15 of them at 0.87-1.00.
+
+    ONCE PER VERSION OF A DRAFT (`_attribution`). One pass asked this of the
+    same draft from every reader -- 7 calls a stage with no jobs, 18 with
+    jobs and retries, 71 ms each on a 17-event, 36-sentence beat (audit of
+    2026-11-01, `agents_director_floors` E1). The answer depends on the
+    events' texts and the sentences alone, so it is remembered by them, and
+    every reader gets its own copy."""
+    texts = tuple((str(event.get("event") or "") or str(event.get("observable") or ""))
+                  if isinstance(event, dict) else "" for event in events or [])
+    sentences = tuple((unit["id"], str(unit["text"])) for unit in units or ())
+    return [list(ids) for ids in _attribution(texts, sentences)]
+
+
+@functools.lru_cache(maxsize=ATTRIBUTION_MEMO_SIZE)
+def _attribution(texts, sentences):
+    """`attribute`'s answer for these event texts against these
+    `(sentence id, text)` pairs, as tuples."""
+    sentence_grams = [_grams(text) for _sid, text in sentences]
     out = []
-    for event in events or []:
-        text = ""
-        if isinstance(event, dict):
-            text = str(event.get("event") or "") or str(event.get("observable") or "")
+    for text in texts:
         grams = _grams(text)
-        if not grams or not units:
-            out.append([])
+        if not grams or not sentences:
+            out.append(())
             continue
         scores = [len(grams & g) / len(grams) for g in sentence_grams]
-        best = max(range(len(units)), key=lambda j: scores[j])
+        best = max(range(len(sentences)), key=lambda j: scores[j])
         if scores[best] < ATTRIBUTION_MIN:
-            out.append([])
+            out.append(())
             continue
-        held = {j for j, unit in enumerate(units) if _holds(text, unit["text"])}
-        near = {j for j in (best - 1, best + 1) if 0 <= j < len(units)
+        held = {j for j, (_sid, sentence) in enumerate(sentences) if _holds(text, sentence)}
+        near = {j for j in (best - 1, best + 1) if 0 <= j < len(sentences)
                 and scores[j] >= max(ATTRIBUTION_MIN, ATTRIBUTION_SPAN * scores[best])}
-        out.append([units[j]["id"] for j in sorted({best} | near | held)])
-    return out
+        out.append(tuple(sentences[j][0] for j in sorted({best} | near | held)))
+    return tuple(out)
 
 
 def citations(events, units):

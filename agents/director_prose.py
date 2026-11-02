@@ -1382,6 +1382,14 @@ def encoder_payload(ctx, sc, prose, model_payload, view, extras, channels):
         "granted_tools": list(channels),
         "variant_seed": model_payload.get("variant_seed"),
     }
+    # WHAT THE ENGINE DID WITH THE LAST BEAT, as the author was told it
+    # (`director._engine_notices_shown`, `ENGINE_NOTICES_SHOWN`): the encoder
+    # writes the beat's state, and is the one call that can keep a record the
+    # engine corrected from being written back the old way. The same list,
+    # and no key when there is none (review 2026-11-01, lane L7a's delivery
+    # to both authors).
+    if model_payload.get("engine_notices"):
+        payload["engine_notices"] = list(model_payload["engine_notices"])
     hands = [name for name in SPECIALISTS
              if any(_owner(channel) == name for channel in channels)]
     for name in hands:
