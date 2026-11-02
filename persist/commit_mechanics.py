@@ -284,39 +284,49 @@ def commit_transit_sweep(ctx, nonce, *, prepared=None):
         # (a Director-declared fuse has no charter in its payload), not on
         # the kind, or it would also silence the charter's own surfaces.
         consequences_minted = 0
+        # ONE SAVEPOINT FOR THE BLOCK IT WARNS ABOUT. The mint, the per-row
+        # INSERTs and the obligations record shared one warn-and-carry-on
+        # `except` inside the turn's transaction, so a failure after some
+        # INSERTs left those rows in the turn and the turn committed with
+        # them, under a warning saying the block was not committed (review
+        # 2026-11-01, persist_scene_entities F11). The nested `transaction()`
+        # is a SAVEPOINT: a failure takes the whole block back and the beat
+        # still commits, which is what the warning has always said.
         try:
-            from world.living_world import (mint_consequences,
-                                      record_obligations)
-            _declared_fuses = diff.get("consequences") or []
-            mint_rows, mint_warnings = mint_consequences(
-                cid, sc, frame_id, ctx.turn.id, ctx.turn.idx,
-                float((clock or {}).get("elapsed_seconds") or 0.0),
-                _declared_fuses,
-                player_room=_player_room)
-            for row in mint_rows:
-                qtx(
-                    "INSERT OR REPLACE INTO scheduled_events"
-                    "(event_id,chat_id,due_at,kind,location_id,payload,"
-                    "seed,status) VALUES(?,?,?,?,?,?,?,?)",
-                    (row["event_id"], row["chat_id"], row["due_at"],
-                     row["kind"], row["location_id"], row["payload"],
-                     row["seed"], row["status"]),
-                )
-                consequences_minted += 1
-            # A fuse the validator itself refused (an unplaceable location, a
-            # due time that is not a number, the per-turn ceiling) is still
-            # reported: a silently swallowed declaration looks like a quiet
-            # world, and the ledger's whole failure history is mechanisms
-            # that never fired and nothing saying so.
-            for warning in mint_warnings:
-                ctx.add_warning(f"consequence not minted: {warning}")
-            # Approach D's feed: a fuse fired at an ungenerated place is
-            # history that place now owes. Recorded regardless of the D
-            # setting -- layer-1 truth accumulates; settings gate surfaces
-            # (the honour seam in mapping), never truth.
-            if fired_consequence_rows:
-                record_obligations(cid, fired_consequence_rows)
+            with transaction():
+                from world.living_world import (mint_consequences,
+                                          record_obligations)
+                _declared_fuses = diff.get("consequences") or []
+                mint_rows, mint_warnings = mint_consequences(
+                    cid, sc, frame_id, ctx.turn.id, ctx.turn.idx,
+                    float((clock or {}).get("elapsed_seconds") or 0.0),
+                    _declared_fuses,
+                    player_room=_player_room)
+                for row in mint_rows:
+                    qtx(
+                        "INSERT OR REPLACE INTO scheduled_events"
+                        "(event_id,chat_id,due_at,kind,location_id,payload,"
+                        "seed,status) VALUES(?,?,?,?,?,?,?,?)",
+                        (row["event_id"], row["chat_id"], row["due_at"],
+                         row["kind"], row["location_id"], row["payload"],
+                         row["seed"], row["status"]),
+                    )
+                    consequences_minted += 1
+                # A fuse the validator itself refused (an unplaceable location, a
+                # due time that is not a number, the per-turn ceiling) is still
+                # reported: a silently swallowed declaration looks like a quiet
+                # world, and the ledger's whole failure history is mechanisms
+                # that never fired and nothing saying so.
+                for warning in mint_warnings:
+                    ctx.add_warning(f"consequence not minted: {warning}")
+                # Approach D's feed: a fuse fired at an ungenerated place is
+                # history that place now owes. Recorded regardless of the D
+                # setting -- layer-1 truth accumulates; settings gate surfaces
+                # (the honour seam in mapping), never truth.
+                if fired_consequence_rows:
+                    record_obligations(cid, fired_consequence_rows)
         except Exception as exc:
+            consequences_minted = 0
             ctx.add_warning(f"living-world consequences not committed: {exc}")
 
         # THE BEAT'S ONE REWRITE OF THE NOTICE KEY. What the deterministic

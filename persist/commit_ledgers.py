@@ -534,11 +534,16 @@ def commit_world_pressure(ctx, nonce):
     # measured (the owner's 2026-09-06 ruling on guards over valid output).
     _sd = res.get("state_diff") if isinstance(res.get("state_diff"), dict) else {}
     _moved = {str(k).strip().casefold() for k in (_sd.get("positions") or {})}
-    _scene_now = wget(cid, "scene", {}) or {}
+    # Parsed only on a beat that ticks: the scene is the largest row a story
+    # has and this domain runs inside the write lock on every beat (review
+    # 2026-11-01, persist_scene_entities E1).
+    _scene_now = None
     for op in ops:
         if not isinstance(op, dict) \
                 or str(op.get("op") or "").strip().lower() != "tick":
             continue
+        if _scene_now is None:
+            _scene_now = wget(cid, "scene", {}) or {}
         _idx = _find_pressure(ledger, op)
         _subject = str((ledger[_idx].get("subject") if _idx is not None
                         else None) or op.get("subject") or "")

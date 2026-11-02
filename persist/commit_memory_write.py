@@ -230,6 +230,14 @@ def cancel_discarded_skip_memories(chat_id, idx):
     return asked
 
 
+#: The PREFIX of a beat's tension-pass job key; the key carries the turn id.
+#: It was the whole key, and `core.jobs.submit` joins an in-flight job with
+#: the same key -- while the job reads only the memories minted on the turn
+#: it was scheduled from -- so a beat committed during a running pass (the
+#: pass costs ~114 s against ~1-minute beats) scheduled nothing and was never
+#: reviewed: roughly every other beat (review 2026-11-01,
+#: persist_background_memory F14). The skip-memories job beside it
+#: (`SKIP_MEMORIES_JOB_PREFIX`) fixed the same class the same way.
 MEMORY_TENSION_JOB_KEY = "memory_tension"
 
 
@@ -304,8 +312,8 @@ def schedule_memory_tension_pass(ctx):
             current_language_id.reset(language_token)
             active_frame_id.reset(token)
 
-    return jobs.submit(cid, MEMORY_TENSION_JOB_KEY, _produce,
-                       base_turn=turn_idx)
+    return jobs.submit(cid, "%s:%s" % (MEMORY_TENSION_JOB_KEY, ctx.turn.id),
+                       _produce, base_turn=turn_idx)
 
 
 def commit_memories(ctx, nonce, *, prepared=None, consolidate=True):
@@ -349,10 +357,19 @@ def commit_memories(ctx, nonce, *, prepared=None, consolidate=True):
         # never overwrites a declaration and the diminishing returns are
         # measured against where the mind actually stands. The source set is
         # each mind's OWN delivered view, answered in prepare.
+        #
+        # EVERY WARN-ONLY STEP BELOW IS ITS OWN SAVEPOINT. Each writes row by
+        # row, and inside the turn's transaction a write runs on the outer
+        # connection, so a raise part-way kept the rows already written --
+        # committed with the turn under a warning saying the step was not
+        # applied (review 2026-11-01, persist_background_memory F22). The
+        # nested `transaction()` takes the failed step back whole and the
+        # turn still commits, which is what the warning has always said.
         for char_id, witnessed in prepared.get("witnessed_signals") or []:
             try:
-                apply_witnessed_signals(cid, char_id, turn.idx, witnessed,
-                                        frame_id=turn.frame_id)
+                with transaction():
+                    apply_witnessed_signals(cid, char_id, turn.idx, witnessed,
+                                            frame_id=turn.frame_id)
             except Exception as exc:
                 ctx.add_warning(f"witnessed stance floor not applied: {exc}")
         for chat_id, char_id, state_json in prepared["state_updates"]:
@@ -380,8 +397,9 @@ def commit_memories(ctx, nonce, *, prepared=None, consolidate=True):
             chat_id, char_id, _gist, _reading, _tidx, _ref = _entry[:6]
             _sources = _entry[6] if len(_entry) > 6 else ()
             try:
-                record_dispute(chat_id, char_id, _gist, _reading, _tidx,
-                               memory_ref=_ref, sources=_sources)
+                with transaction():
+                    record_dispute(chat_id, char_id, _gist, _reading, _tidx,
+                                   memory_ref=_ref, sources=_sources)
             except Exception as exc:
                 ctx.add_warning(f"memory dispute not recorded: {exc}")
         # What a recalled memory was read to make the mind feel, where it
@@ -390,7 +408,8 @@ def commit_memories(ctx, nonce, *, prepared=None, consolidate=True):
         # memory re-read and read afresh on one beat keeps both.
         for chat_id, char_id, _ref, _look in prepared.get("memory_looks") or []:
             try:
-                record_memory_look(chat_id, char_id, _ref, _look)
+                with transaction():
+                    record_memory_look(chat_id, char_id, _ref, _look)
             except Exception as exc:
                 ctx.add_warning(f"memory feeling not kept: {exc}")
         # Memories that turned out to be load-bearing for a belief. Once each,
@@ -398,8 +417,9 @@ def commit_memories(ctx, nonce, *, prepared=None, consolidate=True):
         # rather than a popularity loop -- see _cited_memory_ids.
         for char_id, ids in prepared.get("importance_bumps") or []:
             try:
-                raise_importance(cid, char_id, event_keys=ids,
-                                 only_unrevised=True)
+                with transaction():
+                    raise_importance(cid, char_id, event_keys=ids,
+                                     only_unrevised=True)
             except Exception as exc:
                 ctx.add_warning(f"memory importance not updated: {exc}")
         # Every row this beat's recall REACHED, counted once here (A78). The
@@ -413,8 +433,9 @@ def commit_memories(ctx, nonce, *, prepared=None, consolidate=True):
         # collapsing it.
         if prepared.get("recall_accesses"):
             try:
-                record_memory_access(prepared["recall_accesses"],
-                                     current_turn_idx=turn.idx)
+                with transaction():
+                    record_memory_access(prepared["recall_accesses"],
+                                         current_turn_idx=turn.idx)
             except Exception as exc:
                 ctx.add_warning(f"memory access not recorded: {exc}")
         qi(

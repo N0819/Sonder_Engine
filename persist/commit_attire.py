@@ -8,6 +8,7 @@ See docs/experiments/AUDIT_COMMIT.md for the split record.
 """
 
 import json, re
+from language_runtime import fold_key
 from story import attire as attire_model
 # Canonical in `story.attire`, which is a leaf module three separate callers
 # can reach. Re-exported here under both names because `persist/commit.py`'s
@@ -655,6 +656,33 @@ def _adopt_shed_record(entities, projected, owner, garment):
     return candidates[0] if candidates else None
 
 
+def shed_garment_key(garment, owner):
+    """The floor object a removed garment becomes: `<garment>_<owner>`.
+
+    ONE SPELLING, IN EVERY SCRIPT. Both halves were folded through the ASCII
+    class `[^a-z0-9]+`, which folds 上着 to "" -- so in a Japanese story no
+    floor object was minted and `release_removed_garments` then deleted the
+    removed seat, and the garment left the world -- and folds every kana
+    owner to "", so two bodies shedding a jacket shared ONE object, stamped
+    with the first owner. Measured (review 2026-11-01,
+    persist_scene_entities F2): `('ヒナミ', '上着') -> []`,
+    `two owners -> {'jacket_': 'ヒナミ'}`. `fold_key` keeps the letters of
+    every script and is byte-identical to the old slug for ASCII, so every id
+    already minted keeps matching its own spelling. An owner with no letter
+    or digit in any script keys by its own string rather than collapse onto
+    the next one. "" when the garment itself folds to nothing.
+
+    `world.spatial_containment.mint_transferred_objects` reserves this same
+    key for the attire seam, and `_stamp_shed` reads it back to recognise a
+    placeholder name: the three must spell it alike.
+    """
+    garment_key = fold_key(garment, "_")
+    if not garment_key:
+        return ""
+    owner_key = fold_key(owner, "_") or str(owner or "").strip().casefold()
+    return ("%s_%s" % (garment_key, owner_key))[:60]
+
+
 def _stamp_shed(entity, garment, owner, condition, eid=None):
     """Make an adopted record say what a minted one would have said."""
     if not isinstance(entity, dict):
@@ -681,8 +709,9 @@ def _stamp_shed(entity, garment, owner, condition, eid=None):
     # spelling replaces the placeholder. Anything a model actually named
     # survives untouched: it does not slug back to its own id.
     _existing = str(entity.get("name") or "").strip()
-    _placeholder = bool(eid) and re.sub(
-        r"[^a-z0-9]+", "_", _existing.casefold()).strip("_") == str(eid)
+    # Folded the way the key was (`shed_garment_key`), or a placeholder in
+    # kana -- "上着 ヒナミ" for the id 上着_ヒナミ -- reads as a chosen name.
+    _placeholder = bool(eid) and fold_key(_existing, "_") == str(eid)
     if not _existing or _placeholder:
         entity["name"] = str(garment)
     entity.setdefault("kind", "object")
@@ -765,11 +794,9 @@ def _mint_shed_garments(sc, shed, diff=None, ctx=None):
                     "object handle to settle which garment changed.")
             # Ambiguity cannot authorize a merge or a third copy.
             continue
-        key = re.sub(r"[^a-z0-9]+", "_", str(garment).casefold()).strip("_")
+        key = shed_garment_key(garment, owner)
         if not key:
             continue
-        key = "%s_%s" % (key, re.sub(r"[^a-z0-9]+", "_",
-                                     str(owner).casefold()).strip("_"))[:60]
         if key in entities:
             # STAMP IT, DO NOT SKIP IT. This early-out read as idempotence --
             # the key exists, so a previous pass of THIS seam wrote it, and

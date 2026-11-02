@@ -75,13 +75,77 @@ def _registry_alias_index(cid, book_id):
         index.setdefault(normalize_room_id(row["room_uid"]), row["room_uid"])
     return index
 
+#: The room ledger's own channels, rewritten STRUCTURALLY by
+#: `_apply_room_renames`: `rooms` is keyed by room, so a redirect merges two
+#: records; `remove_rooms` and `remove_adjacent` are the ledger's removals;
+#: `causal_steps` carries whole patches of the same shape. Every other channel
+#: of the diff is walked for room-valued strings (`_rename_room_values`).
+_ROOM_LEDGER_CHANNELS = ("rooms", "remove_rooms", "remove_adjacent",
+                         "causal_steps")
+
+
+def _rename_room_values(node, renames):
+    """Every string VALUE under `node` that is exactly a redirected room key,
+    rewritten to the key that survives -- whatever channel it sits in and
+    whatever field it was written under.
+
+    STATED AS A CLASS RATHER THAN A LIST OF SHAPES, as the entity sibling
+    (`commit_scene_state._apply_entity_renames`) states it. The redirected key
+    was minted by THIS beat and is a duplicate of a room the scene already
+    holds, so any string in this beat's output that is exactly that key names
+    that room. The per-channel list this replaces moved the rooms table,
+    adjacency, positions, removals, interior rooms and transit, and left the
+    same beat's `sensory_events[].room`, `inventory_ops[].to_id`,
+    `movement_refused[].to_room` and a pose's room-valued `support` on the
+    dead key: the sound was then dropped as naming "a room this scene does not
+    hold" and a set-down onto that room stayed in the hand (review
+    2026-11-01, persist_scene_entities F6). Walking the whole diff covers
+    every owner's channel in `director_scopes.SPECIALISTS`, the engine's own
+    keys (`movement_refused`) and any extension channel alike, so there is no
+    list to fall behind.
+
+    VALUES ONLY: a dict key in a channel is a subject -- a body, an entity --
+    never a room reference, and renaming one would move a subject onto
+    another key. Exact strings only: prose that mentions the key is prose.
+    An entry the rename makes a duplicate of another entry of its list --
+    before it or after it -- is dropped; a repeat the list carried on its
+    own is the list's business and stays."""
+    if isinstance(node, dict):
+        for key, value in list(node.items()):
+            node[key] = _rename_room_values(value, renames)
+        return node
+    if isinstance(node, list):
+        kept = {item for item in node
+                if isinstance(item, str) and item not in renames}
+        out = []
+        for item in node:
+            renamed = _rename_room_values(item, renames)
+            if isinstance(item, str) and renamed != item and (
+                    renamed in kept or renamed in out):
+                continue
+            out.append(renamed)
+        node[:] = out
+        return node
+    if isinstance(node, str):
+        return renames.get(node, node)
+    return node
+
+
 def _apply_room_renames(diff, renames):
     """Rewrite every reference to a renamed/redirected room key inside the
-    diff: the rooms table itself, adjacency 'to' edges, positions, room
-    removals, entity interior_rooms, and transit destinations."""
+    diff: the room ledger's own channels structurally (the rooms table, room
+    removals, removed adjacency, each causal step's patch), and every other
+    channel by value (`_rename_room_values`)."""
+    if not renames:
+        return
     for step in diff.get("causal_steps") or []:
-        if isinstance(step, dict) and isinstance(step.get("patch"), dict):
-            _apply_room_renames(step["patch"], renames)
+        if not isinstance(step, dict):
+            continue
+        for key, value in list(step.items()):
+            if key == "patch" and isinstance(value, dict):
+                _apply_room_renames(value, renames)
+            else:
+                step[key] = _rename_room_values(value, renames)
     rooms = diff.get("rooms")
     if isinstance(rooms, dict):
         for old, new in renames.items():
@@ -97,40 +161,18 @@ def _apply_room_renames(diff, renames):
                 rooms[new] = merged
             else:
                 rooms[new] = moved
+        # Every room-valued field of every room record -- adjacency `to`
+        # edges and whatever a room names another room by.
         for room in rooms.values():
-            if not isinstance(room, dict):
-                continue
-            for edge in room.get("adjacent") or []:
-                if isinstance(edge, dict) and edge.get("to") in renames:
-                    edge["to"] = renames[edge["to"]]
-    positions = diff.get("positions")
-    if isinstance(positions, dict):
-        for name, room in list(positions.items()):
-            if room in renames:
-                positions[name] = renames[room]
+            if isinstance(room, dict):
+                _rename_room_values(room, renames)
     if isinstance(diff.get("remove_rooms"), list):
-        diff["remove_rooms"] = [
-            renames.get(r, r) for r in diff["remove_rooms"]
-        ]
-    for edge in diff.get("remove_adjacent") or []:
-        if isinstance(edge, dict):
-            if edge.get("room") in renames:
-                edge["room"] = renames[edge["room"]]
-            if edge.get("to") in renames:
-                edge["to"] = renames[edge["to"]]
-    for ent in (diff.get("entities") or {}).values():
-        if not isinstance(ent, dict):
-            continue
-        if isinstance(ent.get("interior_rooms"), list):
-            ent["interior_rooms"] = [
-                renames.get(r, r) for r in ent["interior_rooms"]
-            ]
-        state = ent.get("state")
-        transit = state.get("transit") if isinstance(state, dict) else None
-        if isinstance(transit, dict):
-            for field in ("destination_room", "route_room", "departed_from"):
-                if transit.get(field) in renames:
-                    transit[field] = renames[transit[field]]
+        _rename_room_values(diff["remove_rooms"], renames)
+    if isinstance(diff.get("remove_adjacent"), list):
+        _rename_room_values(diff["remove_adjacent"], renames)
+    for key, value in list(diff.items()):
+        if key not in _ROOM_LEDGER_CHANNELS:
+            diff[key] = _rename_room_values(value, renames)
 
 
 

@@ -97,11 +97,13 @@ from persist.commit_destruction import (_destruction_book, _chat_book_graph,
     _book_distances, _audience_book_id, _destruction_cascade,
     _prepare_destruction, _finalize_destruction_news, _apply_destruction)
 from persist.commit_room_registry import (_anchored_book_ids, _room_display_slug,
-    _registry_alias_index, _apply_room_renames, dedup_minted_rooms,
+    _registry_alias_index, _apply_room_renames, _rename_room_values,
+    _ROOM_LEDGER_CHANNELS, dedup_minted_rooms,
     _prepare_room_registry, _apply_room_registry,
     sync_room_registry_with_scene, _refresh_relocated_location,
     prune_dangling_exits)
 from persist.commit_attire import (_NON_ATTIRE_TERMS, sanitize_attire_items,
+    shed_garment_key,
     _heal_attire_identity_keys, _beat_voices, _NOTE_NAME_HEAD,
     _garment_named_in, interpret_attire_notes, _fold_duplicate_shed_garments,
     _fold_worn_garment_entities, _set_worn_garment_condition,
@@ -116,7 +118,9 @@ from persist.commit_attire import (_NON_ATTIRE_TERMS, sanitize_attire_items,
     apply_attire_diff)
 from persist.commit_entities import (_is_gated_awareness, _subjects_that_moved,
     _subjects_targeted_by_an_action, _supersede_disguises, _inherit_known_to,
-    _ended_in, _with_sound_wakings, commit_world_entities)
+    _ended_in, _with_sound_wakings, commit_world_entities,
+    _can_read, _disguise_field, _seconds_or_none,
+    sync_world_entities_with_scene)
 from persist.commit_ledgers import (OBLIGATION_OVERDUE_AGE, OBLIGATION_CAP,
     pending_obligation_view, _find_obligation, causal_obligation_ops, commit_obligations,
     _demand_unheard_by, _zip_rows,
@@ -165,7 +169,7 @@ from persist.commit_background import (beat_reactions, BACKGROUND_PROMOTION_DIAL
     BACKGROUND_RECENT_TAIL, _persist_blurbs, _append_manager_conduct,
     _background_fired_reactions_any, _flow_addressed_refs,
     descriptor_bindings, _addressed_ref_strings, _player_intended_targets,
-    _presence_in_addressed_refs, emerged_this_beat,
+    _presence_in_addressed_refs, _presence_addressed_match, emerged_this_beat,
     pick_background_reactor, pick_background_reactors, pick_voice_demand,
     addressed_rooms,
     promotable_background_presences, _refuse_name_collision,
@@ -185,7 +189,8 @@ from persist.commit_scene_state import (_anchor_current_room, sync_anchored_book
     _record_dulled_hearing,
     BEARING_MANNERS, _bearing_subject_key, derive_borne_containment,
     _refuse_unheld_transfers, ComposedBeat, compose_beat_key,
-    compose_beat_scene, composed_beat_for, sleepers_of)
+    compose_beat_scene, composed_beat_for, sleepers_of,
+    _apply_charter_orders, _record_sensory_events)
 from persist.commit_skip import commit_skip_lives
 from persist.commit_mechanics import (commit_transit_sweep, commit_world_event_spine,
     commit_information_carriers, commit_cast_changes, town_for_sweep)

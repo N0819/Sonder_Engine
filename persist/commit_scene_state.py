@@ -15,7 +15,8 @@ from story.character_schema import character_name_from_text, persona_name
 from story.provenance_text import strip_engine_provenance
 from world.beat_ledger import record_beat_events
 from world.landscape import WRITTEN_LOOKS_KEY
-from world.structure import LAID_LOOKS_KEY
+from world.planned_entities import PROJECTED_SOUNDS_KEY
+from world.structure import LAID_LOOKS_KEY, PLAN_GEOMETRY_LAID_KEY
 from world.weather import (DRIFT_WINDOW_LIMIT, OPENING_GROUND_WINDOWS,
                            drift_window, normalize_weather,
                            weather_course)
@@ -771,9 +772,14 @@ def _own_labels(eid, ent):
 #: the Room's word on a standing place, `landscape.WRITTEN_LOOKS_KEY`, whose
 #: re-keying would read a host's clear as never made; `rooms`/
 #: `remove_rooms`/`remove_adjacent` are the room ledger's own, and
-#: `_apply_room_renames` is what rewrites those.)
+#: `_apply_room_renames` is what rewrites those. Two more room-keyed records
+#: of what the planner laid, by the same argument: the geometry each planned
+#: stub took (`structure.PLAN_GEOMETRY_LAID_KEY`) and the noise a plan
+#: projected onto each room (`planned_entities.PROJECTED_SOUNDS_KEY`) --
+#: lane L12b's request, 2026-11-01.)
 _ENTITY_RENAME_SKIP = ("rooms", "remove_rooms", "remove_adjacent", "scents",
-                       LAID_LOOKS_KEY, WRITTEN_LOOKS_KEY)
+                       LAID_LOOKS_KEY, WRITTEN_LOOKS_KEY,
+                       PLAN_GEOMETRY_LAID_KEY, PROJECTED_SOUNDS_KEY)
 
 
 def _apply_entity_renames(node, renames, *, top=True):
@@ -1162,15 +1168,27 @@ def _refuse_unheld_transfers(ctx, sc, diff):
     if not isinstance(ops, list) or not ops:
         return []
     kept, refused = [], []
+    unmerged = []
 
     def accept(op):
-        nonlocal sc
         kept.append(op)
         if len(ops) > 1:
             # Array order is causal inside one span too. Later sources are
             # checked against accepted earlier transfers, never a stale
-            # beginning-of-span holder. The merger copies its input.
-            sc = merge_scene_with_diff(sc, {"inventory_ops": [op]}, age_contacts=False)
+            # beginning-of-span holder.
+            unmerged.append(op)
+
+    def settled():
+        # The accepted ops merged in, one at a time and in order, exactly
+        # as they always were -- but only when a later check is about to
+        # read the result. The merger copies its whole input, and a merge
+        # after every accepted op was O(ops x scene) with nothing reading
+        # the last ones (review 2026-11-01, persist_scene_entities E2).
+        nonlocal sc
+        while unmerged:
+            sc = merge_scene_with_diff(
+                sc, {"inventory_ops": [unmerged.pop(0)]}, age_contacts=False)
+        return sc
 
     for op in ops:
         if not isinstance(op, dict):
@@ -1181,6 +1199,7 @@ def _refuse_unheld_transfers(ctx, sc, diff):
         if not source or not obj:
             accept(op)
             continue
+        settled()
         contained = sc.get("contained") if isinstance(sc.get("contained"), dict) else {}
         record = None
         for key, value in contained.items():
@@ -1374,9 +1393,18 @@ def _record_sensory_events(ctx, cid, sc, diff, turn_idx):
     # carries as far as its authored rung reaches, and arrives with a bearing
     # and no name. The thing that made it is the Director's to introduce when
     # the two finally meet.
+    #
+    # THE BEAT'S OWN ERA'S TOWN. `registry_for(cid)` with no frame reads the
+    # PRESENT era's registry, while perception reads the beat's own
+    # (`registry_for(cid, ctx.turn.frame_id)`): in a frame of another era the
+    # stored record carried the present's creature noises wherever room ids
+    # coincided, and that era's creatures were then fed them
+    # (`hearing_for_creatures` reads this record) -- two readers of one fact
+    # disagreeing by frame (review 2026-11-01, persist_scene_entities F8).
     try:
         from world.charter_runtime import charter_noises, registry_for
-        incoming.extend(charter_noises(registry_for(cid)))
+        incoming.extend(charter_noises(registry_for(
+            cid, getattr(getattr(ctx, "turn", None), "frame_id", None))))
     except Exception as _noise_exc:      # diagnostics, never a story blocker
         ctx.warnings.append("charter noises not delivered: %s" % _noise_exc)
     rooms = sc.get("rooms") if isinstance(sc.get("rooms"), dict) else {}
@@ -2719,6 +2747,7 @@ def prepare_scene_commit(ctx):
     # dangling-edge guard runs. The registry continues to own the rest of the
     # town; mapping resolves only the room the story actually reaches.
     _frontier_mutations = []
+    _plan_marks = {}
     try:
         # A26: the two passes that CORRECT what this beat did to a planned
         # room ran here and nowhere else, so the scene the narrator and every
@@ -2783,8 +2812,18 @@ def prepare_scene_commit(ctx):
         # the scene). `occupied` is the rooms a LIVING body stands in, by the
         # same reading the scent ledger just used -- not every position row,
         # which holds a lift and a lamp.
-        from world.planned_entities import materialize_plans_in_sight
-        sc, _stood_up = materialize_plans_in_sight(
+        #
+        # DECIDED HERE, WRITTEN IN THE TRANSACTION. Preparation runs before
+        # the turn's transaction opens, and the one-call form marked the plan
+        # rendered right here: a domain that raised afterwards rolled the
+        # scene back -- the thing was never stored -- and left the ledger
+        # saying it stood, so it was never offered or stood up again (audit
+        # 2026-11-01, world_layout_bridge_structure F1, reproduced by lane
+        # L12b). `plans_in_sight` writes nothing; `commit_scene` lands its
+        # marks (`mark_plans_rendered`) beside the scene that holds the
+        # things.
+        from world.planned_entities import plans_in_sight
+        sc, _stood_up, _plan_marks = plans_in_sight(
             cid, sc, ctx.turn.frame_id,
             occupied=_body_rooms, turn_idx=getattr(ctx.turn, "idx", None))
         for _rec in _stood_up:
@@ -2968,6 +3007,10 @@ def prepare_scene_commit(ctx):
         # the once-per-chat "already told" flags, landed by `commit_scene`
         # inside the turn's transaction (A66).
         "world_flags": _world_flags,
+        # `{plan uid: rendered record}` for every planned thing this
+        # preparation stood up (`plans_in_sight`), marked rendered by
+        # `commit_scene` inside the transaction, never here.
+        "plan_marks": _plan_marks,
     }
 
 
@@ -3000,6 +3043,12 @@ def commit_scene(ctx, nonce, *, prepared=None):
         if prepared.get("destruction"):
             _apply_destruction(
                 ctx.chat.id, ctx.turn.id, prepared["destruction"])
+        if prepared.get("plan_marks"):
+            # The renders preparation decided, landed with the scene that
+            # holds the things: a rollback takes both back together.
+            from world.planned_entities import mark_plans_rendered
+            mark_plans_rendered(ctx.chat.id, prepared["plan_marks"],
+                                ctx.turn.frame_id)
         _apply_charter_placements(ctx, prepared.get("charter_placements"))
         _apply_charter_orders(ctx, prepared.get("charter_orders"))
         _record_subject_last_seen(ctx, sc, prepared.get("clock"))
@@ -3035,11 +3084,28 @@ def _apply_charter_orders(ctx, ops):
     `author_charter_ops` is all-or-nothing by design -- an event that half
     lands is a town whose ledgers disagree with the sentence that made them --
     so a refusal anywhere reports the whole event and applies none of it.
+
+    ...AND INSIDE THE COMMIT IT WAS NOT. Every turn commits under
+    `registry_session()`, where `registry_for_update` hands out the SESSION's
+    shared parsed copy rather than a private one, so the ops before the
+    refused one had already been applied to the copy
+    `flush_registry_session` writes -- and `_apply_charter_placements`, one
+    line before this in `commit_scene`, dirties that copy on every beat that
+    moves a townsperson. Measured (review 2026-11-01, persist_scene_entities
+    F1): `[vacate_post cook, errand body:"nobody"]` was refused at op 1, the
+    Director was told nothing was dispatched, and the cook's watch post was
+    vacated anyway. So the copy every later writer holds is snapshotted
+    before the event and restored, in place, when the event is refused; an
+    accepted event lands in it exactly as `author_charter_ops` left it. The
+    snapshot is one deepcopy of the frame's registry on a beat that carries
+    an order (32 ms on the largest stored registry, chat 175's 900 KB), and
+    none on any other beat.
     """
     ops = [op for op in (ops or []) if isinstance(op, dict)]
     if not ops:
         return 0
-    from world.charter_runtime import author_charter_ops, registry_for
+    from world.charter_runtime import (author_charter_ops, registry_for,
+                                       registry_for_update)
     # A story with ONE institution should not make the hand name it: the
     # engine knows which, and an op refused for a field the beat could not
     # have known is a refusal the fiction cannot act on. With two or more,
@@ -3052,11 +3118,18 @@ def _apply_charter_orders(ctx, ops):
                    for op in ops]
     except Exception:
         pass
+    # The registry `author_charter_ops` will mutate: inside a session the
+    # session's own copy, outside one a private parse it never sees (and
+    # whose restore below is therefore a no-op on an object nobody holds).
+    live = registry_for_update(ctx.chat.id, ctx.turn.frame_id)
+    before = copy.deepcopy(live)
     try:
         landed = author_charter_ops(
             ctx.chat.id, ctx.turn.frame_id, ops,
             by="director", turn_idx=getattr(ctx.turn, "idx", None))
     except Exception as exc:
+        live.clear()
+        live.update(before)
         ctx.add_warning("charter ops not landed: %s" % exc)
         ctx.tell_director(
             "The institution refused this beat's order and nothing was "

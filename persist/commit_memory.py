@@ -333,14 +333,83 @@ def _hearer_label(name, chat, cast, hearer_known, *, describe=False,
         return "a voice" if heard else ""
     return label
 
+def _mood_over_the_beat(mood_state, baseline, units):
+    """The carried mood (`mood_coords`, `mood_habits`, `mood_clock`) moved on
+    by `units` psych units of story time: the clock advances, the mood
+    relaxes toward home (`affect_mix.decay`, the pass's own rule) and a
+    habit rested back to nothing goes (`affect_mix.rested_away`).
+
+    THE BEAT'S OWN SPAN, WHICH NO CALL COUNTS. The pass decays the mood at
+    the START of a beat over `elapsed_psych_units(affect_seconds, clock)`,
+    and the commit stamps `affect_seconds` with the clock at the END -- the
+    clock the next beat's call then reads unchanged, so 0 units passed every
+    beat. Measured by lane L9 on the owner's db (2026-11-01): chats 175-178,
+    every mind at `mood_clock 1.0` after 12-35 turns while the story clock
+    reached 440-1143 s; no mood ever decayed toward home, no habit ever
+    rested. Applied at commit over the stored clock the beat opened on to
+    the clock it ends on, so a gap the pass already counted is never counted
+    twice."""
+    if not mood_state or not units or units <= 0:
+        return mood_state
+    from mind import affect_mix as mix
+    out = dict(mood_state)
+    clock = float(out.get("mood_clock") or 0.0) + float(units)
+    out["mood_clock"] = round(clock, 4)
+    coords = out.get("mood_coords")
+    if isinstance(coords, dict) and coords:
+        try:
+            mood = mix.decay(
+                mix.Mood({k: float(v) for k, v in coords.items()}),
+                affect_pass.home_mood(baseline), units)
+            out["mood_coords"] = {k: round(float(v), 4)
+                                  for k, v in mood.coords.items()
+                                  if abs(float(v)) > 1e-4}
+        except (TypeError, ValueError):
+            pass            # unreadable coordinates are kept, never guessed
+    if isinstance(out.get("mood_habits"), dict):
+        out["mood_habits"] = mix.rested_away(out["mood_habits"], clock)
+    return out
+
+
+def _salience_cue_pattern(cue):
+    """A cue begins a word in the cue's own script: a Latin cue needs no
+    letter of a spaced script before it; a cue in a script written without
+    spaces (the ja pack's kanji stems -- 攻撃, 死, 盗) sits inside its
+    compound as written. Only the START is bounded, so an inflection still
+    counts ("attacked", "confessed"), exactly as `_durable_dialogue_category`'s
+    markers are anchored."""
+    from language_runtime import SPACED_WORD_CHARS, script_of
+    cue = str(cue or "").lower()
+    if not cue:
+        return None
+    lead = "" if script_of(cue[:1]) else "(?<![%s])" % SPACED_WORD_CHARS
+    return re.compile(lead + re.escape(cue))
+
+
+_SALIENCE_PATTERNS = {}
+
+
 def _salience_of(text):
     s = 0.45 + min(len(text or ""), 400) / 1600.0
     # Which words make a beat worth remembering is a question about words, so
     # the cue list is the pack's. Against an English-only list every memory in
     # a Japanese story scored the flat length-only floor -- not an error, just
     # a bank with no peaks in it.
+    #
+    # A CUE IS A WORD, AND A WORD DOES NOT BEGIN INSIDE ANOTHER ONE. Bare
+    # substring matching found "liar" in "familiar", "promise" in
+    # "compromised" and "love" in "glove", and since a row at 0.72 or above
+    # is never archived, one spurious cue made an ordinary memory permanent:
+    # "He pulled on a glove at the deadline beside the secretary." scored
+    # 0.726 (review 2026-11-01, persist_background_memory F9). A cue the
+    # START rule cannot tell apart -- "dead" opening "deadline" -- still
+    # counts, as an inflection must; the pack can write a narrower cue.
+    lowered = (text or "").lower()
     for w in _ling("_SALIENCE_CUES"):
-        if w in (text or "").lower():
+        pattern = _SALIENCE_PATTERNS.get(w)
+        if pattern is None:
+            pattern = _SALIENCE_PATTERNS[w] = _salience_cue_pattern(w)
+        if pattern is not None and pattern.search(lowered):
             s += 0.08
     return round(min(s, 0.95), 3)
 
@@ -936,6 +1005,12 @@ def prepare_memory_commit(ctx, *, scene=None):
     # non-dict, so the guard bought nothing and cost the silent beat.
     _clock_seconds, _ = _monotonic_elapsed(
         _clock, _time_diff, floor=bool(ctx.director_resolve))
+    # The span of story time THIS beat covers, from the stored clock it
+    # opened on to the one it ends on: what the mood's clock advances by at
+    # commit (`_mood_over_the_beat`). No turn fallback -- a beat whose clock
+    # cannot be read was already counted by the call's own turn cadence.
+    _beat_span_units = psychology_runtime.elapsed_psych_units(
+        _clock.get("elapsed_seconds"), _clock_seconds, 0)
 
     # Loop-invariant inputs to the place-claim rekey below, hoisted: the scene
     # rooms, the cast roster, and the persona do not change while this loop
@@ -1965,13 +2040,17 @@ def prepare_memory_commit(ctx, *, scene=None):
                     # The engine's mood (`mind/affect_pass.py`): its
                     # coordinates, each recalled memory's habituation and its
                     # psych clock, kept for the next call. A beat the pass did
-                    # not reach keeps the last.
-                    **{key: ((own_result.get("_affect_pass") or {}).get(key)
-                             if (own_result.get("_affect_pass") or {}).get(key) is not None
-                             else prev_as.get(key))
-                       for key in ("mood_coords", "mood_habits", "mood_clock")
-                       if (own_result.get("_affect_pass") or {}).get(key) is not None
-                       or prev_as.get(key) is not None},
+                    # not reach keeps the last -- and either way the beat's
+                    # own span of story time passes on it here, which no
+                    # call counts (`_mood_over_the_beat`; L9's finding).
+                    **_mood_over_the_beat(
+                        {key: ((own_result.get("_affect_pass") or {}).get(key)
+                               if (own_result.get("_affect_pass") or {}).get(key) is not None
+                               else prev_as.get(key))
+                         for key in ("mood_coords", "mood_habits", "mood_clock")
+                         if (own_result.get("_affect_pass") or {}).get(key) is not None
+                         or prev_as.get(key) is not None},
+                        baseline, _beat_span_units),
                     "active_concerns": (
                         asv.get("active_concerns")
                         if asv.get("active_concerns") is not None else

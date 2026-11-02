@@ -263,7 +263,8 @@ from fastapi import APIRouter, Body, HTTPException
 
 from core import db
 from core.db import q, qtx, transaction, wset
-from persist.commit import sync_room_registry_with_scene
+from persist.commit import (sync_room_registry_with_scene,
+                            sync_world_entities_with_scene)
 from story import room_slice as rooms
 from story.attire import (GARMENT_STATES, REGIONS as ATTIRE_REGIONS,
                           entry_for as attire_entry_for)
@@ -1791,56 +1792,6 @@ def _apply_parts(room, raw):
         room["parts"] = parts
     else:
         room.pop("parts", None)
-
-
-def sync_world_entities_with_scene(cid, prev_scene, scene):
-    """Keep the `world_entities` projection in step with a scene write made
-    OUTSIDE the commit, the sibling of `persist.commit
-    .sync_room_registry_with_scene` (AGENTS.md Phase 3a: every scene writer
-    owes the pair). Call it inside the write's transaction.
-
-    The row is written FROM the blob, the direction `commit_world_entities`
-    projects: for every entity record this write ADDED or CHANGED the row
-    becomes that record (`kind`, `subtype`, `name`, `payload`); for every id
-    this write REMOVED the row goes, with the decommissioned
-    `world_placements` row the commit sweeps beside it. Nothing else is
-    touched: the table is chat-global while a scene is one era's, so a
-    record this write did not change may be another era's row -- the same
-    "the diff says WHICH, the blob says WHAT" split the commit keeps.
-
-    Audit 2026-11-01 (web_routes_extensions F4, persist_scene_entities F3,
-    both CONFIRMED): the World Browser's create, edit and delete reconciled
-    the registry and never this table, so a deleted thing's row survived
-    (paradox reads ROW PRESENCE for a fixed point), a created thing had
-    none, and an edited kind stayed on the old value; measured read-only on
-    the play database that day, 85 of 1,208 scene entities across 25 chats
-    had no row. The Raw JSON editor (`app.world_put`) has the same gap.
-    """
-    before = (prev_scene or {}).get("entities") if isinstance(prev_scene, dict) else None
-    after = (scene or {}).get("entities") if isinstance(scene, dict) else None
-    before = before if isinstance(before, dict) else {}
-    after = after if isinstance(after, dict) else {}
-    for entity_id, record in after.items():
-        if not isinstance(record, dict) or before.get(entity_id) == record:
-            continue
-        row = (str(record.get("kind") or "object"),
-               str(record.get("subtype") or ""),
-               str(record.get("name") or ""),
-               json.dumps(record, ensure_ascii=False))
-        if q("SELECT 1 FROM world_entities WHERE chat_id=? AND entity_id=?",
-             (cid, str(entity_id)), one=True):
-            qtx("UPDATE world_entities SET kind=?,subtype=?,name=?,payload=? "
-                "WHERE chat_id=? AND entity_id=?", row + (cid, str(entity_id)))
-        else:
-            qtx("INSERT INTO world_entities(entity_id,chat_id,kind,subtype,"
-                "name,payload) VALUES(?,?,?,?,?,?)",
-                (str(entity_id), cid) + row)
-    for entity_id in before:
-        if entity_id not in after:
-            qtx("DELETE FROM world_entities WHERE chat_id=? AND entity_id=?",
-                (cid, str(entity_id)))
-            qtx("DELETE FROM world_placements WHERE chat_id=? AND subject_id=?",
-                (cid, str(entity_id)))
 
 
 def _write_scene(cid, chat, before, scene):

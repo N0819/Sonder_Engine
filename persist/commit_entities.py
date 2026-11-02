@@ -6,7 +6,7 @@ See docs/experiments/AUDIT_COMMIT.md for the split record.
 """
 
 import json
-from core.db import q, transaction, wget
+from core.db import q, qtx, transaction, wget
 from story.character_schema import new_uid
 from story.scene import get_scene, SINGULAR_BODY_CONDITIONS
 from world.spatial import _merge_entity
@@ -149,13 +149,12 @@ def _supersede_disguises(cursor, chat_id, cond, written_id):
         # fetch, and inheritance is an enrichment -- worth skipping, never
         # worth crashing the commit over.
         superseded = []
-        if hasattr(cursor, "fetchall"):
-            cursor.execute(
+        if _can_read(cursor):
+            superseded = list(cursor.execute(
                 f"SELECT payload FROM world_conditions WHERE chat_id=? "
                 f"AND kind IN ({marks}) AND active=1 "
                 f"AND condition_id<>? AND lower(subject_id)=lower(?)",
-                (chat_id, *group, written_id, subject))
-            superseded = list(cursor.fetchall() or [])
+                (chat_id, *group, written_id, subject)).fetchall() or [])
         cursor.execute(
             f"UPDATE world_conditions SET active=0 WHERE chat_id=? "
             f"AND kind IN ({marks}) AND active=1 "
@@ -169,6 +168,35 @@ def _supersede_disguises(cursor, chat_id, cond, written_id):
             (chat_id, *group, subject))
 
 
+def _can_read(cursor):
+    """Can this handle answer a SELECT? A sqlite3 cursor fetches; the
+    transaction's sqlite3 CONNECTION -- which is what `commit_world_entities`
+    actually hands `_supersede_disguises` -- fetches from what its `execute`
+    returns; the recording stub the rule's unit tests use does neither.
+
+    THE INHERITANCE NEVER RAN ON THE COMMIT PATH. The guard asked the handle
+    itself for `fetchall`/`fetchone`, which a Connection does not have, so on
+    every live beat it skipped the read and carried nothing: reproduced
+    through `commit_world_entities` on a scratch database (review fix
+    2026-11-01), a superseding row came back `known_to: []` beside the
+    deactivated row that named The Doctor -- chat 74's defect, live. The
+    review's own repro (persist_scene_entities F10, `checks.py` §3) passed a
+    cursor, which is why it saw the rule work."""
+    return hasattr(cursor, "fetchall") or hasattr(cursor, "cursor")
+
+
+def _disguise_field(payload, key):
+    """A disguise row's field the way its reader takes it
+    (`story.scene.disguises_from_rows`: `state.get(k) or payload.get(k)`).
+    One rule on both sides of the write: reading `state` alone made a row
+    written FLAT -- a shape the reader accepts -- inherit nothing and hand
+    nothing on (persist_scene_entities F10; 0 of 30 corpus rows are flat)."""
+    state = payload.get("state") if isinstance(payload, dict) else None
+    state = state if isinstance(state, dict) else {}
+    return state.get(key) or (payload.get(key) if isinstance(payload, dict)
+                              else None)
+
+
 def _inherit_known_to(cursor, chat_id, written_id, superseded_rows):
     """Carry `known_to` onto a superseding row that did not restate it.
 
@@ -176,13 +204,16 @@ def _inherit_known_to(cursor, chat_id, written_id, superseded_rows):
     audience is authoritative, including when it deliberately names a smaller
     one. Someone who was told the truth does not un-learn it because the
     subject adjusted their glamour.
+
+    Either shape on either side (`_disguise_field`); written into `state`,
+    which a flat row gains for it -- the reader takes `state` first and the
+    row's own top-level fields for everything `state` does not say.
     """
-    if not superseded_rows or not hasattr(cursor, "fetchone"):
+    if not superseded_rows or not _can_read(cursor):
         return
-    cursor.execute(
+    row = cursor.execute(
         "SELECT payload FROM world_conditions WHERE chat_id=? "
-        "AND condition_id=?", (chat_id, written_id))
-    row = cursor.fetchone()
+        "AND condition_id=?", (chat_id, written_id)).fetchone()
     if not row:
         return
     try:
@@ -190,8 +221,7 @@ def _inherit_known_to(cursor, chat_id, written_id, superseded_rows):
                              else row["payload"])
     except Exception:
         return
-    state = payload.get("state")
-    if not isinstance(state, dict) or state.get("known_to"):
+    if not isinstance(payload, dict) or _disguise_field(payload, "known_to"):
         return
     inherited = []
     for old in superseded_rows or []:
@@ -200,16 +230,49 @@ def _inherit_known_to(cursor, chat_id, written_id, superseded_rows):
                                else old["payload"])
         except Exception:
             continue
-        for who in ((prior.get("state") or {}).get("known_to") or []):
+        for who in (_disguise_field(prior, "known_to") or []):
             text = str(who or "").strip()
             if text and text not in inherited:
                 inherited.append(text)
     if not inherited:
         return
+    state = payload.get("state")
+    if not isinstance(state, dict):
+        state = payload["state"] = {}
     state["known_to"] = inherited
     cursor.execute(
         "UPDATE world_conditions SET payload=? WHERE chat_id=? "
         "AND condition_id=?", (json.dumps(payload), chat_id, written_id))
+
+
+def _seconds_or_none(value):
+    """A condition clock column's value: a finite number of seconds, or
+    None for nothing -- and whether a non-blank value was DROPPED, so the
+    caller can say so.
+
+    The encoder's `expires_at_seconds` used to land as written, and the
+    schema types condition items as untyped dicts, so SQLite's REAL affinity
+    kept a word as TEXT. The next beat's transit sweep, the first domain
+    inside the transaction, could not compare it -- `float("")` raised,
+    `commit_all` rolled the beat back, and every later beat after it, because
+    the row was still there (review 2026-11-01, world_offscreen_time F2:
+    `mechanics_sweep(..., expires_at: "")` -> ValueError; 0 of 538 live rows
+    are non-numeric). A number written as text ("3600") is that number."""
+    if value is None or isinstance(value, bool):
+        return None, value is not None
+    if isinstance(value, (int, float)):
+        number = float(value)
+    else:
+        text = str(value).strip()
+        if not text:
+            return None, False
+        try:
+            number = float(text)
+        except ValueError:
+            return None, True
+    if number != number or number in (float("inf"), float("-inf")):
+        return None, True
+    return number, False
 
 
 def _ended_in(cond_value) -> bool:
@@ -277,6 +340,59 @@ def _with_sound_wakings(ctx, chat_id, conditions):
                 "Ended awareness 'asleep' on %s: a sound reached them and "
                 "woke them this beat (%s)" % (record["subject"], by))
     return out
+
+
+def sync_world_entities_with_scene(cid, prev_scene, scene):
+    """Keep the `world_entities` projection in step with a scene write made
+    OUTSIDE the commit, the sibling of `persist.commit
+    .sync_room_registry_with_scene` (AGENTS.md Phase 3a: every scene writer
+    owes the pair). Call it inside the write's transaction. Lives here, beside
+    `commit_world_entities`, because it is the same projection: the commit
+    keeps it for the beat's own writes, this for a host's. (Written for the
+    World Browser by lane L2 and moved here by L4, review 2026-11-01.)
+
+    The row is written FROM the blob, the direction `commit_world_entities`
+    projects: for every entity record this write ADDED or CHANGED the row
+    becomes that record (`kind`, `subtype`, `name`, `payload`); for every id
+    this write REMOVED the row goes, with the decommissioned
+    `world_placements` row the commit sweeps beside it. Nothing else is
+    touched: the table is chat-global while a scene is one era's, so a
+    record this write did not change may be another era's row -- the same
+    "the diff says WHICH, the blob says WHAT" split the commit keeps.
+
+    Audit 2026-11-01 (web_routes_extensions F4, persist_scene_entities F3,
+    both CONFIRMED): the World Browser's create, edit and delete reconciled
+    the registry and never this table, so a deleted thing's row survived
+    (paradox reads ROW PRESENCE for a fixed point), a created thing had
+    none, and an edited kind stayed on the old value; measured read-only on
+    the play database that day, 85 of 1,208 scene entities across 25 chats
+    had no row. The Raw JSON editor (`app.world_put`) has the same gap.
+    """
+    before = (prev_scene or {}).get("entities") if isinstance(prev_scene, dict) else None
+    after = (scene or {}).get("entities") if isinstance(scene, dict) else None
+    before = before if isinstance(before, dict) else {}
+    after = after if isinstance(after, dict) else {}
+    for entity_id, record in after.items():
+        if not isinstance(record, dict) or before.get(entity_id) == record:
+            continue
+        row = (str(record.get("kind") or "object"),
+               str(record.get("subtype") or ""),
+               str(record.get("name") or ""),
+               json.dumps(record, ensure_ascii=False))
+        if q("SELECT 1 FROM world_entities WHERE chat_id=? AND entity_id=?",
+             (cid, str(entity_id)), one=True):
+            qtx("UPDATE world_entities SET kind=?,subtype=?,name=?,payload=? "
+                "WHERE chat_id=? AND entity_id=?", row + (cid, str(entity_id)))
+        else:
+            qtx("INSERT INTO world_entities(entity_id,chat_id,kind,subtype,"
+                "name,payload) VALUES(?,?,?,?,?,?)",
+                (str(entity_id), cid) + row)
+    for entity_id in before:
+        if entity_id not in after:
+            qtx("DELETE FROM world_entities WHERE chat_id=? AND entity_id=?",
+                (cid, str(entity_id)))
+            qtx("DELETE FROM world_placements WHERE chat_id=? AND subject_id=?",
+                (cid, str(entity_id)))
 
 
 def commit_world_entities(ctx, nonce, *, prepared=None):
@@ -373,6 +489,55 @@ def commit_world_entities(ctx, nonce, *, prepared=None):
     removed_entities = [entity_id for entity_id in (diff.get("remove_entities") or [])
                         if not diff.get("causal_steps") or entity_id not in _merged_entities]
 
+    # WHAT THE COMMIT ITSELF MINTED AND FOLDED AFTER THE DIFF WAS WRITTEN.
+    # The diff names what the BEAT touched; several passes of the commit add
+    # or remove scene entities without writing either list -- a planned
+    # thing stood up where somebody stands (`materialize_plans_in_sight`), a
+    # cast body given its record (`ensure_cast_entities`, which heals the
+    # standing scene in place, so the record is in `prev_scene` too), a shed
+    # garment folded into its twin or reclaimed on re-wear, the merge's own
+    # twin fold and a removal named by display name -- and each left the
+    # projection disagreeing with the blob. Measured (review 2026-11-01,
+    # persist_scene_entities F4): 11 of 1,069 rows in 9 chats named no entity
+    # any scene of their chat holds, one a folded twin. So with the merged
+    # scene in hand the projection is taken against IT: an id the merge
+    # folded away is skipped rather than minted from the raw diff (its
+    # survivor carries the change), every merged entity that is new, changed
+    # or has no row is projected, and every entity the beat's own scene held
+    # before and does not hold now loses its row -- the rule
+    # `_mint_shed_garments` states ("an entity minted only here would live
+    # in the runtime scene and be absent from the normalized table"), kept
+    # by construction instead of by every pass remembering it. Direct
+    # callers with no merged scene project the diff alone, as before.
+    _scene_merged = isinstance(prepared, dict) and isinstance(
+        (prepared.get("scene") or {}).get("entities"), dict)
+    _have_prior = isinstance(prepared, dict) and isinstance(
+        prepared.get("prev_scene"), dict)
+    _projects, _seen = [], set()
+    for entity_id, entity_def in (diff.get("entities") or {}).items():
+        if not isinstance(entity_def, dict):
+            continue
+        if _scene_merged and entity_id not in _merged_entities:
+            continue
+        _projects.append((entity_id, entity_def, True))
+        _seen.add(entity_id)
+    if _scene_merged:
+        _has_row = {r["entity_id"] for r in q(
+            "SELECT entity_id FROM world_entities WHERE chat_id=?", (cid,))}
+        for entity_id, merged_def in _merged_entities.items():
+            if entity_id in _seen or not isinstance(merged_def, dict):
+                continue
+            if entity_id not in _has_row or (
+                    _have_prior
+                    and _prior_entities.get(entity_id) != merged_def):
+                _projects.append((entity_id, merged_def, False))
+                _seen.add(entity_id)
+        if _have_prior:
+            for entity_id in _prior_entities:
+                if (entity_id not in _merged_entities
+                        and entity_id not in removed_entities):
+                    removed_entities.append(entity_id)
+
     def _projected(entity_id, entity_def, prior_payload):
         """What world_entities should now hold for this entity.
 
@@ -407,10 +572,8 @@ def commit_world_entities(ctx, nonce, *, prepared=None):
         )
 
     with transaction() as c:
-        for entity_id, entity_def in (diff.get("entities") or {}).items():
-            if not isinstance(entity_def, dict):
-                continue
-            if _copied_forward_unchanged(entity_id, entity_def):
+        for entity_id, entity_def, _from_diff in _projects:
+            if _from_diff and _copied_forward_unchanged(entity_id, entity_def):
                 ctx.add_warning(
                     f"entity {entity_id}: this beat's prose names it, but its "
                     f"posture/description came through byte-identical to the "
@@ -583,6 +746,25 @@ def commit_world_entities(ctx, nonce, *, prepared=None):
                 payload = json.dumps(
                     {**cond, "last_asserted_turn_idx": _asserted_turn},
                     ensure_ascii=False)
+                # The two clock columns hold seconds or nothing
+                # (`_seconds_or_none`). A dropped word is said, never kept: an
+                # unreadable expiry is no expiry, an unreadable start the
+                # default a row that names none already gets (an explicit
+                # null stays null, as it always did).
+                _expires, _bad = _seconds_or_none(cond.get("expires_at_seconds"))
+                if _bad:
+                    ctx.add_warning(
+                        "condition %s: expires_at_seconds %r is not a number "
+                        "of seconds; stored as no expiry"
+                        % (cid_val, cond.get("expires_at_seconds")))
+                _started, _bad = _seconds_or_none(
+                    cond.get("started_at_seconds", 0.0))
+                if _bad:
+                    ctx.add_warning(
+                        "condition %s: started_at_seconds %r is not a number "
+                        "of seconds; stored as 0"
+                        % (cid_val, cond.get("started_at_seconds")))
+                    _started = 0.0
                 if existing:
                     # THE SAME NOTHING-EVER-ENDS CLASS, on the UPDATE branch.
                     # The INSERT below has always read `expires_at_seconds`;
@@ -613,15 +795,15 @@ def commit_world_entities(ctx, nonce, *, prepared=None):
                         WHERE condition_id=? AND chat_id=?""",
                         (cond.get("subject_id", ""), cond.get("kind", ""),
                          payload, int(cond.get("active", 1)),
-                         cond.get("expires_at_seconds"), cid_val, cid),
+                         _expires, cid_val, cid),
                     )
                 else:
                     c.execute(
                         """INSERT INTO world_conditions(condition_id,chat_id,subject_id,kind,
                         started_at,expires_at,next_tick,payload,active) VALUES(?,?,?,?,?,?,?,?,?)""",
                         (cid_val, cid, cond.get("subject_id", ""), cond.get("kind", ""),
-                         cond.get("started_at_seconds", 0.0),
-                         cond.get("expires_at_seconds"),
+                         _started,
+                         _expires,
                          # NULL, always: see the UPDATE branch above. The
                          # sweep schedules this row from the clock it first
                          # sees it on, and a writer that could seed a cadence

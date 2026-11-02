@@ -8,7 +8,8 @@ See docs/experiments/AUDIT_COMMIT.md for the split record.
 """
 
 import copy, hashlib, json, re, time, uuid
-from core.db import q, qi, wget, wset, get_setting
+from core.db import q, qi, transaction, wget, wset, get_setting
+from language_runtime import fold_words, name_boundary_regex, script_of
 from mind.memory import add_memories_batch
 from story.character_schema import (character_name, character_initial_outfit,
                               character_initial_active_state,
@@ -943,6 +944,37 @@ def _fold_duplicate_presences(presences, scene=None):
     return presences
 
 
+def _proven_another_body(record, refs, scene):
+    """Is this tracked record PROVEN to be a body other than the charter body
+    `refs` names?
+
+    Two proofs, the two bindings a record can carry. Another body's charter
+    ref is one. An entity binding is the other: an id denotes exactly one
+    scene body, and that body is THIS charter body only when the scene entity
+    says so with its own `charter_ref` (what the floor writes when it binds a
+    Director mint to a charter body). Without that, the bound body and the
+    charter body are two people who share a name -- the rule
+    `_resolve_or_mint_presence` keeps: "A name match already bound to a
+    DIFFERENT body falls through to the mint: same name, two bodies, two
+    records"."""
+    wanted = {(str(r.get("charter") or ""), str(r.get("body") or ""))
+              for r in refs if isinstance(r, dict)}
+    held = {(str(r.get("charter") or ""), str(r.get("body") or ""))
+            for r in ((record or {}).get("charter_refs") or [])
+            if isinstance(r, dict)}
+    if held and not (held & wanted):
+        return True
+    eid = str((record or {}).get("entity_id") or "")
+    if eid:
+        ent = ((scene or {}).get("entities") or {}).get(eid)
+        ref = ent.get("charter_ref") if isinstance(ent, dict) else None
+        if not (isinstance(ref, dict)
+                and (str(ref.get("charter") or ""),
+                     str(ref.get("body") or "")) in wanted):
+            return True
+    return False
+
+
 def with_charter_presences(cid, presences, scene=None, *, places=None,
                            names=None, frame_id=None, turn_idx=None):
     """Overlay derived Charter bodies onto a background-presence ledger.
@@ -977,6 +1009,22 @@ def with_charter_presences(cid, presences, scene=None, *, places=None,
             key, _rec, status = _presence_lookup(merged, name, scene)
             if status == "ambiguous":
                 continue    # two tracked records answer; refuse to guess
+            if key is not None and _proven_another_body(
+                    merged.get(key), refs, scene):
+                # THE NAME IS TAKEN BY SOMEBODY ELSE, so it is withheld --
+                # the rule `background_presence_records` keeps for two
+                # charter bodies sharing one ("withheld until the fiction
+                # distinguishes them"). Folded in, a different body's charter
+                # ref welded onto a record bound to another: measured (review
+                # 2026-11-01, persist_background_memory F3, reproduced) a
+                # ledger "Mara" bound to m1 in the hall took the millers'
+                # "Mara" (b17, at the mill), and promoting her would have
+                # handed her b17's memories, relationships and stress and
+                # stood her at the mill. A second record keyed on the charter
+                # seed would make every later name lookup of "Mara"
+                # ambiguous instead; withholding keeps the tracked person
+                # whole and the charter body simulated where it is.
+                continue
         if key is None:
             seed = _charter_uid_seed(record) or ("legacy:%s" % name)
             fresh = copy.deepcopy(record)
@@ -1144,10 +1192,16 @@ def _background_name_mentioned(name, text, shared=()):
     `shared` is the set of words this name holds IN COMMON with other
     tracked names (`_shared_name_words`): a word every holder of a post
     carries is the post's name, not anyone's, and a full-name match is the
-    only way such a word reaches this person."""
+    only way such a word reaches this person.
+
+    A WHOLE NAME IN ITS OWN SCRIPT (`language_runtime.name_boundary_pattern`),
+    never `\\b`: there is no word boundary between ハンナ and the particle or
+    honorific written onto it, so in a Japanese story this never fired for
+    the ordinary spelling (review 2026-11-01, persist_background_memory F15:
+    `('ハンナ', 'ハンナは頷いた') -> False`)."""
     text_cf = text.casefold()
     name_cf = name.casefold()
-    if re.search(rf"\b{re.escape(name_cf)}\b", text_cf):
+    if name_boundary_regex(name_cf).search(text_cf):
         return True
     words = [w.strip(".,;:").casefold() for w in name.split()]
     significant = [
@@ -1155,9 +1209,7 @@ def _background_name_mentioned(name, text, shared=()):
         if w and w not in _BACKGROUND_NAME_TITLE_WORDS and len(w) >= 3
         and w not in shared
     ]
-    return any(
-        re.search(rf"\b{re.escape(w)}\b", text_cf) for w in significant
-    )
+    return any(name_boundary_regex(w).search(text_cf) for w in significant)
 
 
 def _thing_name_words(scene):
@@ -1218,13 +1270,16 @@ def _background_name_named_exactly(name, text):
     fuzzy must never FORCE: measured on the Part C bench, six tracked
     "Regular N" records against the input "Regular 2, what do I owe you?"
     all matched on the shared word "regular", and an addressee guarantee
-    keyed to that match widened one address into six voice calls."""
-    return bool(re.search(rf"\b{re.escape(str(name).casefold())}\b",
-                          str(text).casefold()))
+    keyed to that match widened one address into six voice calls.
+
+    The boundary is the name's own script's (`name_boundary_pattern`, F15):
+    `\\b` made 'ハンナさん、エールを一杯' name nobody."""
+    return bool(name_boundary_regex(str(name).casefold()).search(
+        str(text).casefold()))
 
 
 def _character_address_of(dr_output, presence_name, roster, scene=None,
-                          station_room=None, hears=None):
+                          station_room=None, hears=None, shared=()):
     """Return the last hearable dialogue_log entry in which a roster speaker
     (a registered character or the player) aimed a line at this background
     presence, or None -- so a character speaking directly TO an extra can
@@ -1250,6 +1305,11 @@ def _character_address_of(dr_output, presence_name, roster, scene=None,
     probe (2026-10-20, chat 2): the room-level read gives a normal line FULL
     to anyone in the same room, where the cast's gate gives a bystander 7.2
     paces off in the taproom's 68 dB din only pieces.
+
+    `shared` is the story's shared name words (`_shared_name_words`), handed
+    to the matcher because `intended_target` arrives UNBOUND: a target that
+    is only the word a post's holders share addresses none of them
+    precisely (`_presence_addressed_match`, F2).
     """
     found = None
     for d in (dr_output.get("dialogue_log") or []):
@@ -1264,7 +1324,8 @@ def _character_address_of(dr_output, presence_name, roster, scene=None,
         # 3043: one sleeve-grab became a 44-strong forced chorus). The
         # conceal_from check below deliberately KEEPS the loose matcher --
         # concealment fails closed, and wide denial leaks nothing.
-        if not target or not _presence_addressed_match(presence_name, target):
+        if not target or not _presence_addressed_match(
+                presence_name, target, shared=shared):
             continue
         if str(d.get("visibility") or "").casefold() == "concealed":
             continue
@@ -1637,20 +1698,22 @@ PENDING_ACT_BEATS = 3
 def _owed_clock_seconds(cid, res):
     """The fiction clock this beat leaves, for stamping a debt's age.
 
-    The same monotonic read `commit_memory` stamps affect and strain with
-    (`_monotonic_elapsed` over the stored `simulation_clock` and the beat's
-    own `state_diff.time`), so a debt ages on the clock everything else in
-    this engine ages on. Fails to 0.0 rather than raising: an unstamped debt
-    still counts beats, and a promise that cannot be timed is better than a
-    commit that rolls back.
+    THE CLOCK ALREADY STORED, which by now IS this beat's end: this runs in
+    the `background_presences` domain, after the `scene` domain has written
+    the beat's clock (`commit_scene`). It applied the beat's `state_diff.time`
+    span to that clock a second time -- the stamp ran one beat ahead of the
+    story, so a promise read as 0 s old a beat later and was understated by
+    one beat's span ever after (review 2026-11-01, persist_background_memory
+    F10: stored 1600.0, stamped 2200.0; a silent beat stored 1010.0 and
+    stamped 1020.0) -- the one number `still_waiting_for` exists to carry.
+    `res` is kept for the callers' signature. Fails to 0.0 rather than
+    raising: an unstamped debt still counts beats, and a promise that cannot
+    be timed is better than a commit that rolls back.
     """
     try:
-        from persist.commit_common import _monotonic_elapsed
         clock = wget(cid, "simulation_clock",
                      {"elapsed_seconds": 0.0, "display": "now"}) or {}
-        diff = ((res or {}).get("state_diff") or {}).get("time")
-        seconds, _ = _monotonic_elapsed(clock, diff, floor=True)
-        return float(seconds or 0.0)
+        return float(clock.get("elapsed_seconds") or 0.0)
     except Exception:
         return 0.0
 
@@ -2670,6 +2733,20 @@ def track_background_presences(ctx, nonce, *, prepared=None):
         except Exception as exc:
             ctx.add_warning(f"Charter conduct skipped for {reaction_name}: {exc}")
 
+    # THE BEAT'S DESCRIPTION BINDINGS, DERIVED ONCE AND BEFORE ANYTHING HERE
+    # MOVES A BODY. A binding is a seeded pick over the bodies standing in
+    # the player's room (`descriptor_bindings`), and it was re-derived below
+    # AFTER the departure applier had moved the bound body: the cohort no
+    # longer held it, the seed picked the other one, and the phrase, the
+    # promotion counter and a reply owed for a question somebody else
+    # answered all landed on the wrong person (review 2026-11-01,
+    # persist_background_memory F6). The gate's own bindings win where the
+    # stage carried them (`pick_voice_demand` returns them as `bindings`);
+    # otherwise they are derived here, before the appliers.
+    _bindings = (ctx.get("background_react") or {}).get("descriptor_bindings")
+    if not isinstance(_bindings, dict):
+        _bindings = descriptor_bindings(ctx, res)
+
     # A figure that said where it goes is there when the beat ends; the
     # scene is the one this domain read after the scene commit, written back
     # under the same frame (`wget`/`wset` scope it).
@@ -2784,7 +2861,6 @@ def track_background_presences(ctx, nonce, *, prepared=None):
     # them in their own input, and a registered character aiming a line at
     # them. The signal for the first already existed and was used only as a
     # same-beat liveness bit; nothing accumulated it.
-    _bindings = descriptor_bindings(ctx, res)
     addressed_refs = [_bindings.get(r, r)
                       for r in _addressed_ref_strings(ctx, res)]
     # A description address is a BINDING (descriptor_bindings): persist the
@@ -2813,16 +2889,58 @@ def track_background_presences(ctx, nonce, *, prepared=None):
     sc = wget(cid, "scene", {}) or {}
     _p_name = _player_name_or_none(ctx)
     _p_room = str(room_of(sc, _p_name) or "") if _p_name else ""
+    # A NAME SAID IN THE PLAYER'S WORDS COUNTS AS TURNING TOWARD SOMEBODY
+    # ONLY ON THE GATE'S TERMS. This counter is the one that earns a
+    # passer-by a sheet, and it accrued on the significant-word match alone,
+    # while the demand gate (`pick_voice_demand`) drops that match when the
+    # beat has a precise addressee -- "A NAME IN A LINE AIMED AT SOMEONE ELSE
+    # IS A SUBJECT" -- and drops any raw-text address whose words did not
+    # arrive (`address_reaches`). Measured (review 2026-11-01,
+    # persist_background_memory F7): "Has Nookfeller been in today?", asked of
+    # the clerk, counted toward Nookfeller at the mill across town, and two
+    # such beats proposed him as "turned to on 2 beats". The Director's own
+    # addressee (a flow ref) still counts as it did; a character's aimed line
+    # is judged below by its own reader.
+    _precise_any = bool(res.get("routed_to_background")) or any(
+        _presence_in_addressed_refs(n, addressed_refs)
+        or _background_name_named_exactly(n, player_input)
+        for _k, _r in presences.items()
+        for n in _presence_names(_k, _r))
+    if not _precise_any:
+        for _d in (res.get("dialogue_log") or []):
+            _target = str((_d or {}).get("intended_target") or "").strip()
+            if (_target and str((_d or {}).get("speaker") or "").strip()
+                    .casefold() in roster
+                    and any(_presence_addressed_match(n, _target,
+                                                      shared=shared_words)
+                            for _k, _r in presences.items()
+                            for n in _presence_names(_k, _r))):
+                _precise_any = True
+                break
+    _volumes = None
+    _authored = None
     for key, record in presences.items():
         name = presence_display_name(key, record)
         if not name:
             continue
-        addressed = any(
-            _presence_in_addressed_refs(n, addressed_refs)
-            or _background_name_mentioned(n, player_input,
-                                          shared=shared_words)
-            for n in _presence_names(key, record)
-        )
+        _names = _presence_names(key, record)
+        addressed = any(_presence_in_addressed_refs(n, addressed_refs)
+                        for n in _names)
+        if not addressed and player_input:
+            _exact = any(_background_name_named_exactly(n, player_input)
+                         for n in _names)
+            _loose = not _exact and not _precise_any and any(
+                _background_name_mentioned(n, player_input,
+                                           shared=shared_words)
+                for n in _names)
+            if _exact or _loose:
+                if _volumes is None:
+                    _volumes = spoken_volumes(ctx, res)
+                    _authored = authored_mind_rooms(sc, roster)
+                addressed = address_reaches(
+                    sc, name, presence_room(sc, name, record), _p_name,
+                    {_p_room} if _p_room else _authored, _volumes,
+                    addressed=None)
         pr = record.get("pending_reply")
         if isinstance(pr, dict) and turn_idx > (pr.get("expires_turn")
                                                 if pr.get("expires_turn") is not None else -1):
@@ -2852,7 +2970,8 @@ def track_background_presences(ctx, nonce, *, prepared=None):
                 _asker = _character_address_of(
                     res, name, roster, sc,
                     (record.get("sketch") or {}).get("station_room"),
-                    hears=_presence_ear(ctx, sc, name, record, res))
+                    hears=_presence_ear(ctx, sc, name, record, res),
+                    shared=shared_words)
                 record["pending_act"] = {
                     "what": " ".join(str(owes.get("what")).split()),
                     "to": " ".join(str(owes.get("to") or "").split()),
@@ -2878,7 +2997,8 @@ def track_background_presences(ctx, nonce, *, prepared=None):
             # cast's gate on its sound field -- where the scene places it.
             entry = _character_address_of(
                 res, name, roster, sc, (record.get("sketch") or {}).get("station_room"),
-                hears=_presence_ear(ctx, sc, name, record, res))
+                hears=_presence_ear(ctx, sc, name, record, res),
+                shared=shared_words)
             if entry:
                 addressed = True
                 record["pending_reply"] = {
@@ -3792,7 +3912,19 @@ def _word_stems(text):
     word. Morphology, not a vocabulary: nothing here anticipates which words
     English will use, only that it inflects them."""
     out = set()
-    for word in re.findall(r"[a-z0-9]+", str(text or "").casefold()):
+    # The words of every script (`fold_words`): the ASCII class gave a
+    # Japanese description no words at all, so PB6's narrowing never
+    # narrowed there (review 2026-11-01, persist_background_memory F15).
+    # Identical to the old token class for ASCII text. A HIRAGANA run is
+    # Japanese grammar -- the particle joining two nouns, a verb's
+    # inflection -- the way "with" and "wearing" are English's, so it is
+    # morphology to drop rather than a word to score: left in, a particle
+    # one surface happened to use and another did not decided a binding.
+    # Dropping a rare hiragana-written noun only narrows less, which is the
+    # behaviour the narrowing falls back to anyway.
+    for word in fold_words(text):
+        if script_of(word[:1]) == "hiragana":
+            continue
         out.add(word[:-1] if len(word) > 3 and word.endswith("s") else word)
     return out
 
@@ -4033,7 +4165,7 @@ def _flow_addressed_refs(ctx, dr_output=None):
             for ref in _addressed_ref_strings(ctx, dr_output)]
 
 
-def _presence_addressed_match(name, ref):
+def _presence_addressed_match(name, ref, shared=()):
     """PRECISE two-way match between one tracked name and one structured
     flow.addressed_to ref: equality, the whole name inside the ref
     ("Captain Trader Tate" names Trader Tate), or the whole title-stripped
@@ -4043,18 +4175,32 @@ def _presence_addressed_match(name, ref):
     single shared word matched everybody who shares it -- six "Regular N"
     records against "Regular 2" on the Part C bench, and every one of a
     market town's 44 "Trader *" bodies against any single trader ref, each
-    match a FORCED pick."""
+    match a FORCED pick.
+
+    THE CONTAINMENT ARM NEEDS A WORD ONLY THIS NAME HOLDS. `shared` is the
+    words this story's tracked names hold in common (`_shared_name_words`:
+    the post's name, not anyone's), and a ref made of nothing else singles
+    nobody out. A caller holding an UNBOUND ref passes it; a bound one
+    (`_flow_addressed_refs`) is already one body's display name. Measured
+    (review 2026-11-01, persist_background_memory F2, reproduced): a line
+    aimed at "the trader" matched Trader Bob, Trader Ann and Trader Tate,
+    each a forced pick, and at commit each stored the WHISPERED words as the
+    reply it owed. Both arms bound a name by its own script's edges
+    (`name_boundary_pattern`, F15), never `\\b`."""
     name_cf = str(name or "").strip().casefold()
     ref_cf = str(ref or "").strip().casefold()
     if not name_cf or not ref_cf:
         return False
     if name_cf == ref_cf:
         return True
-    if re.search(rf"\b{re.escape(name_cf)}\b", ref_cf):
+    if name_boundary_regex(name_cf).search(ref_cf):
         return True
     stripped = _normalized_descriptor(strip_name_titles(ref))
-    return bool(stripped
-                and re.search(rf"\b{re.escape(stripped)}\b", name_cf))
+    if not stripped:
+        return False
+    if shared and set(stripped.split()) <= set(shared):
+        return False
+    return bool(name_boundary_regex(stripped).search(name_cf))
 
 
 def _presence_in_addressed_refs(name, refs):
@@ -4323,6 +4469,9 @@ def pick_voice_demand(ctx, dr_output, cap=1):
     arrived on, so a pick is auditable from the step (Harrowmere replay
     2026-09-03 turn 23: a gate watchman answered a line spoken in the
     smithy, and the step could not say which trigger reached him).
+    ``bindings`` is the beat's description bindings as this gate derived
+    them (`descriptor_bindings`), for the stage to carry to the commit, which
+    persists them onto the bodies they name (F6).
     """
     chat = ctx.chat
     cid = chat.id
@@ -4374,7 +4523,13 @@ def pick_voice_demand(ctx, dr_output, cap=1):
     presences = _fold_duplicate_presences(
         wget(cid, "background_presences", {}) or {}, sc)
 
-    addressed_refs = _flow_addressed_refs(ctx, dr_output)
+    # `_flow_addressed_refs`, spelled out so the gate can hand its BINDINGS
+    # on: the commit persists a description's phrase onto the body the gate
+    # bound it to, and re-deriving it there from a scene the beat has since
+    # moved bodies in bound it to somebody else (F6, review 2026-11-01).
+    _bindings = descriptor_bindings(ctx, dr_output)
+    addressed_refs = [_bindings.get(ref, ref)
+                      for ref in _addressed_ref_strings(ctx, dr_output)]
 
     # Where the player is standing, scoping which charter bodies overlay
     # into the candidate ledger at all.
@@ -4510,11 +4665,24 @@ def pick_voice_demand(ctx, dr_output, cap=1):
         # A registered character (or the player) who spoke directly TO this
         # presence this beat -- read-only here; the owed-reply debt is written
         # at commit (track_background_presences), never in this pre-commit gate.
-        char_addr = _character_address_of(dr_output, name, roster, sc, here)
+        char_addr = _character_address_of(dr_output, name, roster, sc, here,
+                                          shared=shared_words)
         # OWED (§C1.2): an unexpired reply debt from a beat the gate spent
         # elsewhere. This is what keeps an open exchange re-triggering with
         # no tenure list anywhere.
         owed = _valid_pending_reply(record, turn_idx)
+        # A BODY THAT STARTED SOMETHING IS ASKED TO FINISH IT: an unexpired
+        # promised act (`still_owes` -> `pending_act`) is a demand on its
+        # maker. The scene manager's gate had this trigger
+        # (`agents/background._demanded_presences`' `owes_act`) and this one,
+        # the only gate under `scene_life: off`, did not -- so the tapster
+        # who said "In good time" was never picked again unless re-addressed,
+        # and the ale was never poured, while Design.md said the promise was
+        # re-asked until `hands_over` landed (review 2026-11-01,
+        # persist_background_memory F13). Same rule as the manager's: it
+        # qualifies, ranks with no bit of its own, and is judged on the
+        # unaimed channel below.
+        owes_act = bool(_valid_pending_act(record, turn_idx))
         # ACTING (§C1.3): this presence turned toward an authored mind last
         # beat -- a fired reaction aimed at one (`engaged_turns`, written at
         # commit), or a charter act whose `other` is a bound body or an
@@ -4586,7 +4754,7 @@ def pick_voice_demand(ctx, dr_output, cap=1):
                                  or char_addr)
         addressed_any = bool(addressed_precise or addressed
                              or place_addressed)
-        if not (addressed_any or owed or acting or emerged or arrived):
+        if not (addressed_any or owes_act or owed or acting or emerged or arrived):
             continue
         # THE WORKING, for the step's audit: which triggers qualified this
         # candidate, then (below) the channel that carried the demand.
@@ -4596,7 +4764,8 @@ def pick_voice_demand(ctx, dr_output, cap=1):
             ("character_address", bool(char_addr)),
             ("mentioned", addressed and not addressed_exact),
             ("place_addressed:%s" % here, place_addressed),
-            ("owed", bool(owed)), ("acting", acting), ("emerged", emerged),
+            ("owed", bool(owed)), ("owes_act", owes_act),
+            ("acting", acting), ("emerged", emerged),
             ("arrived:%s" % here, arrived),
         ) if hit]
         # What is left claims something reached this person without ever
@@ -4680,8 +4849,8 @@ def pick_voice_demand(ctx, dr_output, cap=1):
              # rule below.
              "loose_only": bool(addressed and not addressed_precise
                                 and not place_addressed
-                                and not (owed or acting or emerged
-                                         or arrived)),
+                                and not (owed or owes_act or acting
+                                         or emerged or arrived)),
              # The PLAYER's own precise address specifically (a flow ref --
              # description bindings included -- or their exact name in the
              # declaration), so the stage downstream can hand the presence
@@ -4693,7 +4862,7 @@ def pick_voice_demand(ctx, dr_output, cap=1):
                       if isinstance(r, dict)]})
 
     if not candidates:
-        return {"picks": [], "meta": {}}
+        return {"picks": [], "meta": {}, "bindings": _bindings}
     # A NAME IN A LINE AIMED AT SOMEONE ELSE IS A SUBJECT, NOT AN ADDRESSEE.
     # The loose word-match exists so "Crusher" can carry a scene once the
     # doctor has been established; it was never a finding that the speaker
@@ -4753,7 +4922,7 @@ def pick_voice_demand(ctx, dr_output, cap=1):
         meta[c["name"]] = {"addressed": c["addressed"], "refs": c["refs"],
                            "player_addressed": bool(c.get("player_addressed")),
                            "room": c["room"], "why": list(c.get("why") or [])}
-    return {"picks": picks, "meta": meta}
+    return {"picks": picks, "meta": meta, "bindings": _bindings}
 
 def _propose_promotions(ctx, presences, scene):
     """A MIND IS EARNED, AND THE ENGINE SAYS WHEN. Deterministic, at commit,
@@ -4920,6 +5089,26 @@ def _refuse_name_collision(cid, new_name):
         key = str(row["name"] or "").strip().casefold()
         if key:
             taken.setdefault(key, "a character already in this story")
+    # ...AND EVERY CO-PLAYER. They live in `chat_personas`, not `chat_chars`,
+    # and the tracker reserves their names (`reserved=roster`) while this did
+    # not: a presence tracked before a co-player named "Bo" joined could be
+    # promoted to a second "Bo" sharing that player's `positions` key (review
+    # 2026-11-01, persist_background_memory F21). Every frame's, because a
+    # name is the story's identity wherever its holder is stationed.
+    from story.character_schema import normalize_persona_data
+    for row in q(
+            "SELECT p.sheet AS sheet, p.name AS name FROM chat_personas cp "
+            "JOIN personas p ON p.id=cp.persona_id "
+            "WHERE cp.chat_id=? AND cp.status='active'", (cid,)):
+        try:
+            spelled = persona_name(normalize_persona_data(
+                json.loads(row["sheet"] or "{}")))
+        except Exception:
+            spelled = ""
+        for form in (spelled, row["name"]):
+            key = str(form or "").strip().casefold()
+            if key:
+                taken.setdefault(key, "a player in this story")
     if wanted in taken:
         raise ValueError(
             "Refusing to promote %r: that name belongs to %s. Names are how "
@@ -5012,218 +5201,294 @@ def promote_background_character(cid, name, sheet=None, memory_seeds=None,
     memory_seeds = [str(m) for m in (memory_seeds or []) if str(m).strip()]
     _refuse_name_collision(cid, character_name(sheet))
 
-    char_id = qi(
-        "INSERT INTO characters(name,sheet,source,created) VALUES(?,?,?,?)",
-        (
-            character_name(sheet), json.dumps(sheet, ensure_ascii=False),
-            json.dumps({
-                "format": "promoted", "chat_id": cid,
-                **({"charter": charter_bundle["charter"],
-                    "charter_body": charter_bundle["body"]}
-                   if charter_bundle else {}),
-            }, ensure_ascii=False),
-            time.time(),
-        ),
-    )
-    initial_active = character_initial_active_state(sheet)
-    _charter_color = ""
-    if charter_bundle:
-        from story.dialogue_colors import auto_dialogue_color, normalize_color
-        _charter_color = normalize_color(
-            charter_bundle.get("dialogue_color")) or auto_dialogue_color(
-                charter_bundle.get("dialogue_color_seed"))
-    qi(
-        "INSERT INTO chat_chars(chat_id,char_id,status,state,dialogue_color) "
-        "VALUES(?,?,'active',?,?)",
-        (cid, char_id, json.dumps({
-            "active_state": initial_active,
-            **({"charter_origin": {
-                "charter": charter_bundle["charter"],
-                "body": charter_bundle["body"],
-                "stood": handoff.get("stood") or {},
-            }} if charter_bundle else {}),
-            # The map a townsperson arrives with: the town's public rooms
-            # and the routes this body walked, seeded once and thereafter
-            # written only by `commit_place_graph.update_place_graph` --
-            # the same graph any character builds, with a head start the
-            # firewall permits because a life in a town is a channel to
-            # its streets (`charter_promote.inherited_place_graph`).
-            **({"place_graph": charter_bundle["place_graph"]}
-               if charter_bundle and (charter_bundle.get("place_graph")
-                                      or {}).get("nodes") else {}),
-        }, ensure_ascii=False), _charter_color),
-    )
+    # ONE TRANSACTION FOR EVERY WRITE THAT MAKES THIS PERSON. Each used to
+    # auto-commit on its own -- neither caller holds a transaction -- and
+    # the charter binding, which can fail when the body is gone from the
+    # registry by binding time, came LAST: a failure left an active
+    # character with a position and recognition, the presence record still
+    # tracked, and the charter simulating the same body -- one person, two
+    # simulations -- and with auto-promote on every later beat re-drafted
+    # it (two `utility` calls, ~27 s each) only to be refused by the name
+    # the half-made character now held (review 2026-11-01,
+    # persist_background_memory F5). The seed memories and the greeting
+    # mind land AFTER the commit, outside it: both are embedding round
+    # trips, which must never hold SQLite's write lock, and a seed for a
+    # character that was rolled back would be a memory of nobody.
+    with transaction():
+        char_id = qi(
+            "INSERT INTO characters(name,sheet,source,created) VALUES(?,?,?,?)",
+            (
+                character_name(sheet), json.dumps(sheet, ensure_ascii=False),
+                json.dumps({
+                    "format": "promoted", "chat_id": cid,
+                    **({"charter": charter_bundle["charter"],
+                        "charter_body": charter_bundle["body"]}
+                       if charter_bundle else {}),
+                }, ensure_ascii=False),
+                time.time(),
+            ),
+        )
+        initial_active = character_initial_active_state(sheet)
+        _charter_color = ""
+        if charter_bundle:
+            from story.dialogue_colors import auto_dialogue_color, normalize_color
+            _charter_color = normalize_color(
+                charter_bundle.get("dialogue_color")) or auto_dialogue_color(
+                    charter_bundle.get("dialogue_color_seed"))
+        qi(
+            "INSERT INTO chat_chars(chat_id,char_id,status,state,dialogue_color) "
+            "VALUES(?,?,'active',?,?)",
+            (cid, char_id, json.dumps({
+                "active_state": initial_active,
+                **({"charter_origin": {
+                    "charter": charter_bundle["charter"],
+                    "body": charter_bundle["body"],
+                    "stood": handoff.get("stood") or {},
+                }} if charter_bundle else {}),
+                # The map a townsperson arrives with: the town's public rooms
+                # and the routes this body walked, seeded once and thereafter
+                # written only by `commit_place_graph.update_place_graph` --
+                # the same graph any character builds, with a head start the
+                # firewall permits because a life in a town is a channel to
+                # its streets (`charter_promote.inherited_place_graph`).
+                **({"place_graph": charter_bundle["place_graph"]}
+                   if charter_bundle and (charter_bundle.get("place_graph")
+                                          or {}).get("nodes") else {}),
+            }, ensure_ascii=False), _charter_color),
+        )
 
-    # Charter's evidence-backed local stances become the promoted mind's
-    # ordinary relationship graph.  Copy the projection and append one
-    # explanation row per non-zero axis; do not ask a model to reinterpret a
-    # history the simulator already knows exactly.
-    if handoff.get("social_judgments"):
-        from mind.memory import (get_relationships, record_relationship_event,
-                                 save_relationships)
+        # Charter's evidence-backed local stances become the promoted mind's
+        # ordinary relationship graph.  Copy the projection and append one
+        # explanation row per non-zero axis; do not ask a model to reinterpret a
+        # history the simulator already knows exactly.
+        if handoff.get("social_judgments"):
+            from mind.memory import (get_relationships, record_relationship_event,
+                                     save_relationships)
 
-        graph = get_relationships(cid, char_id, frame_id=frame_id)
-        social_names = (charter_bundle or {}).get("social_names") or {}
-        for stance in handoff.get("social_judgments") or ():
-            if not isinstance(stance, dict):
-                continue
-            subject = str(stance.get("subject") or "")
-            target = str(social_names.get(subject) or subject)
-            if not target:
-                continue
-            values = {
-                "trust": float(stance.get("trust") or 0.0),
-                "emotional_valence": float(stance.get("warmth") or 0.0),
-                "fear": float(stance.get("fear") or 0.0),
-                "respect": float(stance.get("respect") or 0.0),
-                "suspicion": float(stance.get("suspicion") or 0.0),
-            }
-            graph.update(target, **values, last_interaction_turn=(
-                int(promoted_turn or 0)))
-            triggers = [str(reason.get("evidence_id") or "")
-                        for reason in stance.get("reasons") or ()
-                        if isinstance(reason, dict)
-                        and reason.get("evidence_id")]
-            for axis, value in (
-                    ("trust", values["trust"]),
-                    ("warmth", values["emotional_valence"]),
-                    ("fear", values["fear"]),
-                    ("respect", values["respect"]),
-                    ("suspicion", values["suspicion"])):
-                if not value:
+            graph = get_relationships(cid, char_id, frame_id=frame_id)
+            social_names = (charter_bundle or {}).get("social_names") or {}
+            for stance in handoff.get("social_judgments") or ():
+                if not isinstance(stance, dict):
                     continue
-                record_relationship_event(
-                    cid, char_id, target, axis, value, triggers=triggers,
-                    note="carried across Charter promotion",
-                    provenance="charter", turn_idx=int(promoted_turn or 0),
-                    frame_id=frame_id)
-        save_relationships(cid, char_id, graph, frame_id=frame_id)
+                subject = str(stance.get("subject") or "")
+                target = str(social_names.get(subject) or subject)
+                if not target:
+                    continue
+                values = {
+                    "trust": float(stance.get("trust") or 0.0),
+                    "emotional_valence": float(stance.get("warmth") or 0.0),
+                    "fear": float(stance.get("fear") or 0.0),
+                    "respect": float(stance.get("respect") or 0.0),
+                    "suspicion": float(stance.get("suspicion") or 0.0),
+                }
+                graph.update(target, **values, last_interaction_turn=(
+                    int(promoted_turn or 0)))
+                triggers = [str(reason.get("evidence_id") or "")
+                            for reason in stance.get("reasons") or ()
+                            if isinstance(reason, dict)
+                            and reason.get("evidence_id")]
+                for axis, value in (
+                        ("trust", values["trust"]),
+                        ("warmth", values["emotional_valence"]),
+                        ("fear", values["fear"]),
+                        ("respect", values["respect"]),
+                        ("suspicion", values["suspicion"])):
+                    if not value:
+                        continue
+                    record_relationship_event(
+                        cid, char_id, target, axis, value, triggers=triggers,
+                        note="carried across Charter promotion",
+                        provenance="charter", turn_idx=int(promoted_turn or 0),
+                        frame_id=frame_id)
+            save_relationships(cid, char_id, graph, frame_id=frame_id)
 
-    # ACQUAINTANCE IS AN EDGE, NOT A SENTENCE. The block above is gated on
-    # `social_judgments`, which measured ZERO holders across all four charters
-    # of a real story -- so the only writer into the relationship graph never
-    # ran, and a person who stood beside the same colleagues for 720 hours
-    # arrived a stranger to every one of them in the one structure the
-    # character pipeline actually consults. This runs on plain acquaintance,
-    # which every body has. A judgment, where one exists, is written after and
-    # wins: an opinion earned by evidence outranks the baseline familiarity
-    # gives.
-    if handoff.get("acquaintances"):
-        from mind.memory import (get_relationships, record_relationship_event,
-                                 save_relationships)
+        # ACQUAINTANCE IS AN EDGE, NOT A SENTENCE. The block above is gated on
+        # `social_judgments`, which measured ZERO holders across all four charters
+        # of a real story -- so the only writer into the relationship graph never
+        # ran, and a person who stood beside the same colleagues for 720 hours
+        # arrived a stranger to every one of them in the one structure the
+        # character pipeline actually consults. This runs on plain acquaintance,
+        # which every body has. A judgment, where one exists, is written after and
+        # wins: an opinion earned by evidence outranks the baseline familiarity
+        # gives.
+        if handoff.get("acquaintances"):
+            from mind.memory import (get_relationships, record_relationship_event,
+                                     save_relationships)
 
-        graph = get_relationships(cid, char_id, frame_id=frame_id)
-        social_names = (charter_bundle or {}).get("social_names") or {}
-        judged = {str(social_names.get(str(stance.get("subject") or ""))
-                      or stance.get("subject") or "")
-                  for stance in (handoff.get("social_judgments") or ())
-                  if isinstance(stance, dict)}
-        for row in handoff.get("acquaintances") or ():
-            if not isinstance(row, dict):
-                continue
-            body = str(row.get("body") or "")
-            target = str(social_names.get(body) or row.get("name") or body)
-            if not target or target in judged:
-                continue
-            familiarity = float(row.get("familiarity") or 0.0)
-            # Regard is centred on 1.0 in Charter's own scale; either side of
-            # it is thinking better or worse of somebody. Warmth carries that;
-            # trust follows familiarity, discounted when the acquaintance is
-            # secondhand, because knowing OF a person is not knowing them.
-            standing = float(row.get("regard") or 1.0) - 1.0
-            firsthand = bool(row.get("firsthand"))
-            before = graph.get(target)
-            # Snapshot BEFORE the update: `graph.get` hands back the live
-            # Relationship (D22, second skeptic), so read the priors here.
-            prior_trust = float(getattr(before, "trust", 0.0) or 0.0)
-            prior_warmth = float(getattr(before, "emotional_valence", 0.0) or 0.0)
-            trust = round(familiarity * (1.0 if firsthand else 0.4), 4)
-            warmth = round(standing, 4)
-            graph.update(
-                target, trust=trust, emotional_valence=warmth,
-                last_interaction_turn=int(promoted_turn or 0))
-            # AND THE REASON IS WRITTEN DOWN (D22 rework, review 2026-09-07).
-            # The judgment block ten lines above records one row per axis it
-            # moves and this one recorded nothing, so the largest population a
-            # charter story hands a promoted mind -- plain acquaintance, which
-            # every body has, where a judgment is rare -- arrived as numbers
-            # with no beat behind them. Since D22 the payload's `because`
-            # reads this ledger, so an unrecorded movement is a stance the
-            # mind holds and cannot account for.
-            #
-            # The delta is the MOVEMENT rather than the value: an edge the
-            # graph already carries has not travelled the whole distance, and
-            # the ledger's meaning is how far a stance moved.
-            note = ("known firsthand, from the hours actually shared"
-                    if firsthand
-                    else "known of at second hand, never met")
-            for axis, value, prior in (("trust", trust, prior_trust),
-                                       ("warmth", warmth, prior_warmth)):
-                record_relationship_event(
-                    cid, char_id, target, axis,
-                    value - float(prior or 0.0), note=note,
-                    provenance="charter", turn_idx=int(promoted_turn or 0),
-                    frame_id=frame_id)
-        save_relationships(cid, char_id, graph, frame_id=frame_id)
+            graph = get_relationships(cid, char_id, frame_id=frame_id)
+            social_names = (charter_bundle or {}).get("social_names") or {}
+            judged = {str(social_names.get(str(stance.get("subject") or ""))
+                          or stance.get("subject") or "")
+                      for stance in (handoff.get("social_judgments") or ())
+                      if isinstance(stance, dict)}
+            for row in handoff.get("acquaintances") or ():
+                if not isinstance(row, dict):
+                    continue
+                body = str(row.get("body") or "")
+                target = str(social_names.get(body) or row.get("name") or body)
+                if not target or target in judged:
+                    continue
+                familiarity = float(row.get("familiarity") or 0.0)
+                # Regard is centred on 1.0 in Charter's own scale; either side of
+                # it is thinking better or worse of somebody. Warmth carries that;
+                # trust follows familiarity, discounted when the acquaintance is
+                # secondhand, because knowing OF a person is not knowing them.
+                standing = float(row.get("regard") or 1.0) - 1.0
+                firsthand = bool(row.get("firsthand"))
+                before = graph.get(target)
+                # Snapshot BEFORE the update: `graph.get` hands back the live
+                # Relationship (D22, second skeptic), so read the priors here.
+                prior_trust = float(getattr(before, "trust", 0.0) or 0.0)
+                prior_warmth = float(getattr(before, "emotional_valence", 0.0) or 0.0)
+                trust = round(familiarity * (1.0 if firsthand else 0.4), 4)
+                warmth = round(standing, 4)
+                graph.update(
+                    target, trust=trust, emotional_valence=warmth,
+                    last_interaction_turn=int(promoted_turn or 0))
+                # AND THE REASON IS WRITTEN DOWN (D22 rework, review 2026-09-07).
+                # The judgment block ten lines above records one row per axis it
+                # moves and this one recorded nothing, so the largest population a
+                # charter story hands a promoted mind -- plain acquaintance, which
+                # every body has, where a judgment is rare -- arrived as numbers
+                # with no beat behind them. Since D22 the payload's `because`
+                # reads this ledger, so an unrecorded movement is a stance the
+                # mind holds and cannot account for.
+                #
+                # The delta is the MOVEMENT rather than the value: an edge the
+                # graph already carries has not travelled the whole distance, and
+                # the ledger's meaning is how far a stance moved.
+                note = ("known firsthand, from the hours actually shared"
+                        if firsthand
+                        else "known of at second hand, never met")
+                for axis, value, prior in (("trust", trust, prior_trust),
+                                           ("warmth", warmth, prior_warmth)):
+                    record_relationship_event(
+                        cid, char_id, target, axis,
+                        value - float(prior or 0.0), note=note,
+                        provenance="charter", turn_idx=int(promoted_turn or 0),
+                        frame_id=frame_id)
+            save_relationships(cid, char_id, graph, frame_id=frame_id)
 
-    chat_row = dict(q("SELECT * FROM chats WHERE id=?", (cid,), one=True))
-    if frame_id is None:
-        sc = wget(cid, "scene", None)
-    else:
-        from core.db import wget_for_frame
-        sc = wget_for_frame(cid, "scene", frame_id, None)
-    if isinstance(sc, dict):
-        positions = sc.setdefault("positions", {})
-        if character_name(sheet) not in positions:
-            player_name = persona_name(persona_of(chat_row))
-            # WHERE THE PRESENCE'S OWN BODY STOOD, before anywhere else: the
-            # canonical resolver reads its scene position, then its entity
-            # id, then its station (`presence_room`). The card's name is
-            # rarely the key its body was filed under, and the fallback to
-            # the player's room put a man on his doorstep beside the player
-            # while his body still stood inside his house (scratch story
-            # 166, idx 24-26): one person as two bodies in two rooms, and
-            # the confession he called her in to hear came through the
-            # door she had closed on him.
-            positions[character_name(sheet)] = (
-                (charter_bundle or {}).get("place")
-                or presence_room(sc, _display or name, presence_record)
-                or positions.get(player_name))
-        # Survival remains opt-in.  If this scene already owns vitals, carry
-        # the body's real depletion across; never create the subsystem here.
-        if isinstance(sc.get("vitals"), dict) and handoff.get("body_state"):
-            vitals = {
-                key: handoff["body_state"][key]
-                for key in ("stamina", "nourishment", "injury")
-                if key in handoff["body_state"]
-            }
-            if vitals:
-                # ONE BODY IS ONE ROW. The promoted body already has a vitals
-                # row whenever the Director opened one under its own spelling
-                # of the presence (`mirela` against the card's `Mirela`);
-                # writing under the card name would open a second row that
-                # every reader then misses (review 2026-09-07, B4).
-                row_key = (
-                    vitals_entry_key(sc["vitals"], character_name(sheet))
-                    or character_name(sheet))
-                sc["vitals"].setdefault(row_key, {}).update(vitals)
-        seed_initial_attire(
-            sc, character_name(sheet), character_initial_outfit(sheet))
+        chat_row = dict(q("SELECT * FROM chats WHERE id=?", (cid,), one=True))
         if frame_id is None:
-            wset(cid, "scene", sc)
+            sc = wget(cid, "scene", None)
         else:
-            from core.db import wset_for_frame
-            wset_for_frame(cid, "scene", sc, frame_id)
+            from core.db import wget_for_frame
+            sc = wget_for_frame(cid, "scene", frame_id, None)
+        if isinstance(sc, dict):
+            positions = sc.setdefault("positions", {})
+            if character_name(sheet) not in positions:
+                player_name = persona_name(persona_of(chat_row))
+                # WHERE THE PRESENCE'S OWN BODY STOOD, before anywhere else: the
+                # canonical resolver reads its scene position, then its entity
+                # id, then its station (`presence_room`). The card's name is
+                # rarely the key its body was filed under, and the fallback to
+                # the player's room put a man on his doorstep beside the player
+                # while his body still stood inside his house (scratch story
+                # 166, idx 24-26): one person as two bodies in two rooms, and
+                # the confession he called her in to hear came through the
+                # door she had closed on him.
+                positions[character_name(sheet)] = (
+                    (charter_bundle or {}).get("place")
+                    or presence_room(sc, _display or name, presence_record)
+                    or positions.get(player_name))
+            # Survival remains opt-in.  If this scene already owns vitals, carry
+            # the body's real depletion across; never create the subsystem here.
+            if isinstance(sc.get("vitals"), dict) and handoff.get("body_state"):
+                vitals = {
+                    key: handoff["body_state"][key]
+                    for key in ("stamina", "nourishment", "injury")
+                    if key in handoff["body_state"]
+                }
+                if vitals:
+                    # ONE BODY IS ONE ROW. The promoted body already has a vitals
+                    # row whenever the Director opened one under its own spelling
+                    # of the presence (`mirela` against the card's `Mirela`);
+                    # writing under the card name would open a second row that
+                    # every reader then misses (review 2026-09-07, B4).
+                    row_key = (
+                        vitals_entry_key(sc["vitals"], character_name(sheet))
+                        or character_name(sheet))
+                    sc["vitals"].setdefault(row_key, {}).update(vitals)
+            seed_initial_attire(
+                sc, character_name(sheet), character_initial_outfit(sheet))
+            if frame_id is None:
+                wset(cid, "scene", sc)
+            else:
+                from core.db import wset_for_frame
+                wset_for_frame(cid, "scene", sc, frame_id)
 
-    # Seed mutual recognition with the player and with every other
-    # already-registered cast member -- she's been part of the scene the
-    # whole time, so treating her as a stranger to everyone else present
-    # would be as wrong as it was to treat her as a stranger to the player.
-    # An authored answer with a stated reason, which is why this one is
-    # unconditional where the other two attach paths take the caller's.
-    seed_mutual_recognition(
-        cid, character_name(sheet),
-        recognition_roster(cid, chat_row, exclude_char_id=char_id))
+        # Seed mutual recognition with the player and with every other
+        # already-registered cast member -- she's been part of the scene the
+        # whole time, so treating her as a stranger to everyone else present
+        # would be as wrong as it was to treat her as a stranger to the player.
+        # An authored answer with a stated reason, which is why this one is
+        # unconditional where the other two attach paths take the caller's.
+        seed_mutual_recognition(
+            cid, character_name(sheet),
+            recognition_roster(cid, chat_row, exclude_char_id=char_id))
+
+        if charter_bundle:
+            from world.charter_runtime import bind_promoted_character
+            bound = bind_promoted_character(
+                cid, charter_bundle, char_id=char_id,
+                name=character_name(sheet),
+                entity_id=(sheet.get("identity") or {}).get("uid") or "",
+                promoted_turn=promoted_turn,
+                place=((sc or {}).get("positions") or {}).get(
+                    character_name(sheet), "") if isinstance(sc, dict) else "",
+                frame_id=frame_id)
+            if not bound:
+                raise RuntimeError("Charter promotion binding could not be saved")
+
+        presences = wget(cid, "background_presences", {})
+        # Every spelling of them, not just the one promotion was called with: a
+        # leftover `The Dalek` after `A Dalek` is promoted would go on being
+        # tracked as an unregistered passer-by while the same body now has a
+        # character sheet, and could be selected to react against itself.
+        identity = _presence_identity(name)
+        # ...and every spelling of the same BODY: a record bound to the promoted
+        # presence's entity id, or one whose former names (`aka`) include it, is
+        # the same person under a name the rename left behind. A record PROVEN to
+        # be a different body -- bound to another entity -- survives however
+        # exactly its name collides: two people may share a name now, and
+        # promoting one must not delete the other.
+        doomed_keys = set()
+        doomed_entities = set()
+        doomed_identities = {identity} if identity else set()
+        if presence_key is not None:
+            doomed_keys.add(presence_key)
+            doomed_keys.update(
+                str(f) for f in (presence_record.get("former_uids") or []))
+            if presence_record.get("entity_id"):
+                doomed_entities.add(str(presence_record["entity_id"]))
+        for tracked, record in presences.items():
+            if not isinstance(record, dict):
+                continue
+            spellings = {_presence_identity(n)
+                         for n in _presence_names(tracked, record)} - {""}
+            if not (doomed_identities & spellings) and tracked not in doomed_keys:
+                continue
+            eid = str(record.get("entity_id") or "")
+            if (tracked not in doomed_keys and eid and doomed_entities
+                    and eid not in doomed_entities):
+                continue        # same name, different proven body: keep them
+            if eid:
+                doomed_entities.add(eid)
+            doomed_identities.update(spellings)
+            doomed_keys.add(tracked)
+        for tracked in list(presences):
+            record = presences[tracked] if isinstance(presences[tracked], dict) else {}
+            eid = str(record.get("entity_id") or "")
+            spellings = {_presence_identity(n)
+                         for n in _presence_names(tracked, record)} - {""}
+            if tracked in doomed_keys or (eid and eid in doomed_entities):
+                presences.pop(tracked, None)
+            elif doomed_identities & spellings:
+                if eid and doomed_entities and eid not in doomed_entities:
+                    continue    # proven different body
+                presences.pop(tracked, None)
+        wset(cid, "background_presences", presences)
 
     memory_rows = [
             {
@@ -5260,73 +5525,13 @@ def promote_background_character(cid, name, sheet=None, memory_seeds=None,
     # If the chat launched from a greeting that put this presence on the
     # page, the extraction retained her mind unclaimed -- a background
     # presence has no memory or psychology until this exact moment. Claim it
-    # now, after recognition is seeded so the persona's name is a legitimate
-    # handle. Local import: greetings imports agents.runtime, and this module
-    # must stay importable inside the commit family.
+    # now, after the promotion has committed -- recognition is seeded, so
+    # the persona's name is a legitimate handle -- and outside its
+    # transaction, because the claim embeds the retained seeds. Local
+    # import: greetings imports agents.runtime, and this module must stay
+    # importable inside the commit family.
     from story.greetings import claim_greeting_mind
     claim_greeting_mind(cid, char_id, name, sheet)
-
-    if charter_bundle:
-        from world.charter_runtime import bind_promoted_character
-        bound = bind_promoted_character(
-            cid, charter_bundle, char_id=char_id,
-            name=character_name(sheet),
-            entity_id=(sheet.get("identity") or {}).get("uid") or "",
-            promoted_turn=promoted_turn,
-            place=((sc or {}).get("positions") or {}).get(
-                character_name(sheet), "") if isinstance(sc, dict) else "",
-            frame_id=frame_id)
-        if not bound:
-            raise RuntimeError("Charter promotion binding could not be saved")
-
-    presences = wget(cid, "background_presences", {})
-    # Every spelling of them, not just the one promotion was called with: a
-    # leftover `The Dalek` after `A Dalek` is promoted would go on being
-    # tracked as an unregistered passer-by while the same body now has a
-    # character sheet, and could be selected to react against itself.
-    identity = _presence_identity(name)
-    # ...and every spelling of the same BODY: a record bound to the promoted
-    # presence's entity id, or one whose former names (`aka`) include it, is
-    # the same person under a name the rename left behind. A record PROVEN to
-    # be a different body -- bound to another entity -- survives however
-    # exactly its name collides: two people may share a name now, and
-    # promoting one must not delete the other.
-    doomed_keys = set()
-    doomed_entities = set()
-    doomed_identities = {identity} if identity else set()
-    if presence_key is not None:
-        doomed_keys.add(presence_key)
-        doomed_keys.update(
-            str(f) for f in (presence_record.get("former_uids") or []))
-        if presence_record.get("entity_id"):
-            doomed_entities.add(str(presence_record["entity_id"]))
-    for tracked, record in presences.items():
-        if not isinstance(record, dict):
-            continue
-        spellings = {_presence_identity(n)
-                     for n in _presence_names(tracked, record)} - {""}
-        if not (doomed_identities & spellings) and tracked not in doomed_keys:
-            continue
-        eid = str(record.get("entity_id") or "")
-        if (tracked not in doomed_keys and eid and doomed_entities
-                and eid not in doomed_entities):
-            continue        # same name, different proven body: keep them
-        if eid:
-            doomed_entities.add(eid)
-        doomed_identities.update(spellings)
-        doomed_keys.add(tracked)
-    for tracked in list(presences):
-        record = presences[tracked] if isinstance(presences[tracked], dict) else {}
-        eid = str(record.get("entity_id") or "")
-        spellings = {_presence_identity(n)
-                     for n in _presence_names(tracked, record)} - {""}
-        if tracked in doomed_keys or (eid and eid in doomed_entities):
-            presences.pop(tracked, None)
-        elif doomed_identities & spellings:
-            if eid and doomed_entities and eid not in doomed_entities:
-                continue    # proven different body
-            presences.pop(tracked, None)
-    wset(cid, "background_presences", presences)
 
     return char_id
 
