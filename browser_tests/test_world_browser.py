@@ -1473,11 +1473,14 @@ def test_a_side_handle_resizes_the_room_and_the_shape_is_chosen_on_the_map(
     inputs = add.locator("input")
     inputs.nth(0).fill("0"); inputs.nth(1).fill("0"); inputs.nth(2).fill("8"); inputs.nth(3).fill("2")
     add.get_by_role("button", name="Add part").click()
-    patches = [w for w in writes if w[0] == "PATCH" and "parts" in w[2]]
-    assert patches[-1][2] == {"parts": [{"w": 8, "d": 2, "at": [0, 0]}]}
     # Drawn as a part on the map, with a knob; the room's cells are the
     # part's now (the mock cuts the box to the parts as the engine does).
+    # Waited for BEFORE `writes` is read: a whole-list write re-reads the
+    # room first (`wbPatchRoomList`, audit 2026-11-01 F2), so the PATCH no
+    # longer leaves during the click itself.
     expect(modal.locator(".wb-room-map .wb-m-part[data-part='0']")).to_have_count(1)
+    patches = [w for w in writes if w[0] == "PATCH" and "parts" in w[2]]
+    assert patches[-1][2] == {"parts": [{"w": 8, "d": 2, "at": [0, 0]}]}
     expect(modal.locator(".wb-room-map .wb-m-cell")).to_have_count(16)
     # Dragged one cell down, the part is re-placed by its origin cell.
     part = modal.locator(".wb-room-map .wb-m-part[data-part='0']")
@@ -1796,9 +1799,11 @@ def test_dragging_a_townsperson_in_its_room_writes_the_charter_station(
     # cell beside the table (3, 4), one to the east.
     svg.locator(".wb-m-body[data-body=Ysra]").focus()
     page.keyboard.press("ArrowRight")
+    # The toast first, as every other step here waits: `writes` read straight
+    # after the key press raced its PUT to the route handler under load.
+    expect(page.locator("#toasts")).to_contain_text("Placed Ysra at (4, 4)")
     puts = [w for w in writes if w[1] == CLERK]
     assert puts[-1] == ("PUT", CLERK, {"room": "kitchen", "cell": [4, 4]})
-    expect(page.locator("#toasts")).to_contain_text("Placed Ysra at (4, 4)")
 
 
 def test_dragging_a_townsperson_into_a_neighbour_moves_it_there(
