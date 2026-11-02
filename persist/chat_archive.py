@@ -19,7 +19,8 @@ from pydantic import BaseModel, Field, ValidationError, validator
 
 from llm.schemas import LenientModel
 
-from persist.checkpoints import insert_world_tables
+from persist.checkpoints import (global_key_remap, insert_world_tables,
+                                 remap_global_keys)
 from story.room_conversation import (dump_room_messages,
                                      restore_room_messages)
 from story.character_schema import (
@@ -88,6 +89,261 @@ WORLD_TABLES = (
 # `world` row, and again inside every checkpoint blob, which carries
 # `snapshot_state`'s copy of the same table.
 UNEXPORTED_WORLD_KEYS = frozenset({"presence_id_namespace"})
+
+
+# WHERE A CHARACTER'S ROW ID LIVES IN A STORY'S WORLD STATE -- one table, read
+# by every path that moves a story into another install: the import's live
+# world and its world-table payloads, every checkpoint it carries
+# (`web.app._remap_cp_blob`), and the export deciding which characters travel
+# with the story. `characters.id` is the INSTALL's integer; an import
+# re-creates the character under whatever id the importing install hands out,
+# so every stored copy of the old number has to be rewritten through the
+# import's map or it names whoever holds that number here. Measured (audit
+# 2026-11-01, persistence F3): Mora became character 6, her stance graph
+# stayed under `relationships:1`, and `get_relationships(.., 6)` read nothing
+# about Hal while the remapped ledger still said why she distrusts him -- and
+# a Charter body stayed bound to "1", a couple map's cast kept the old number.
+#
+# The engine spells the id in exactly these ways:
+#   * a field named `char_id` -- its one field name for the id, in any record
+#     (a Charter binding, a skip's whereabouts, an off-screen plan);
+#   * a handle `<prefix><id>` -- the seat tokens of
+#     `world.charter_model.MIND_SEED_PREFIXES` (`character:7`, `cast:7`),
+#     which the greeting's `resolved` and a route's `seed_id` also use;
+#   * a world KEY `relationships:<id>` -- one stance graph per mind;
+#   * the keys of the per-character records named below;
+#   * a couple map's `cast` lists (`world.spatial_frames.COUPLE_MAP_PREFIX`).
+# A new per-character world record keyed by the id joins
+# `CHARACTER_KEYED_WORLD_KEYS`; anything spelled the first two ways is covered
+# wherever it sits. An id the map does not carry is DROPPED, never kept: the
+# same number is a different person here.
+CHARACTER_ID_FIELD = "char_id"
+CHARACTER_ID_KEY_PREFIXES = ("relationships:",)
+CHARACTER_KEYED_WORLD_KEYS = frozenset({
+    "character_history_routes",       # story/greetings, world/charter_runtime
+    "character_journey_histories",    # story/journey_history
+    "charter_resident_histories",     # world/charter_history
+})
+
+
+def _character_row_id(value):
+    """`value` as a character row id -- a positive integer or its decimal
+    string -- else None: a sentinel `-1`, None, a name are not ids."""
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value if value > 0 else None
+    if isinstance(value, str):
+        text = value.strip()
+        if text.isascii() and text.isdigit():
+            number = int(text)
+            return number if number > 0 else None
+    return None
+
+
+def _handle_prefixes():
+    """`(prefixes, initials)`: the seat-token prefixes, and the first
+    letters any of them can start with, in either case -- a string starting
+    with none of those is rejected before it is case-folded, because the walk
+    below visits every string of a world whose Charter row alone has run to
+    41 MB."""
+    from world.charter_model import MIND_SEED_PREFIXES
+    prefixes = tuple(p.casefold() for p in MIND_SEED_PREFIXES)
+    initials = frozenset(c for p in prefixes for c in (p[:1], p[:1].upper()))
+    return prefixes, initials
+
+
+def _rekey_handle(text, new_id, spelling):
+    """`(True, rewritten-or-None)` when `text` is a character handle,
+    `(False, text)` otherwise. `character:player` is not a row id."""
+    prefixes, initials = spelling
+    if type(text) is not str or text[:1] not in initials:
+        return False, text
+    folded = text.casefold()
+    for prefix in prefixes:
+        if folded.startswith(prefix):
+            old = _character_row_id(text[len(prefix):])
+            if old is None:
+                return False, text
+            new = new_id(old)
+            return True, (None if new is None else text[:len(prefix)] + str(new))
+    return False, text
+
+
+def _rekey_in_place(obj, new_id, spelling):
+    """Pass every `char_id` field and every handle inside the container `obj`
+    through `new_id(old) -> new | None`, IN PLACE; True when anything moved.
+    A record keyed by a handle that maps to nobody is dropped, as is a list
+    member; a field or a value becomes None.
+
+    In place, and with strings rejected by their first letter, because it
+    walks whole worlds: copying every node made it 4.4x a `json.loads` of the
+    same world (0.71 s over 3.9 MB, measured 2026-11-01)."""
+    initials = spelling[1]
+    changed = False
+    if type(obj) is dict:
+        renames = None
+        for key, value in obj.items():
+            if key == CHARACTER_ID_FIELD:
+                old = _character_row_id(value)
+                if old is not None:
+                    new = new_id(old)
+                    moved = (None if new is None
+                             else str(new) if type(value) is str else new)
+                    if moved != value:
+                        obj[key] = moved
+                        changed = True
+                    continue
+            kind = type(value)
+            if kind is dict or kind is list:
+                if _rekey_in_place(value, new_id, spelling):
+                    changed = True
+            elif kind is str and value[:1] in initials:
+                is_handle, mapped = _rekey_handle(value, new_id, spelling)
+                if is_handle and mapped != value:
+                    obj[key] = mapped
+                    changed = True
+            if type(key) is str and key[:1] in initials:
+                is_handle, mapped = _rekey_handle(key, new_id, spelling)
+                if is_handle and mapped != key:
+                    renames = renames or []
+                    renames.append((key, mapped))
+        for old_key, new_key in renames or ():
+            value = obj.pop(old_key)
+            if new_key is not None:
+                obj.setdefault(new_key, value)
+            changed = True
+        return changed
+    if type(obj) is list:
+        dropped = None
+        for index, item in enumerate(obj):
+            kind = type(item)
+            if kind is dict or kind is list:
+                if _rekey_in_place(item, new_id, spelling):
+                    changed = True
+            elif kind is str and item[:1] in initials:
+                is_handle, mapped = _rekey_handle(item, new_id, spelling)
+                if is_handle and mapped != item:
+                    changed = True
+                    if mapped is None:
+                        dropped = dropped or []
+                        dropped.append(index)
+                    else:
+                        obj[index] = mapped
+        for index in reversed(dropped or ()):
+            del obj[index]
+        return changed
+    return False
+
+
+def _rekey_world(world, new_id):
+    """Pass every character row id `world` holds -- by the table above --
+    through `new_id`, IN PLACE, and return it. Values are objects (an
+    archive's or a parsed checkpoint's world), never stored JSON text."""
+    from world.spatial_frames import COUPLE_MAP_PREFIX
+    spelling = _handle_prefixes()
+    renames = []
+    for key, value in list(world.items()):
+        base, frame_id = parse_scoped_world_key(key)
+        new_key = key
+        prefix = next((p for p in CHARACTER_ID_KEY_PREFIXES if base.startswith(p)), None)
+        if prefix is not None:
+            old = _character_row_id(base[len(prefix):])
+            if old is not None:
+                new = new_id(old)
+                new_key = None             # a stance hung on nobody here
+                if new is not None:
+                    new_key = prefix + str(new)
+                    if frame_id is not None:
+                        new_key = f"{new_key}{_FRAME_KEY_SEP}{frame_id}"
+        if base in CHARACTER_KEYED_WORLD_KEYS and isinstance(value, dict):
+            keyed = {}
+            for record_key, record in value.items():
+                old = _character_row_id(record_key)
+                if old is None:
+                    keyed[record_key] = record
+                elif new_id(old) is not None:
+                    keyed.setdefault(str(new_id(old)), record)
+            value = world[key] = keyed
+        if base.startswith(COUPLE_MAP_PREFIX) and isinstance(value, dict) \
+                and isinstance(value.get("cast"), dict):
+            value["cast"] = {
+                side: [new_id(old) for old in map(_character_row_id, members or [])
+                       if old is not None and new_id(old) is not None]
+                for side, members in value["cast"].items()}
+        if type(value) in (dict, list):
+            _rekey_in_place(value, new_id, spelling)
+        else:
+            is_handle, mapped = _rekey_handle(value, new_id, spelling)
+            if is_handle:
+                world[key] = mapped
+        if new_key != key:
+            renames.append((key, new_key))
+    for old_key, new_key in renames:
+        value = world.pop(old_key)
+        # Two old ids the import matched onto one character land on one key;
+        # the first kept is as good as any, and neither is a stranger's.
+        if new_key is not None:
+            world.setdefault(new_key, value)
+    return world
+
+
+def _new_ids(char_idmap):
+    """`new_id(old)` for an import's `{old: new}` character map."""
+    table = {}
+    for old, new in (char_idmap or {}).items():
+        old, new = _character_row_id(old), _character_row_id(new)
+        if old is not None and new is not None:
+            table[old] = new
+    return table.get
+
+
+def remap_world_character_ids(world, char_idmap):
+    """Rewrite, IN PLACE, every character row id `world` holds through
+    `char_idmap` (`{old: new}`), dropping what does not map. A same-install
+    branch passes None: its characters are shared rows and keep their ids."""
+    if char_idmap is None or not isinstance(world, dict):
+        return world
+    return _rekey_world(world, _new_ids(char_idmap))
+
+
+def remap_row_character_ids(rows, char_idmap):
+    """The same table over the JSON columns (`payload`, `detail`) of
+    normalized world-table rows, re-dumped only where something changed."""
+    if char_idmap is None:
+        return rows
+    new_id, spelling = _new_ids(char_idmap), _handle_prefixes()
+    for row in rows or []:
+        if not isinstance(row, dict):
+            continue
+        for field in ("payload", "detail"):
+            text = row.get(field)
+            if not isinstance(text, str) or not text:
+                continue
+            try:
+                parsed = json.loads(text)
+            except (TypeError, ValueError):
+                continue
+            if not isinstance(parsed, (dict, list)):
+                continue
+            if _rekey_in_place(parsed, new_id, spelling):
+                row[field] = json.dumps(parsed, ensure_ascii=False)
+    return rows
+
+
+def world_character_ids(world):
+    """Every character row id `world` holds, by the same table -- what an
+    export must bundle so the import has an id to map each one to. Asked
+    with the identity, so the walk moves nothing."""
+    found = []
+
+    def collect(old):
+        if old not in found:
+            found.append(old)
+        return old
+    if isinstance(world, dict):
+        _rekey_world(world, collect)
+    return found
 
 
 def _exportable_world(rows):
@@ -451,6 +707,12 @@ class ChatArchiveService:
             ):
                 if char_id not in char_ids:
                     char_ids.append(char_id)
+        # Every id the live world holds (a stance graph, a Charter binding, a
+        # seat token, a keyed history): bundled so the import has a character
+        # to map each one to, rather than dropping the reference.
+        for char_id in world_character_ids(export["world"]):
+            if char_id not in char_ids:
+                char_ids.append(char_id)
 
         checkpoint_persona_ids = []
         for checkpoint in export["checkpoints"]:
@@ -914,7 +1176,9 @@ class ChatArchiveService:
                         (
                             book.get("name") or "book",
                             new_chat_id,
-                            book.get("origin_id"),
+                            # Resolved in the second pass, through the
+                            # archive's own book map (see there).
+                            None,
                             book.get("book_type") or "general",
                             book.get("summary") or "",
                             self._import_book_uid(book.get("resource_uid")),
@@ -951,7 +1215,7 @@ class ChatArchiveService:
                             (
                                 new_chat_id,
                                 new_book_id,
-                                book.get("origin_id"),
+                                None,
                                 1 if book_data.get("enabled", 1) else 0,
                             ),
                         )
@@ -963,12 +1227,26 @@ class ChatArchiveService:
                     new_book_id = bookmap.get(book.get("id"))
                     if new_book_id is None:
                         continue
+                    # `origin_id` is a ROW ID, and the source install's: a
+                    # fork of another story's book names that book, and the
+                    # same integer here can be an unrelated library book --
+                    # `attach_lore` then read it as "already attached" and
+                    # the host could never attach it (audit 2026-11-01,
+                    # persistence F8). It survives only through this
+                    # archive's own map, when the origin came along.
+                    origin = bookmap.get(book.get("origin_id"))
                     qtx(
-                        "UPDATE lorebooks SET parent_id=? WHERE id=?",
+                        "UPDATE lorebooks SET parent_id=?, origin_id=? WHERE id=?",
                         (
                             bookmap.get(book.get("parent_id")),
+                            origin,
                             new_book_id,
                         ),
+                    )
+                    qtx(
+                        "UPDATE chat_lorebooks SET origin_id=? "
+                        "WHERE chat_id=? AND lorebook_id=?",
+                        (origin, new_chat_id, new_book_id),
                     )
             elif data.get("lorebook") and data["lorebook"].get("entries"):
                 lorebook_data = data["lorebook"]
@@ -983,7 +1261,8 @@ class ChatArchiveService:
                     (
                         (book.get("name") or "Imported canon") + " (import)",
                         new_chat_id,
-                        book.get("id"),
+                        # the SOURCE install's row id: no origin here (F8)
+                        None,
                         book.get("book_type") or "general",
                         book.get("summary") or "",
                         self._import_book_uid(book.get("resource_uid")),
@@ -1073,10 +1352,23 @@ class ChatArchiveService:
                         f"{base}{_FRAME_KEY_SEP}{new_frame_id}"
                     ] = value
             world = remapped_world
+            # Every character row id the world holds, by the one table
+            # (`remap_world_character_ids`) -- the couple maps' casts among
+            # them, which is why the frame rescope below is handed no
+            # character map of its own.
+            remap_world_character_ids(world, old_char_map)
+            # The two world tables with a GLOBAL key get fresh ids, one map
+            # for the live rows, the live world and every checkpoint below
+            # (`checkpoints.GlobalKeyRemap`): an import of a story this
+            # install still holds collided on `fiction_worlds.world_id`
+            # (audit 2026-11-01, persistence F9). Every other world id is
+            # `(chat_id, id)` and kept verbatim, as it always was here.
+            global_keys = global_key_remap([data])
+            if global_keys:
+                world = remap_global_keys(world, global_keys)
             self._remap.active_books(world, bookmap)
             self._remap.fixed_point_frames(world, frame_idmap)
-            self._remap.couple_frames(world, frame_idmap, old_char_map,
-                                      persona_idmap)
+            self._remap.couple_frames(world, frame_idmap, None, persona_idmap)
             for key, value in world.items():
                 wset(new_chat_id, key, value)
 
@@ -1126,6 +1418,11 @@ class ChatArchiveService:
             self._remap.scheduled_event_frames(
                 world_tables["scheduled_events"], frame_idmap
             )
+            for table in WORLD_TABLES:
+                remap_row_character_ids(world_tables[table], old_char_map)
+                if global_keys:
+                    world_tables[table] = remap_global_keys(
+                        world_tables[table], global_keys)
             insert_world_tables(new_chat_id, world_tables)
 
             for roster_row in data.get("chat_personas") or []:
@@ -1186,6 +1483,7 @@ class ChatArchiveService:
                     new_canon,
                     char_idmap=old_char_map,
                     persona_idmap=persona_idmap,
+                    world_id_remap=global_keys,
                     frame_idmap=frame_idmap,
                 )
                 qtx(

@@ -228,6 +228,15 @@ def record_exchange(*, turn_id: int | None, step_key: str, role: str,
             finish_reason=finish_reason))
     except Exception:
         return
+    if seq == 1:
+        # A turn's first captured call: the chat's window has moved on by one
+        # beat, so this is where the capture is kept to it (`prune`).
+        try:
+            chat = q("SELECT chat_id FROM turns WHERE id=?", (int(turn_id),), one=True)
+            if chat:
+                prune(int(chat["chat_id"]))
+        except Exception:
+            return
 
 
 def _hold_pending(chat_id: int, **fields) -> None:
@@ -355,19 +364,29 @@ def _read_row(row, include_bodies: bool) -> dict:
 
 
 def prune(chat_id: int) -> int:
-    """Drop capture for all but the most recent RETAIN_TURNS turns of a chat.
+    """Drop capture for all but the most recent RETAIN_TURNS turns of a chat;
+    returns how many capture rows went.
+
+    Called by `record_exchange` on each turn's FIRST captured call -- the
+    moment the window moves on by one beat. It had no caller at all until
+    2026-11-01 (audit persistence F15), so capture grew with every turn of
+    every chat while DATABASE.md said it was pruned. ONE statement over the
+    turns past the window, not one per turn: after the first prune those
+    turns hold nothing, and a long story would otherwise pay a DELETE per
+    old turn on every new one.
 
     Blobs are left alone: they are shared across turns and chats by design, so
     deleting one because a turn aged out would strip it from every other
-    record referencing it. `vacuum_blobs` is the separate, safe collector.
+    record referencing it. `vacuum_blobs` is the separate, safe collector --
+    run when a story is deleted (`persist.chat_delete`).
     """
     try:
-        rows = q("SELECT id FROM turns WHERE chat_id=? ORDER BY idx DESC "
-                 "LIMIT -1 OFFSET ?", (int(chat_id), RETAIN_TURNS))
-        ids = [int(r["id"]) for r in rows or ()]
-        for tid in ids:
-            qi("DELETE FROM llm_capture WHERE turn_id=?", (tid,))
-        return len(ids)
+        with transaction() as c:
+            cur = c.execute(
+                "DELETE FROM llm_capture WHERE turn_id IN ("
+                "SELECT id FROM turns WHERE chat_id=? ORDER BY idx DESC "
+                "LIMIT -1 OFFSET ?)", (int(chat_id), int(RETAIN_TURNS)))
+            return max(int(cur.rowcount or 0), 0)
     except Exception:
         return 0
 

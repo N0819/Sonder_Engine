@@ -95,7 +95,14 @@ def _save_active_variant(temp_db, turn_id, key, content, ordn):
 def _make_corrupted_open_group_ctx(
         temp_db, monkeypatch, *, barrier="open", previous_verb="walk",
         follow_stop=False):
-    """A pre-fix reroll: last beat began together and resolved split+near."""
+    """A pre-fix reroll: last beat began together and resolved split+near.
+
+    The two paths are FAR from the crossroads since 2026-11-01: the far field
+    now answers for listeners whose rooms have no grid (audit
+    world_spatial_sound F1), and it carries a normal voice across two NEAR
+    open trail segments -- so the split these tests rest on has to be a
+    distance the world states, or plain acoustics delivers the line the
+    rescue is being tested for."""
     import agents.perception as perception
     from persist.checkpoints import snapshot_state
 
@@ -104,14 +111,14 @@ def _make_corrupted_open_group_ctx(
         "location": "Open Trail", "time": "day",
         "rooms": {
             "left_path": {"name": "Left Path", "adjacent": [
-                {"to": "crossroads", "barrier": barrier, "distance": "near"},
+                {"to": "crossroads", "barrier": barrier, "distance": "far"},
             ]},
             "crossroads": {"name": "Crossroads", "adjacent": [
-                {"to": "left_path", "barrier": barrier, "distance": "near"},
-                {"to": "right_path", "barrier": "open", "distance": "near"},
+                {"to": "left_path", "barrier": barrier, "distance": "far"},
+                {"to": "right_path", "barrier": "open", "distance": "far"},
             ]},
             "right_path": {"name": "Right Path", "adjacent": [
-                {"to": "crossroads", "barrier": "open", "distance": "near"},
+                {"to": "crossroads", "barrier": "open", "distance": "far"},
             ]},
         },
         "positions": {"The Stranger": "crossroads", "Reya": "crossroads"},
@@ -725,7 +732,9 @@ from llm.schemas import validate_llm_output_strict as _vlos, SpeechElement, Dial
 def test_speech_element_coerces_unknown_volume():
     assert SpeechElement(text="hi", volume="quiet").volume.value == "mutter"
     assert SpeechElement(text="hi", volume="bellowing").volume.value == "normal"
-    assert DialogueLogEntry(speaker="x", exact_quote="q", volume="softly").volume.value == "mutter"
+    # "softly" is how the line sounds, not how far it carries: normal, as the
+    # encoder card says (review 2026-11-01, llm_schemas_prompts F2).
+    assert DialogueLogEntry(speaker="x", exact_quote="q", volume="softly").volume.value == "normal"
 
 
 def test_director_interpret_out_of_enum_volume_does_not_crash():

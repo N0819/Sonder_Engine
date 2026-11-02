@@ -10,9 +10,9 @@ Housekeeping tables not described below: `schema_meta` (the migration version), 
   payloads. Their top-level `initial_outfit` is authored starting clothing,
   distinct from stable body appearance in `embodiment.visible` and from the
   mutable story ledger in `world.scene.attire`.
-- `lorebooks`, `lore_entries`: canon containers and entries. Two different questions get asked of this table and must not be confused: **ownership** (`chat_id`, what a chat has — what the workspace browser lists via `GET /api/chats/{cid}/lorebooks`) and **reachability** (`memory.chat_lorebook_ids`, what lore retrieval may read — resolved outward from canon plus `chat_lorebooks` attachments through parents/children/links). A chat-owned book with `parent_id` NULL and no attachment row is owned but unreachable: it exists, it is editable, and the pipeline can never read it. A third question is asked of the entries themselves: **who may KNOW one.** `mind.memory_lore_entries.knowledge_for_character` answers it on three orthogonal axes — depth (`knowledge_tag`: `common`/`scholarly`/`esoteric`, matched against the sheet's `knowledge.access_tags`), compartment (`lore_entries.circles`, inheriting `lorebooks.default_circles`, matched against the sheet's `knowledge.circles`) and range (`knowledge_range` + `knowledge_locations`). Reachability is a PROPERTY, not a category: an entry with an explicit depth tag reaches minds whatever it is filed as, and an entry with none is Director-only retrieval material (`agents.common.lore_for`). It was a category until 2026-08-22, which made 25 of 2,671 entries (0.9%) the only ones any mind could hold while 974 tagged entries in other categories reached nobody. `lore_entries.circles` is NULLABLE on purpose — NULL inherits the book, `[]` is a deliberate "this one is public", and a `NOT NULL DEFAULT '[]'` would make the second unwritable. Compartments must survive export/checkpoint/branch or an archive republishes a clandestine organisation's existence to everybody, so both columns ride `dump_lorebook`/`restore_lorebook` and the two `lorebooks` INSERTs in `persist/chat_archive.py`.
+- `lorebooks`, `lore_entries`: canon containers and entries. Two different questions get asked of this table and must not be confused: **ownership** (`chat_id`, what a chat has — what the workspace browser lists via `GET /api/chats/{cid}/lorebooks`) and **reachability** (`memory.chat_lorebook_ids`, what lore retrieval may read — resolved outward from canon plus `chat_lorebooks` attachments through parents/children/links). A chat-owned book with `parent_id` NULL and no attachment row is owned but unreachable: it exists, it is editable, and the pipeline can never read it. A checkpoint snapshots and restores by OWNERSHIP -- an `isolated` child retrieval cannot reach is restored exactly, and an owned book minted after the snapshot is taken back, reachable or not (audit 2026-11-01, persistence F7) -- and a LIBRARY book by reference only: its entries and the links between library books are the library's, never rolled back by one story's rewind (web F2); the links a restore replaces are the ones between the story's own books, which are the only ones `add_lorebook_link` lets a story draw. A third question is asked of the entries themselves: **who may KNOW one.** `mind.memory_lore_entries.knowledge_for_character` answers it on three orthogonal axes — depth (`knowledge_tag`: `common`/`scholarly`/`esoteric`, matched against the sheet's `knowledge.access_tags`), compartment (`lore_entries.circles`, inheriting `lorebooks.default_circles`, matched against the sheet's `knowledge.circles`) and range (`knowledge_range` + `knowledge_locations`). Reachability is a PROPERTY, not a category: an entry with an explicit depth tag reaches minds whatever it is filed as, and an entry with none is Director-only retrieval material (`agents.common.lore_for`). It was a category until 2026-08-22, which made 25 of 2,671 entries (0.9%) the only ones any mind could hold while 974 tagged entries in other categories reached nobody. `lore_entries.circles` is NULLABLE on purpose — NULL inherits the book, `[]` is a deliberate "this one is public", and a `NOT NULL DEFAULT '[]'` would make the second unwritable. Compartments must survive export/checkpoint/branch or an archive republishes a clandestine organisation's existence to everybody, so both columns ride `dump_lorebook`/`restore_lorebook` and the two `lorebooks` INSERTs in `persist/chat_archive.py`.
 - `lorebook_links`: typed relationships between books.
-- `chat_lorebooks`: attachments between chats and reusable or chat-owned books. Since 2026-09-03 a LIBRARY book (chat_id NULL) is attached BY REFERENCE -- the row points at the library book itself and nothing is copied; `origin_id` is a legacy column, NULL on every new row. Another story's book is still forked into a chat-owned copy, because it has no shared origin to overlay.
+- `chat_lorebooks`: attachments between chats and reusable or chat-owned books. Since 2026-09-03 a LIBRARY book (chat_id NULL) is attached BY REFERENCE -- the row points at the library book itself and nothing is copied, and its `origin_id` is NULL. Another story's book is still forked into a chat-owned copy, because it has no shared origin to overlay, and the fork's `origin_id` (on the book and on the attachment) names the book it was forked from: `attach_lore` reads it as "already attached" and a checkpoint restore matches a book by it; a branch's clone writes `origin_id or` the source book's id. It is a ROW ID, so an archive import keeps it only through the archive's own book map and writes NULL otherwise -- the source install's integer can be an unrelated library book here, which then could never be attached to the imported story (audit 2026-11-01, persistence F8).
 - `lore_overlays`: one story's deviation from one library entry -- `(chat_id, frame_id, entry_id)` unique, per era like the scene. A NULL field inherits the library value; a set one overrides it (`keys`, `content`, `category`, `title`, the three gate fields, `circles`, `canon_locked`, and the overlay's own vector when the text changed). `disposition` is `story_edit` (a hand edit from inside a story), `room_supersession` (the Writers' Room, through a package) or `migrated_copy` (the one-time conversion of a pre-2026-09 chat copy, `core/db._migrate_chat_copies_to_overlays`). Every reader merges it (`mind.memory_lore_entries.lore_rows`); an ADDITION made from inside a story to a library book is a canon-book entry, since there is no library row to deviate from. Checkpoints snapshot the story's overlays (`lore_overlays`) and a library book as a reference, never its entries; archives carry `lore_overlays` by `entry_uid`; a branch copies them onto its own eras. Cascades from the entry and the chat.
 - `providers`, `settings`: local model/provider configuration and prompt/runtime settings. `settings.ui_language` is the host-wide interface language (absent means `en`), intentionally separate from each chat's `world.story_language`; changing chrome must not rewrite a story's authored language, and changing a story must not relabel the host UI.
 - `lore_gen_jobs`: resumable lorebook-tree generation runs (`importers.generate_lorebook_plan` / `resume_lorebook_plan`). A run is one structure model call plus one call per batch of outlined entries, and each completed unit is written here so an interruption (dropped stream, exhausted provider retries, closed tab, restarted server) costs one unit instead of the whole run. `status` is `running|interrupted|failed|ready|applied|cancelled`; `owner` is a per-process token, so a `running` row from any other process is a crash and reclassifies as an interruption with no staleness timeout. `params` holds the whole request (brief, mode, depth, entry target, flags, and the raised read `timeout`), so a resume reproduces it without the client. Authoring scratch state only — deliberately **not** exported, checkpointed, or branch-remapped, since no lore exists until the plan is applied; rows are pruned to the newest `LORE_GEN_KEEP_PER_BOOK` per book and cascade with the book.
@@ -75,7 +75,11 @@ Housekeeping tables not described below: `schema_meta` (the migration version), 
   at the moment the exchange is noted. DIAGNOSTIC state, deliberately outside
   the fiction's carriage: no checkpoint snapshots it, no archive exports it,
   and a branch does not copy it -- a turn's capture is deleted with the turn
-  (`ON DELETE CASCADE`) and pruned to `RETAIN_TURNS` per chat. Read through
+  (`ON DELETE CASCADE`) and pruned to `RETAIN_TURNS` per chat on each turn's
+  first captured call (`llm_capture.prune`). The blobs are shared and outlive
+  the rows that named them until `vacuum_blobs` collects what no capture row
+  references; it runs when a story is deleted (`persist/chat_delete.py`), so a
+  deleted story's captured text leaves with it. Read through
   `GET /api/turns/{tid}/debug` (`persist/pipeline_trace.export_turn_debug`).
 - `llm_capture_pending`: the same columns keyed by `chat_id`, for a story's
   calls made before it has a turn -- the Writers' Room's prelude, the layout
@@ -143,11 +147,14 @@ Housekeeping tables not described below: `schema_meta` (the migration version), 
   ages. A stored reading is local and rolls back with its own row. NULL means
   "no reading" and never zero, because zero is a real opening-of-the-story
   value; rows with a NULL `turn_idx` (prestory seeds, imported banks) stay NULL
-  and keep qualitative phrasing. The v34 backfill charges existing rows
-  `turn_idx * world.mechanics.UNCLAIMED_BEAT_SECONDS` — the rate the live clock
-  already charges a beat that claimed no duration — and is the one estimate in
-  the column; `mind/memory_time.window_clock_readings` is the named seam a
-  stored per-turn clock history would replace it at. Since **v42**,
+  and keep qualitative phrasing. Rows written before v34 are left NULL too,
+  deliberately: the obvious backfill, `turn_idx *
+  world.mechanics.UNCLAIMED_BEAT_SECONDS`, was measured and refused (a story
+  that ran ~18 s a beat read a 30-second-old memory as "about 9 minutes ago";
+  the v33 -> v34 note in `core/db.py`), so the column holds no estimate at all.
+  A summary's window is dated from the readings its own memories carry
+  (`mind/memory_time.window_clock_readings`), the seam a stored per-turn clock
+  history would answer instead. Since **v42**,
   `memories.feelings` keeps what the moment made the character FEEL (JSON
   `{moment, looks}`, `docs/guides/MEMORY.md` §1): written at commit from the
   beat's affect passes, and a later one-time reading beside it
@@ -181,9 +188,6 @@ Housekeeping tables not described below: `schema_meta` (the migration version), 
   again. Keyed by event_key rather than row id, so checkpoint, branch and
   archive carry it verbatim with no remapping; a character bank imported into
   another story drops it with its blanked keys. Existing rows stay `''`.
-- `world`: JSON key/value state for the chat, including the current scene and pipeline caches. The chat-global `story_language` key is an author setting naming an installed, story-capable language pack; absent means `en`. It is exported and branched with the world and preserved across checkpoint restore, because rerolling a beat must not undo the reader's language selection. Inside the frame-scoped `scene` blob, `positions` is which room each person is in, `stations` their within-room position, and `following` the voluntary durable follower → target travel relations. Following is intention rather than containment: it may persist while separated and never derives a position by itself; Director movement carries it only across ordinary passable travel. `scales` records each body's size relative to its own baseline (absent = normal; not pruned by position, since a size is not a co-location), `contained` says who is being carried by what (a contained body's position is derived from its carrier's, transitively), and `contacts` is a flat list of who is in physical contact with whom and by which body parts — a relation stored once rather than on either body, pruned at every merge by `spatial.normalize_scene_contacts` (contact between two people not in the same room cannot survive, so movement ends a hold deterministically). Each contact has independent `relation: surface|interior` topology and `motion: settled|moving` kinematics; old rows derive both from `manner` and `detail`, and an interior relation must be explicitly removed before the same endpoints become surface contact. Interior records may also carry `target_interior`, the enclosing passage/chamber/material, separately from `target_part`, the exact boundary or endpoint currently touched. An `op:cross` is validated against a standing `crossed_target_part`; it persists only the downstream `target_interior` and current `target_part`, not the crossed boundary. `attire` is the live per-story clothing state: a card's `initial_outfit` may seed a missing entry at scene creation or first attachment/promotion, but must never reset an entry already changed by story events. Each attire region contains ordered `garments` and optional authored `beneath`; torso additionally permits `beneath_zones:{chest,midriff}`. A garment's optional `covered_zones:{torso:[...]}` is an override listing the zones it still covers while worn; absence means full coverage. An empty torso list means the garment remains worn at the torso but covers neither torso zone. `wearing`, derived `state`, region garment state and zone coverage must be reconciled only through `attire.rederive_entry`/the commit path.
-
-  character's first window.
 - `world`: JSON key/value state for the chat, including the current scene and pipeline caches. The chat-global `story_language` key is an author setting naming an installed, story-capable language pack; absent means `en`. It is exported and branched with the world and preserved across checkpoint restore, because rerolling a beat must not undo the reader's language selection. Inside the frame-scoped `scene` blob, `time_of_day` is the story's STANDING time of day (a free-text label — "dusk", "08:42:15 AM" — written by the opening or by a beat that explicitly declares a new one, and restated on `simulation_clock.display` so the two cannot drift; a beat's PASSAGE PHRASE is never written to either, and `db.init` recovers the field for stories written before it existed from their own persisted `director_establish` variant; since the day cycle landed the label is also DERIVED: the clock record carries `anchor_hour` (the hour of the day at elapsed zero, set from the first readable label), `day_length_hours` (the author's `style_guide.day_length_hours` dial, default 24), and the derived `hour_of_day` and `phase`; the scene carries `day_phase`; and `time_of_day` becomes the phase's own name once the clock has left the phase the last declared label named. All of it rides the `world` row, so archive, checkpoint, branch and frame split/merge carry it without their own handling; a story whose opening named no readable time has no anchor and none of these keys), `positions` is which room each person is in, `stations` their within-room position, and `following` the voluntary durable follower → target travel relations. Following is intention rather than containment: it may persist while separated and never derives a position by itself; Director movement carries it only across ordinary passable travel. `scales` records each body's size relative to its own baseline (absent = normal; not pruned by position, since a size is not a co-location), `contained` says who is being carried by what (a contained body's position is derived from its carrier's, transitively), and `contacts` is a flat list of who is in physical contact with whom and by which body parts — a relation stored once rather than on either body, pruned at every merge by `spatial.normalize_scene_contacts` (contact between two people not in the same room cannot survive, so movement ends a hold deterministically). Each contact has independent `relation: surface|interior` topology and `motion: settled|moving` kinematics; old rows derive both from `manner` and `detail`, and an interior relation must be explicitly removed before the same endpoints become surface contact. Interior records may also carry `target_interior`, the enclosing passage/chamber/material, separately from `target_part`, the exact boundary or endpoint currently touched. An `op:cross` is validated against a standing `crossed_target_part`; it persists only the downstream `target_interior` and current `target_part`, not the crossed boundary. `attire` is the live per-story clothing state: a card's `initial_outfit` may seed a missing entry at scene creation or first attachment/promotion, but must never reset an entry already changed by story events. Each attire region contains ordered `garments` and optional authored `beneath`; torso additionally permits `beneath_zones:{chest,midriff}`. A garment's optional `covered_zones:{torso:[...]}` is an override listing the zones it still covers while worn; absence means full coverage. An empty torso list means the garment remains worn at the torso but covers neither torso zone. `wearing`, derived `state`, region garment state and zone coverage must be reconciled only through `attire.rederive_entry`/the commit path.
 - `scene.passages`: frame-scoped, the passage record (2026-09-05,
   `docs/design/DESIGN_ROOM_FIDELITY.md` §5): `{id: {rooms: [a, b], barrier,
@@ -542,9 +546,12 @@ durable store.
 `world_events` joined `snapshot_state`/`insert_world_tables`, portable
 export/import, branch remapping, deletion, and fidelity tests with its first
 runtime writer (schema v27). Same-chat checkpoint restore preserves ids and
-removes discarded-timeline rows; portable import may preserve ids because the
-primary key is chat-partitioned; branching mints new event ids and remaps
-payload references plus turn/frame FKs. Do not add a second event ledger.
+removes discarded-timeline rows; portable import and branching both keep the
+ids, because the primary key is chat-partitioned, and both remap the
+turn/frame FKs. (A branch minted fresh event and entity ids until
+2026-11-01 and rewrote every string equal to one anywhere in the world --
+an exit's `barrier: "door"` became hex; see the branch remap under the
+schema-change checklist.) Do not add a second event ledger.
 
 Physical information envelopes use the bounded `carried_reports` member of a
 character's existing `chat_chars.state` / `chat_char_frames.state`, not another
@@ -571,7 +578,22 @@ A durable field or table change is incomplete until all applicable paths are upd
 3. Read and commit code.
 4. Export/import payloads.
 5. Checkpoint snapshot and restore.
-6. Branch/clone ID remapping in `web/app.py` when IDs are embedded.
+6. Branch/clone ID remapping in `web/app.py` when IDs are embedded. What moves:
+   integer row ids of this install (turns, frames, books; characters and
+   personas on an import into another install) are remapped wherever they
+   are stored. TEXT ids of the `(chat_id, id)` world tables -- entities,
+   conditions, scheduled and world events -- are the story's own and are
+   KEPT, by a branch and an import alike. Only the two deprecated tables
+   with a global key (`fiction_worlds`, `fiction_locations`) get fresh ids,
+   rewritten only where those rows name them (`checkpoints.GlobalKeyRemap`),
+   one map across the live tables and every checkpoint. A character's row
+   id inside world state is named in ONE table
+   (`chat_archive.remap_world_character_ids`: a `char_id` field, a
+   `character:`/`cast:` seat token, the `relationships:<id>` key, the
+   per-character records keyed by id, a couple map's cast), which the import
+   runs over the live world and every checkpoint; a new spelling of the id
+   joins that table, and an id the import cannot map is dropped, never
+   kept.
 7. Cleanup behavior under foreign keys.
 8. Regression tests using the temporary database fixture.
 
@@ -652,7 +674,11 @@ payload's text) all carry it with no code of their own -- and
 What the bump DID need is the one thing a blob field cannot do for itself: the
 one-shot data backfill, gated on `SCHEMA_VERSION` crossing 36 in `init()`, so a
 room minted afterwards with no region is not quietly given one on the next
-open. A new column would have been a second spelling of `planned.structure`
+open. A one-shot pass runs INSIDE the transaction that holds the version
+stamps, before `LATE_SCHEMA` commits them, so a pass that raises or a first
+start killed mid-pass leaves the file at the version that asks for it again;
+it used to run after the stamps had committed and was skipped forever
+(audit 2026-11-01, persistence F5). A new column would have been a second spelling of `planned.structure`
 for every planned room.
 
 `far_look` (2026-10-08) is the third, and needed no backfill: a room's rides the

@@ -383,11 +383,17 @@ def _restore_books(chat_id, books, links=None):
     """Restore lorebook rows/entries from a snapshot. Returns the
     {snapshot book id: current book id} map so the caller can remap other
     snapshot data that embeds book ids (room_registry.owning_book_id)."""
-    current_ids = set(chat_lorebook_ids(chat_id, enabled_only=False))
+    # EVERY BOOK THE STORY OWNS, not only the ones retrieval can reach. The
+    # snapshot takes ownership (`_snapshot_lore`), and an `isolated` child --
+    # owned, unreachable through its parent -- was missing from this set, so
+    # the id match missed it, the re-create declined (its id is live) and the
+    # book was neither restored nor deleted (audit 2026-11-01, persistence
+    # F7: "isolated entries after restore: 2 (snapshot held 1)").
+    # Reachability still decides nothing about LIBRARY books here: those are
+    # handled by reference below and never touched.
     current = {
         row["id"]: row
         for row in q("SELECT * FROM lorebooks WHERE chat_id=?", (chat_id,))
-        if row["id"] in current_ids
     }
     by_origin = {}
     by_name = {}
@@ -397,6 +403,7 @@ def _restore_books(chat_id, books, links=None):
         by_name.setdefault(row["name"], lid)
     
     old_to_new = {}
+    restored_targets = set()
     library_kept = set()
     for snapshot in (books or []):
         # A LIBRARY REFERENCE -- snapshotted as one (`library`), or a
@@ -447,6 +454,12 @@ def _restore_books(chat_id, books, links=None):
         old_id = snapshot.get("lorebook_id")
         if old_id:
             old_to_new[old_id] = target
+        # Matched whether or not the snapshot's id survived a remap: a book a
+        # branch or an import could not map (its id is None in the blob) is
+        # still the snapshot's, and was re-created above only to be deleted
+        # below as "minted by a discarded timeline" (audit 2026-11-01,
+        # persistence F8's restore half).
+        restored_targets.add(target)
         row = current[target]
         qi("UPDATE lorebooks SET name=?,book_type=?,summary=?,parent_id=NULL,scope_world_id=?,scope_location_id=?,inheritance_mode=?,sort_order=?,anchor_entity_id=?,retired_turn_id=? WHERE id=?",
            (snapshot.get("name") or row["name"],
@@ -482,10 +495,10 @@ def _restore_books(chat_id, books, links=None):
     # Delete chat-OWNED books that no snapshot book maps onto: a book minted
     # by a since-discarded timeline (rerolled/deleted turn) must not survive
     # into canon, or the rerun would dedup against the stale book and its
-    # rolled-back entries. `current` already holds only this chat's own
-    # attached books (WHERE chat_id=?), so library/attached reusable books
+    # rolled-back entries. `current` holds only this chat's own books
+    # (WHERE chat_id=?), reachable or not, so library/attached reusable books
     # are never touched. FK cascade removes the entries + chat_lorebooks row.
-    matched = set(old_to_new.values())
+    matched = set(old_to_new.values()) | restored_targets
     if snapshot_canon_target is not None:
         matched.add(snapshot_canon_target)
     for lid in list(current.keys()):
@@ -515,7 +528,16 @@ def _restore_books(chat_id, books, links=None):
     # and add_lorebook_link's dedup means saved metadata never replaces an
     # existing row. Links involving books outside the snapshot mapping are
     # deliberately left alone.
-    managed_ids = sorted(set(old_to_new.values()))
+    #
+    # THE MANAGED SUBGRAPH IS THE RESTORABLE ONE: links between the story's
+    # OWN books, which is all `restore_lorebook_links` will put back (and
+    # all `add_lorebook_link` lets a story draw -- a link never crosses
+    # ownership scopes). The map above also holds the LIBRARY books the
+    # story reads by reference, so a link the host drew between two of them
+    # -- a library-wide edit -- was deleted by any reroll of any story
+    # reading both, and never put back (audit 2026-11-01, web F2: links
+    # before [(1, 2)], after []).
+    managed_ids = sorted(set(old_to_new.values()) - library_kept)
     if managed_ids:
         placeholders = ",".join("?" * len(managed_ids))
         qi(
@@ -724,9 +746,32 @@ def _restore_frames(chat_id, snap_frames):
     # its era (`db.era_of_frame`).
     forget_frame_eras()
 
+def _restore_char_frames(chat_id, rows):
+    """Put the per-era character overrides back as the snapshot held them.
+
+    Delete-and-reinsert, skipping a row whose CHARACTER or ERA no longer
+    exists: `chat_char_frames` references both, a checkpoint keeps its copy in
+    a JSON blob no foreign key reaches, and replaying an orphan raised
+    `FOREIGN KEY constraint failed` and rolled the whole restore back -- every
+    reroll of the story 500'd once the host deleted a character with an era
+    override (audit 2026-11-01, persistence F2). Dropping the row is the
+    cascade the schema already ran, applied to the copy that missed it; the
+    memories, summaries and personas below were already filtered so."""
+    qi("DELETE FROM chat_char_frames WHERE chat_id=?", (chat_id,))
+    eras = {r["id"] for r in q("SELECT id FROM frames WHERE chat_id=?", (chat_id,))}
+    for cf in rows or []:
+        if cf.get("frame_id") not in eras or not q(
+                "SELECT 1 FROM characters WHERE id=?", (cf.get("char_id"),), one=True):
+            continue
+        qi("""INSERT INTO chat_char_frames(chat_id,char_id,frame_id,status,state)
+            VALUES(?,?,?,?,?)""",
+           (chat_id, cf["char_id"], cf["frame_id"], cf.get("status", "active"),
+            json.dumps(cf.get("state") or {})))
+
+
 def _restore_chat_personas(chat_id, personas):
     # Delete-and-reinsert with same-chat ids, mirroring the
-    # chat_char_frames restore just above it in the restore body.
+    # chat_char_frames restore just above it (`_restore_char_frames`).
     qi("DELETE FROM chat_personas WHERE chat_id=?", (chat_id,))
     for p in personas or []:
         if not q("SELECT id FROM personas WHERE id=?", (p["persona_id"],), one=True):
@@ -736,6 +781,79 @@ def _restore_chat_personas(chat_id, personas):
             continue
         qi("INSERT INTO chat_personas(chat_id,persona_id,status,frame_id) VALUES(?,?,?,?)",
            (chat_id, p["persona_id"], p.get("status", "active"), p.get("frame_id")))
+
+# THE TWO WORLD TABLES WHOSE KEY IS NOT THE CHAT'S. Every other world table
+# is keyed `(chat_id, id)` (v14/v16/v27), so a copy of a story -- a branch, an
+# import -- keeps their ids verbatim and nothing collides. The deprecated
+# `fiction_worlds.world_id` and `fiction_locations.location_id` are PRIMARY
+# KEYs on their own: a copy inside one install must give those rows fresh ids
+# or the insert collides (audit 2026-11-01, persistence F9: importing a story
+# the install still holds failed with `UNIQUE constraint failed:
+# fiction_worlds.world_id`). And their ids are rewritten ONLY where those
+# rows name them. The branch used to mint a fresh id for every world id and
+# rewrite every equal string anywhere in the world, so an entity keyed `door`
+# turned each `barrier: "door"` into hex (persistence F10) and an authored
+# event's idempotent id became random (story_scene_schema F3).
+GLOBAL_KEY_FIELDS = frozenset({"world_id", "parent_world_id", "parent_location_id"})
+#: `location_id` names a fiction location only beside its `world_id` -- a
+#: `fiction_locations` row. Everywhere else in the world it is a scene room id.
+GLOBAL_KEY_PAIRED_FIELD = "location_id"
+
+
+class GlobalKeyRemap(dict):
+    """`{old id: fresh id}` for the rows of the two global-key tables,
+    rewritten only at the fields above (`remap_global_keys`).
+
+    `.get` answers NO lookup: a caller that asks the map about a bare string
+    is asking about an arbitrary word, not an id position, and the answer
+    that keeps it a word is the default (`web.app._remap_world_values` asks a
+    bare world value; `turn_branch` asks a vehicle book's anchor, which is an
+    entity id and the story's own)."""
+
+    def get(self, key, default=None):
+        return default
+
+
+def global_key_remap(blobs, *, protected=(), remap=None):
+    """Fresh ids for every global-key row in `blobs` that `remap` does not
+    name yet, added to `remap` (a new `GlobalKeyRemap` when none). One map
+    across a copy's live tables and every checkpoint it carries, so a row
+    first met in an older checkpoint -- one the branch point had lost -- gets
+    one fresh id everywhere it appears."""
+    import uuid
+
+    remap = remap if isinstance(remap, GlobalKeyRemap) else GlobalKeyRemap()
+    protected = {str(p) for p in protected or () if p}
+    for blob in blobs or ():
+        if not isinstance(blob, dict):
+            continue
+        for table, column in (("fiction_worlds", "world_id"),
+                              ("fiction_locations", "location_id")):
+            for row in blob.get(table) or ():
+                old = row.get(column) if isinstance(row, dict) else None
+                if old and old not in protected and not dict.__contains__(remap, old):
+                    remap[old] = uuid.uuid4().hex[:16]
+    return remap
+
+
+def remap_global_keys(obj, remap):
+    """A copy of `obj` with every global-key field rewritten through
+    `remap`, and nothing else touched."""
+    if isinstance(obj, dict):
+        paired = "world_id" in obj
+        out = {}
+        for key, value in obj.items():
+            if (key in GLOBAL_KEY_FIELDS
+                    or (paired and key == GLOBAL_KEY_PAIRED_FIELD)) \
+                    and isinstance(value, str) and dict.__contains__(remap, value):
+                out[key] = dict.__getitem__(remap, value)
+            else:
+                out[key] = remap_global_keys(value, remap)
+        return out
+    if isinstance(obj, list):
+        return [remap_global_keys(item, remap) for item in obj]
+    return obj
+
 
 def insert_world_tables(chat_id, b, delete_first=False):
     """Insert the normalized world-state arrays from blob dict `b` into
@@ -872,6 +990,14 @@ MACHINE_MINTED = "machine_minted"
 SETTING_PROVENANCE = {
     "dialogue_config": SET_BY_HAND,     # NPC autonomy, prose pacing, line budgets
     "background_config": SET_BY_HAND,   # background life / scene-manager dials
+    # The contested-reaction loop's switch and budgets (`story.scene.
+    # reaction_config`). Written by no turn -- only by the host, through the
+    # world editor -- and missing here, so every reroll put the checkpoint's
+    # value back and undid the host's change (audit 2026-11-01, persistence
+    # F17). A `*_config` key is a dial by the engine's own naming:
+    # tests/test_a_rewind_keeps_every_config_dial.py fails for the next one
+    # the engine reads without an entry here.
+    "reaction_config": SET_BY_HAND,
     # The authored story-level naming law (story/naming.py). A dial the
     # author turned; a rewind must not undo it. Names ALREADY MINTED from it
     # live in `background_presences` records and roll back with the story --
@@ -1212,12 +1338,7 @@ def _restore_checkpoint_body(chat_id, r, carried=(), sweep_later=False):
         # After the frames: an era this restore took away takes its asks.
         _keep_room_briefs(chat_id, briefs)
         _keep_spared_room_work(chat_id, room_rows, r["turn_idx"])
-        qi("DELETE FROM chat_char_frames WHERE chat_id=?", (chat_id,))
-        for cf in b.get("char_frames") or []:
-            qi("""INSERT INTO chat_char_frames(chat_id,char_id,frame_id,status,state)
-                VALUES(?,?,?,?,?)""",
-               (chat_id, cf["char_id"], cf["frame_id"], cf.get("status", "active"),
-                json.dumps(cf.get("state") or {})))
+        _restore_char_frames(chat_id, b.get("char_frames"))
         if "chat_personas" in b:
             _restore_chat_personas(chat_id, b.get("chat_personas") or [])
         if mem_plan is not None:
@@ -1872,6 +1993,16 @@ def refresh_checkpoint(chat_id, turn_idx, book_set_only=False):
     known/lore/background bookkeeping, and re-diff the scene. Attach/detach
     only changes the book set, so only the book sections are refreshed;
     everything else in the existing blob is left untouched.
+
+    THE BOOK SET, AND ONLY THE BOOK SET, for every checkpoint
+    (`_carry_the_book_set`): which books, enabled or not, which is canon --
+    never what a book the checkpoint already held contains. That was the
+    older checkpoints' rule alone; the NEWEST took the lore as it is now,
+    whole, and lies under exactly one turn that writes lore of its own, so a
+    canon claim that beat ratified was copied into the world before the beat
+    and survived its own reroll (audit 2026-11-01, persistence F6). Every
+    caller takes the book set now; `book_set_only` is accepted from the
+    callers that still name it and changes nothing.
     """
     # Snapshot outside the transaction: it is read-only and may take time;
     # holding the write lock for its duration would needlessly block other
@@ -1924,13 +2055,9 @@ def refresh_checkpoint(chat_id, turn_idx, book_set_only=False):
                  time.time(), held),
             )
         blob = json.loads(row["blob"])
-        if book_set_only:
-            # an older checkpoint, under turns with lore of their own
-            # (`_carry_the_book_set`, `web.app._refresh_rewindable_checkpoints`)
-            _carry_the_book_set(blob, fresh)
-        else:
-            for key in ("lore", "lorebooks", "lorebook_links", "lore_overlays"):
-                blob[key] = fresh.get(key)
+        # every checkpoint lies under at least one turn with lore of its own
+        # (`_carry_the_book_set`, `web.app._refresh_rewindable_checkpoints`)
+        _carry_the_book_set(blob, fresh)
         qi(
             "UPDATE checkpoints SET blob=?, created=? WHERE chat_id=? AND turn_idx=?",
             (json.dumps(blob), time.time(), chat_id, turn_idx),

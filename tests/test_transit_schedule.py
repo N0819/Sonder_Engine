@@ -320,10 +320,14 @@ def test_destroyed_occupied_mover_is_refused(temp_db):
     assert prepared["scene"]["positions"]["Mara"] == "yard"
 
 
-def test_branch_clone_mints_fresh_event_ids_and_remaps_frames():
-    """scheduled_events rows survive branch/clone with FRESH event ids
-    (global TEXT PK -- collisions would silently drop rows) and payload
-    frame ids remapped to the clone's own frames."""
+def test_branch_clone_keeps_event_ids_and_remaps_frames():
+    """scheduled_events rows survive branch/clone with their OWN event ids --
+    the key is `(chat_id, event_id)`, so nothing collides; the pin used to
+    say "global TEXT PK -- collisions would silently drop rows", which has
+    been false since the repartition, and the fresh ids it asked for were
+    what broke an authored event's idempotent id (audit 2026-11-01,
+    persistence F10 / story_scene_schema F3) -- and payload frame ids
+    remapped to the clone's own frames."""
     from web.app import _build_world_id_remap, _remap_scheduled_event_frames
 
     blob = {"scheduled_events": [{
@@ -335,8 +339,7 @@ def test_branch_clone_mints_fresh_event_ids_and_remaps_frames():
         "seed": "s", "status": "pending",
     }]}
     remap = _build_world_id_remap(blob)
-    assert "evt_original" in remap
-    assert remap["evt_original"] != "evt_original"
+    assert "evt_original" not in dict(remap)
 
     rows = blob["scheduled_events"]
     _remap_scheduled_event_frames(rows, {7: 42})

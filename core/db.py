@@ -2045,8 +2045,10 @@ MIGRATIONS = [
         # which is also how a memory actually behaves.
         #
         # The replacement for the estimate is a stored per-turn clock history,
-        # not a better rate: `mind/memory_time.turn_clock_reading` is the seam
-        # that would read one, and nothing downstream changes when it lands.
+        # not a better rate: `mind/memory_time.window_clock_readings` is the
+        # seam that would read one, and nothing downstream changes when it
+        # lands. (This note named `turn_clock_reading`, which never existed;
+        # audit 2026-11-01, persistence F20.)
     ],
     # v34 -> v35
     [
@@ -2241,6 +2243,54 @@ CREATE INDEX IF NOT EXISTS idx_lorebooks_anchor ON lorebooks(anchor_entity_id)
 -- because a story's eras partition the events before a room does.
 CREATE INDEX IF NOT EXISTS idx_world_events_room_time
     ON world_events(chat_id, frame_id, location_id, occurred_at);
+
+-- EVERY KEY ONTO A TURN OR AN ERA HAS AN INDEX THAT LEADS WITH IT. Deleting a
+-- `turns` or `frames` row makes SQLite find each child row naming it (to set
+-- it NULL or cascade); a child column no index leads with makes that a scan
+-- of the whole table, every chat's rows included, once per deleted row.
+-- Measured (audit 2026-11-01, persistence P1): deleting a 1,000-turn story
+-- beside another holding 60k world_events / 20k entities / 5k rooms took
+-- 17.6 s inside the global write lock, 0.035 s indexed (30.1 s on the lane's
+-- own bench); six eras took 0.24 s. Paid by story deletion, `turn_del`, a
+-- take-back and every discarded stepless turn. PARTIAL: a NULL key names no
+-- row, and the present era's rows are NULL. Here rather than in SCHEMA for
+-- `idx_lorebooks_anchor`'s reason: several of these columns arrive by
+-- migration. tests/test_every_key_onto_a_turn_or_an_era_is_indexed.py holds
+-- the class.
+CREATE INDEX IF NOT EXISTS idx_world_events_turn
+    ON world_events(turn_id) WHERE turn_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_world_entities_created_turn
+    ON world_entities(created_turn_id) WHERE created_turn_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_world_entities_retired_turn
+    ON world_entities(retired_turn_id) WHERE retired_turn_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_room_registry_created_turn
+    ON room_registry(created_turn_id) WHERE created_turn_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_room_registry_retired_turn
+    ON room_registry(retired_turn_id) WHERE retired_turn_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_lorebooks_retired_turn
+    ON lorebooks(retired_turn_id) WHERE retired_turn_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_fiction_worlds_created_turn
+    ON fiction_worlds(created_turn_id) WHERE created_turn_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_fiction_worlds_retired_turn
+    ON fiction_worlds(retired_turn_id) WHERE retired_turn_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_turns_frame
+    ON turns(frame_id) WHERE frame_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_memories_frame
+    ON memories(frame_id) WHERE frame_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_world_events_frame
+    ON world_events(frame_id) WHERE frame_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_relationship_events_frame
+    ON relationship_events(frame_id) WHERE frame_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_room_messages_frame
+    ON room_messages(frame_id) WHERE frame_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_lore_overlays_frame
+    ON lore_overlays(frame_id) WHERE frame_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_chat_char_frames_frame
+    ON chat_char_frames(frame_id);
+CREATE INDEX IF NOT EXISTS idx_chat_personas_frame
+    ON chat_personas(frame_id) WHERE frame_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_frames_parent
+    ON frames(parent_frame_id) WHERE parent_frame_id IS NOT NULL;
 
 -- A vector address that outlived its vectors is worse than no address: the
 -- checkpoint would file the memory by reference to bytes that are no longer
@@ -2943,40 +2993,67 @@ def init():
                             raise
                 _set_schema_version(c, i + 1)
 
-    # After the chain on BOTH paths: see LATE_SCHEMA's own comment.
-    c.executescript(LATE_SCHEMA)
-
-    _backfill_resource_uids(c)
-    # Chat copies of library books become references plus overlays, ONCE, on
-    # the file that crosses v39 (A85). It used to run on every start, and its
-    # `kept_own` branch cleared the `origin_id` that four minting paths still
-    # write and two readers still key by -- see the v38 -> v39 migration note.
-    if not is_fresh_db and current < 39:
-        _migrate_chat_copies_to_overlays(c)
-    # After the chain and on both paths, like the backfill above: a fresh file
-    # has no scenes to repair, and an existing one is repaired exactly once
-    # (see the function -- the key's presence is the gate).
-    _recover_scene_time_of_day(c)
-    # Room regions, once. A file crossing v36 gets `region` derived for every
-    # room a rule reaches -- planned rooms by structure, zones folded, the
-    # rest inherited from a regioned neighbour, nothing invented
-    # (world/regions.backfill_regions). A fresh file has no rooms; a file
-    # already past the bump is left exactly as it is, so a room minted later
-    # with no region is not given one on the next server start. Deferred
-    # import: `world` imports this module.
-    if not is_fresh_db and current < 36:
-        from world.regions import backfill_regions
-        backfill_regions(c)
-    # Memory vectors, once: a file crossing v37 files every existing vector
-    # pair in the content-addressed store (mind/memory_snapshot), after which
-    # the writers file their own and the checkpoint writes nothing. The same
-    # pass stamps each row's `vkey` since v38 -- it is hashing those bytes
-    # anyway -- so a file that stopped at 37 crosses 38 by re-running it
-    # (idempotent: INSERT OR IGNORE into the store, one UPDATE per row).
-    if not is_fresh_db and current < 38:
-        from mind.memory import backfill_memory_vectors
-        backfill_memory_vectors(c)
-    c.commit()
+    # THE ONE-SHOT DATA PASSES RIDE THE TRANSACTION THAT HOLDS THE STAMPS.
+    # Each is gated on the version read before the chain (`current`), so the
+    # stamp IS its completion record -- and they used to run after
+    # `executescript(LATE_SCHEMA)` below, which (legacy transaction mode)
+    # COMMITS the open transaction first. A pass that raised, or a first
+    # start killed during the vector backfill, left the file stamped at the
+    # new version with the pass never run, and every later start skipped it:
+    # chat copies never became overlays, rooms never got regions, old vectors
+    # were never filed (audit 2026-11-01, persistence F5; reproduced with an
+    # injected failure -- "stamped version after the failed pass: 45"). None
+    # of them commits on its own, so here they land with the stamps or not at
+    # all, and the next start asks for them again. A deterministic failure in
+    # one now stops every start until it is fixed, as a failing migration
+    # statement always has -- loud, where the old order was silent.
+    try:
+        _backfill_resource_uids(c)
+        # Chat copies of library books become references plus overlays, ONCE,
+        # on the file that crosses v39 (A85). It used to run on every start,
+        # and its `kept_own` branch cleared the `origin_id` that four minting
+        # paths still write and two readers still key by -- see the v38 -> v39
+        # migration note.
+        if not is_fresh_db and current < 39:
+            _migrate_chat_copies_to_overlays(c)
+        # On both paths, like the backfill above: a fresh file has no scenes
+        # to repair, and an existing one is repaired exactly once (see the
+        # function -- the key's presence is the gate).
+        _recover_scene_time_of_day(c)
+        # Room regions, once. A file crossing v36 gets `region` derived for
+        # every room a rule reaches -- planned rooms by structure, zones
+        # folded, the rest inherited from a regioned neighbour, nothing
+        # invented (world/regions.backfill_regions). A fresh file has no
+        # rooms; a file already past the bump is left exactly as it is, so a
+        # room minted later with no region is not given one on the next
+        # server start. Deferred import: `world` imports this module.
+        if not is_fresh_db and current < 36:
+            from world.regions import backfill_regions
+            backfill_regions(c)
+        # Memory vectors, once: a file crossing v37 files every existing
+        # vector pair in the content-addressed store (mind/memory_snapshot),
+        # after which the writers file their own and the checkpoint writes
+        # nothing. The same pass stamps each row's `vkey` since v38 -- it is
+        # hashing those bytes anyway -- so a file that stopped at 37 crosses
+        # 38 by re-running it (idempotent: INSERT OR IGNORE into the store,
+        # one UPDATE per row).
+        if not is_fresh_db and current < 38:
+            from mind.memory import backfill_memory_vectors
+            backfill_memory_vectors(c)
+        # After the chain AND the passes, on BOTH paths: see LATE_SCHEMA's
+        # own comment. Its implicit COMMIT is what lands the stamps and the
+        # passes together.
+        c.executescript(LATE_SCHEMA)
+        c.commit()
+    except BaseException:
+        # Roll back what is still open -- the stamps and whatever a pass
+        # wrote -- and let go of the file: a caller that catches this and
+        # starts again must not find its own write lock still held.
+        try:
+            c.rollback()
+        finally:
+            c.close()
+        raise
     c.close()
 
 def get_setting(k, d=None):

@@ -279,13 +279,24 @@ def _backfill_chat(chat_id, counts):
                     extra = []
                 about = _memory_about(scene, observer, room, known, disguises,
                                       transformations, extra=extra, senses=senses)
-                writes.append((_storage_json(about) if about else "[]", row["id"]))
+                writes.append((_storage_json(about) if about else "[]", row["id"],
+                               row["char_id"], row["content"]))
                 counts["tagged" if about else "nobody"] += 1
     if writes:
+        # COMPARE-AND-SET ON THE ROW'S IDENTITY, not its id alone. A restore is
+        # delete-and-reinsert and re-mints every id of the chat (the dump
+        # orders rows so ids swap on the first restore), so one landing
+        # between the reads above and this write -- a reroll while the startup
+        # pass works -- put one mind's tag on another mind's memory: a moment
+        # spent alone named a body never seen there, which the `about` recall
+        # lane hands back to a question about that person (audit 2026-11-01,
+        # persistence F4). A row that moved under the computation is left
+        # untagged for the next pass, which reads it as it now is.
         with transaction():
-            for value, row_id in writes:
-                qi("UPDATE memories SET about=? WHERE id=? AND (about IS NULL OR about='')",
-                   (value, row_id))
+            for value, row_id, char_id, content in writes:
+                qi("UPDATE memories SET about=? WHERE id=? AND chat_id=? AND char_id=? "
+                   "AND content=? AND (about IS NULL OR about='')",
+                   (value, row_id, chat_id, char_id, content))
 
 
 def backfill_all():

@@ -239,11 +239,14 @@ def test_branch_remaps_registry_owner_entity_and_turn_ids(temp_db):
     by_name = {r["name"]: r for r in rows}
     deck = by_name["Deck 3"]
 
-    # parent_entity followed the branch's fresh world-entity id.
+    # parent_entity names the branch's world-entity row -- the SAME id, the
+    # story's own under a (chat_id, entity_id) key (audit 2026-11-01,
+    # persistence F10: a branch used to mint a fresh one and rewrite every
+    # equal string in the world with it).
     new_ent = temp_db.q(
         "SELECT entity_id FROM world_entities WHERE chat_id=?",
         (ncid,), one=True)["entity_id"]
-    assert new_ent != "ship_a"
+    assert new_ent == "ship_a"
     assert deck["parent_entity"] == new_ent
 
     # owning_book_id points at the branch's own cloned vehicle book.

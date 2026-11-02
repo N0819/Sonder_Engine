@@ -105,13 +105,18 @@ def test_portable_archive_remaps_turn_and_frame_and_keeps_source(temp_db):
                      ("evt_world",), one=True)["n"] == 2
 
 
-def test_branch_mints_event_id_and_remaps_payload_and_foreign_keys(temp_db):
+def test_branch_keeps_event_id_and_remaps_foreign_keys(temp_db):
+    """The event and entity ids are the story's own under a `(chat_id, id)`
+    key and survive the branch verbatim, as they survive an import (the
+    pin used to require fresh ones, which drove the exact-string rewrite of
+    every equal word in the world -- audit 2026-11-01, persistence F10); the
+    integer turn and frame keys are this install's rows and still remap."""
     cid, frame_id, turn_id = _story(temp_db)
     _insert_event(temp_db, cid, frame_id, turn_id)
     branched = app.turn_branch(turn_id)
     ncid = branched["id"]
     copied = _events(temp_db, ncid)[0]
-    assert copied["event_id"] != "evt_world"
+    assert copied["event_id"] == "evt_world"
     assert copied["turn_id"] != turn_id
     assert copied["frame_id"] != frame_id
     new_entity = temp_db.q(
@@ -120,7 +125,7 @@ def test_branch_mints_event_id_and_remaps_payload_and_foreign_keys(temp_db):
     for checkpoint in temp_db.q(
             "SELECT blob FROM checkpoints WHERE chat_id=?", (ncid,)):
         for event in json.loads(checkpoint["blob"]).get("world_events") or []:
-            assert event["event_id"] != "evt_world"
+            assert event["event_id"] == "evt_world"
             assert event["turn_id"] != turn_id
             assert event["frame_id"] != frame_id
 

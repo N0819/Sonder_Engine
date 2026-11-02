@@ -40,3 +40,12 @@ def delete_chat_data(chat_id: int) -> None:
         qi("DELETE FROM memory_summaries WHERE chat_id=?", (chat_id,))
         qi("DELETE FROM lorebooks WHERE chat_id=?", (chat_id,))
         qi("DELETE FROM chats WHERE id=?", (chat_id,))
+    # The story's debug capture went with its turns (`llm_capture.turn_id` and
+    # `llm_capture_pending.chat_id` cascade), but the BODIES it pointed at --
+    # prompts, payloads, reasoning: the story's text -- are content-addressed
+    # in `llm_blobs`, shared, and stayed behind for good: `vacuum_blobs` had
+    # no caller (audit 2026-11-01, persistence F15). Collected here, after the
+    # commit and outside the lock; it keeps every blob any capture row still
+    # names, and never raises.
+    from persist.llm_capture import vacuum_blobs
+    vacuum_blobs()
