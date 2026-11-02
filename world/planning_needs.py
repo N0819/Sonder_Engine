@@ -41,6 +41,23 @@ import time
 #: else is filed as a `thing` with its declared kind kept on the surface.
 NEED_KINDS = ("room", "person", "thing")
 
+#: What a need of no stated kind -- or of a kind outside `NEED_KINDS` -- is
+#: filed as: the set's catch-all, the same answer for an unstated kind as for
+#: an unknown one. It was "person" for an unstated kind while the compiler
+#: asked the plan about the same request as a ROOM (audit of 2026-11-01,
+#: world_misc_causal F9), so a kindless declared rope went to the person
+#: drain, which can never enrol a surface with no name and re-queued it
+#: every beat (F10).
+NEED_KIND_DEFAULT = "thing"
+
+
+def need_kind(declared):
+    """The kind a need is filed as: `declared` when it names one of
+    `NEED_KINDS`, else `NEED_KIND_DEFAULT`. The one reading of a stated kind,
+    for the ledger and for the compiler that asks the plan before it files."""
+    kind = str(declared or "").strip().casefold()
+    return kind if kind in NEED_KINDS else NEED_KIND_DEFAULT
+
 #: Why a need was raised -- each one a place the engine used to invent, and
 #: each one now a record instead.
 NEED_REASONS = (
@@ -110,6 +127,17 @@ NEED_REASONS = (
     "offscreen_thread_stalled",
 )
 
+#: Reasons nothing raises and nothing answers any more. A need stored under
+#: one stays READABLE (`NEED_REASONS` keeps the reason), but one still open is
+#: closed as it is read, with `RETIRED_CLOSED_REASON`: it can never be
+#: answered, and `open_planning_needs` serves the oldest first, so it held the
+#: Writers' Room's fill slots for good. Measured on the owner's database
+#: (audit of 2026-11-01, world_misc_causal F11): in 19 of the 20 chats with
+#: open needs, the three oldest open needs were `setting_fact` needs filed at
+#: turn 0, and chats 154, 157 and 158 held real room needs behind them.
+RETIRED_NEED_REASONS = ("setting_fact",)
+RETIRED_CLOSED_REASON = "channel retired: nothing raises or answers this reason now"
+
 NEED_STATUSES = ("open", "filled", "closed")
 
 #: Open needs kept per frame. Past it the OLDEST open need is closed as
@@ -157,9 +185,7 @@ def normalize_need(entry, frame_id=None):
     """One well-formed record from whatever was stored or offered."""
     entry = entry if isinstance(entry, dict) else {}
     declared_kind = str(entry.get("kind") or "").strip().casefold()
-    kind = declared_kind or "person"
-    if kind not in NEED_KINDS:
-        kind = "thing"
+    kind = need_kind(declared_kind)
     reason = str(entry.get("reason") or "").strip()
     if reason not in NEED_REASONS:
         reason = "rendered_unplanned"
@@ -184,6 +210,11 @@ def normalize_need(entry, frame_id=None):
         status = "filled"
     if status not in NEED_STATUSES:
         status = "open"
+    # A NEED NOTHING CAN ANSWER IS CLOSED AS IT IS READ (`RETIRED_NEED_REASONS`),
+    # kept with the reason it closed; one already filled keeps its answer.
+    retired = status == "open" and reason in RETIRED_NEED_REASONS
+    if retired:
+        status = "closed"
     subject = _subject_of(kind, entry, surface)
     identity = str(entry.get("identity") or "") or need_identity(kind, subject)
     out = {
@@ -209,26 +240,36 @@ def normalize_need(entry, frame_id=None):
         out["filled_turn"] = entry.get("filled_turn")
     if entry.get("closed_reason"):
         out["closed_reason"] = _text(entry.get("closed_reason"), 200)
+    elif retired:
+        out["closed_reason"] = RETIRED_CLOSED_REASON
     return out
 
 
 def planning_need(kind, reason, *, subject, surface=None, turn_idx=0,
-                  frame_id=None):
+                  frame_id=None, identity=None):
     """One typed need, unfiled. ``subject`` is what the beat called the
     thing (a room id, a query, a request's subject); ``surface`` is whatever
     the beat committed about it -- the stub's name and exits, the request's
-    stated specifics -- so the plan that answers may not contradict it."""
+    stated specifics -- so the plan that answers may not contradict it.
+
+    ``identity`` replaces the subject's own (`need_identity`) for a need whose
+    subject names no thing of its own -- the place a vessel bound nowhere is
+    going is the VESSEL's need, one per vessel, never a room called what the
+    vessel is called."""
     reason = str(reason or "").strip()
     if reason not in NEED_REASONS:
         raise ValueError("unknown planning-need reason %r" % reason)
     subject = " ".join(str(subject or "").split())
     if not subject:
         raise ValueError("a planning need names what was asked for")
-    return normalize_need({
+    entry = {
         "kind": kind, "reason": reason, "subject": subject,
         "surface": surface if isinstance(surface, dict) else {},
         "filed_turn": int(turn_idx or 0),
-    }, frame_id=frame_id)
+    }
+    if identity:
+        entry["identity"] = str(identity)
+    return normalize_need(entry, frame_id=frame_id)
 
 
 def normalize_planning_needs(stored, frame_id=None):

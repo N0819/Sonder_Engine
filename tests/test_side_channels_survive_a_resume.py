@@ -246,5 +246,8 @@ class TestTheEstablishmentResume:
                         for c in ast.walk(rest)), (
                         "a hydration at line %d restores the step content "
                         "without rebuilding its side channels" % stmt.lineno)
-        # Two: the establishment plan's and the normal plan's.
-        assert hydrations == 2
+        # Three: the establishment plan's, the normal plan's HEAD -- the
+        # interpretation and any stage anchored before it, read back before
+        # the plan exists (`runtime._plan_head`, 2026-11-01) -- and the rest
+        # of the normal plan's.
+        assert hydrations == 3

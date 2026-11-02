@@ -588,18 +588,21 @@ class TestFromKeyMissingInterpret:
         with pytest.raises(RuntimeError, match="not in this turn's plan"):
             list(_run_pipeline(chat_id, turn_id, from_key="bogus_step"))
 
-        # Refused before anything is recomputed. The restore has run by then
-        # (the plan the key is judged against is built after it), so the
-        # commit it took back says so -- stale, offering Resume -- rather
-        # than the turn reading complete over a world without it (review of
-        # 2026-10-13). Nothing else is marked.
+        # Refused before anything is recomputed -- and, since 2026-11-01,
+        # before the REWIND: the key is judged against the plan the stored
+        # interpretation builds (`runtime._refusal_before_the_rewind`), so no
+        # checkpoint is restored, no commit taken back and nothing marked
+        # stale. This pinned the old order, in which the restore ran first and
+        # the commit it took back read stale after a refusal (audit of
+        # 2026-11-01, agents_runtime_loops_mapping F1: the refused rerun had
+        # also swept the later checkpoints).
         counts_after = {
             r["key"]: variant_count(turn_id, r["key"]) for r in temp_db.q(
                 "SELECT key FROM steps WHERE turn_id=?", (turn_id,))
         }
         assert counts_after == counts_before
         assert {r["key"] for r in temp_db.q(
-            "SELECT key FROM steps WHERE turn_id=? AND stale=1", (turn_id,))} == {"commit"}
+            "SELECT key FROM steps WHERE turn_id=? AND stale=1", (turn_id,))} == set()
 
     def test_valid_from_key_rerun_still_rerolls_downstream_only(
         self, temp_db, monkeypatch,

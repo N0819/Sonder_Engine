@@ -96,9 +96,14 @@ LAYOUT_GROUNDS_STORY_KEY = "layout_grounds"
 #: ask-before-limiting.
 LAYOUT_TIER_PER_RUN = 1
 #: The world key filing each building's last attempt: `{building key:
-#: {signature, turn, failed?, failed_turn?, reasons?, moved?, unplaced?}}`.
-#: A reconstructible record: lost, a building is simply attempted again.
+#: {signature, turn, failed?, failed_turn?, reasons?, moved?, unplaced?,
+#: warnings?}}`. A reconstructible record: lost, a building is simply
+#: attempted again.
 LAYOUT_RUNS_KEY = "layout_tier_runs"
+#: How many of an attempt's refusals and of its solve's warnings its run
+#: record keeps -- the 12 the refusals were always cut to, now named and
+#: applied to the warnings too. Diagnostic only: the log keeps every one.
+LAYOUT_RUN_NOTES_MAX = 12
 #: The two calls' step keys, by which the capture files them
 #: (`persist/llm_capture.py`).
 SORT_STEP = "director_rooms_layout_sort"
@@ -657,13 +662,42 @@ def lay_out_buildings(job, cid, scene, room_ids, language_id, *, call=None):
         specs = _plan_specs(cid)
         held_open = structure.provisional_room_ids(cid)
         wanted = set(room_ids)
+        # ONLY THE BUILDINGS HOLDING A ROOM ASKED ABOUT ARE BUILT (`only`):
+        # built whole and then filtered here, a street of expanded lots cost
+        # 112 ms at 25 lots and 1,485 ms at 100 per rooms-in-view run (audit of
+        # 2026-11-01, world_layout_bridge_structure E2). The grouping still
+        # reads the whole plan, so a building is the same one either way.
         buildings = [b for b in layout_bridge.plan_buildings(
                          specs, scene, held_open=held_open,
-                         grounds=layout_grounds_enabled(cid))
+                         grounds=layout_grounds_enabled(cid), only=wanted)
                      if b["refusal"] is None and wanted & set(b["rooms"])]
     except Exception as exc:
         logger.info("layout tier: chat=%s could not read the plan: %s", cid, str(exc)[:300])
         return scene, laid_out
+    # THE SOLVES ASK THE JOB WHETHER IT WAS STOPPED (`layout_bridge.CANCELLED`):
+    # the core counting its work and the lab's search between seeds raise
+    # `ArrangeCancelled` when it says so. Nothing set it, so a rerolled job
+    # kept solving to the core's budget and four lab seeds of pure-Python CPU
+    # beside the beat that replaced it (audit of 2026-11-01, world_layout_core
+    # E3). The job's alone, and off again when this run ends.
+    stop_token = layout_bridge.CANCELLED.set(
+        (lambda: jobs.is_cancelled(job)) if job is not None else None)
+    try:
+        return _lay_out_each(job, cid, scene, buildings, language_id, call,
+                             turn_idx, laid_out)
+    finally:
+        layout_bridge.CANCELLED.reset(stop_token)
+
+
+def _lay_out_each(job, cid, scene, buildings, language_id, call, turn_idx,
+                  laid_out):
+    """`lay_out_buildings`' walk over the buildings it may lay out this run,
+    under the job's stop (`layout_bridge.CANCELLED`)."""
+    from core import jobs
+    from core.logging_utils import logger
+    from world import layout_bridge, structure
+    from world.layout_arrange import ArrangeCancelled
+
     runs = _read_runs(cid)
     done = 0
     for building in buildings:
@@ -682,15 +716,30 @@ def lay_out_buildings(job, cid, scene, room_ids, language_id, *, call=None):
             building = dict(building, description=described)
         try:
             spec, layout, inventory, refused = lay_out(building, call, language_id)
+        except ArrangeCancelled as exc:
+            # A STOPPED JOB IS NO FAILURE: nothing filed, nothing waits on a
+            # retry, and no further building is begun this run.
+            logger.info("layout tier: chat=%s building=%s not laid out: %s",
+                        cid, key, " ".join(str(exc).split())[:200])
+            break
         except Exception as exc:
             refused = [f"an answer could not be laid out: {' '.join(str(exc).split())[:300]}"]
             spec = layout = inventory = None
+        # WHAT THE SOLVE SAID, ON THE RECORD: why a building was laid by the
+        # lab's search instead of the arrangement core, or why the core gave
+        # up first (`layout_bridge._fell_back`). It reached the log and no
+        # run record, so a fallback was silent wherever the log is not read
+        # (audit of 2026-11-01, world_layout_core F1).
+        said = [str(w) for w in (getattr(layout, "warnings", None) or ())]
         if refused:
             failed = int((runs.get(key) or {}).get("failed") or 0) + 1 \
                 if (runs.get(key) or {}).get("signature") == signature else 1
             entry = {"signature": signature, "turn": turn_idx, "failed": failed,
-                     "failed_turn": turn_idx, "reasons": refused[:12],
+                     "failed_turn": turn_idx,
+                     "reasons": refused[:LAYOUT_RUN_NOTES_MAX],
                      "seconds": round(time.time() - started, 2)}
+            if said:
+                entry["warnings"] = said[:LAYOUT_RUN_NOTES_MAX]
             if (spec or {}).get("brief"):
                 entry["brief"] = spec["brief"]
             _file_run(cid, job, key, entry)
@@ -731,6 +780,9 @@ def lay_out_buildings(job, cid, scene, room_ids, language_id, *, call=None):
             entry["places_dropped"] = list(spec["places_dropped"])
         if spec.get("brief"):
             entry["brief"] = spec["brief"]
+        said = [str(w) for w in (report.get("warnings") or said)]
+        if said:
+            entry["warnings"] = said[:LAYOUT_RUN_NOTES_MAX]
         _file_run(cid, job, key, entry)
         runs[key] = entry
         logger.info("layout tier: chat=%s building=%s laid out on %s in %.1fs; "

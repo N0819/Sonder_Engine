@@ -74,6 +74,7 @@ from concurrent.futures import ThreadPoolExecutor
 from contextvars import copy_context
 
 from core.db import q, wget
+from llm.providers import Aborted
 from world import charter_skip
 from world import skip_itinerary as itin
 
@@ -351,6 +352,8 @@ def ask(ctx, row, span, nonce=0):
     try:
         built = character_step(ctx, cid, nonce, skip={
             "row": row, "view": view, "observations": observations})
+    except Aborted:
+        raise                   # a Stop is never a mind's default day
     except Exception as exc:  # noqa: BLE001 -- the default day answers instead
         return None, f"payload not built ({type(exc).__name__}: {str(exc)[:160]})"
     if not isinstance(built, dict) or not isinstance(built.get("payload"), dict):
@@ -369,6 +372,15 @@ def ask(ctx, row, span, nonce=0):
                              wire, temperature=built.get("temperature"),
                              sampler=built.get("sampler"),
                              reasoning_effort=SKIP_QUESTION_REASONING)
+    except Aborted:
+        # THE USER'S STOP IS NOT A MIND'S SILENCE. `Aborted` is a
+        # `RuntimeError`, and this caught it as an unanswered question: every
+        # mind asked when Stop was pressed lived the default day, the stage
+        # returned normally and was saved fresh, and the commit made canon a
+        # stretch in which they all slept in place (audit of 2026-11-01,
+        # agents_runtime_loops_mapping F2). Re-raised at every model seam of
+        # this stage, as `director`, `background` and `skip_work` do.
+        raise
     except Exception as exc:  # noqa: BLE001 -- the default day answers instead
         return None, f"no answer ({type(exc).__name__}: {str(exc)[:160]})"
     return (answer if isinstance(answer, dict) else None), None
@@ -552,6 +564,8 @@ def resolve_mind(name, stretches, scene, state, here, held, language=None,
                                        for i in stretches[:40]]}
         try:
             answers = decisions.decide(state_for_jev, questions)
+        except Aborted:
+            raise                   # a Stop is never an unanswered question (`ask`)
         except Exception as exc:  # noqa: BLE001 -- unanswered is off the map
             record["jev_failed"] = f"{type(exc).__name__}: {str(exc)[:120]}"
     resolved.update(itin.read_place_answers(answers, unresolved, options))
@@ -592,6 +606,8 @@ def judge_what_was_missing(name, log, language=None):
     if questions:
         try:
             answers = decisions.decide(state, questions) or {}
+        except Aborted:
+            raise                   # a Stop is never an unanswered question (`ask`)
         except Exception as exc:  # noqa: BLE001 -- unanswered: told as far as it went
             record["jev_failed"] = f"{type(exc).__name__}: {str(exc)[:120]}"
     unanswered = [i for i in rows if not itin.answered(answers.get(f"without:{i}"))]
@@ -695,6 +711,8 @@ def skip_lives(ctx, nonce):
         for cid, future in futures.items():
             try:
                 answers[cid], errors[cid] = future.result()
+            except Aborted:
+                raise               # a Stop is never a mind's default day (`ask`)
             except Exception as exc:  # noqa: BLE001 -- the default day answers
                 answers[cid], errors[cid] = None, f"{type(exc).__name__}: {exc}"
     skies = itin.Skies(scene, span, seed="chat:%s" % chat_id,
@@ -728,6 +746,8 @@ def skip_lives(ctx, nonce):
             stretches, holding, record = resolve_mind(
                 name, stretches, scene, state, here, held_things(scene, name),
                 ctx.language, under_way=under_way, ways=ways)
+        except Aborted:
+            raise
         except Exception as exc:  # noqa: BLE001 -- one mind, not the beat
             ctx.add_warning(f"skip: {name}'s places could not be read "
                             f"({type(exc).__name__}: {str(exc)[:120]}); the "
@@ -753,6 +773,8 @@ def skip_lives(ctx, nonce):
         try:
             result = charter_skip.live_in_charter(chat_id, scene, name,
                                                   itinerary, out["span"])
+        except Aborted:
+            raise
         except Exception as exc:  # noqa: BLE001 -- the mind's own runs it
             ctx.add_warning(f"skip: the charter could not run {name} "
                             f"({type(exc).__name__}: {str(exc)[:120]}); "
@@ -776,6 +798,8 @@ def skip_lives(ctx, nonce):
         # as far as it went.
         try:
             judged = judge_what_was_missing(name, log, ctx.language)
+        except Aborted:
+            raise
         except Exception as exc:  # noqa: BLE001 -- one mind, not the beat
             ctx.add_warning(f"skip: what {name} went without could not be judged "
                             f"({type(exc).__name__}: {str(exc)[:120]}); those "
@@ -820,7 +844,6 @@ def skip_lives(ctx, nonce):
     # typed leaves the things as the stretch found them -- said, never the
     # beat's failure.
     from agents import skip_work
-    from llm.providers import Aborted
     try:
         skip_work.type_the_work(
             ctx, minds, scene,

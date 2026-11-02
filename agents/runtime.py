@@ -6,7 +6,6 @@ import contextvars
 import json
 import logging
 import queue
-import sys
 import threading
 import time
 
@@ -14,7 +13,7 @@ from story.character_schema import (character_name, character_name_from_text,
                               normalize_persona_data, persona_appearance)
 from persist.checkpoints import ensure_checkpoint, restore_checkpoint
 from persist.commit import commit_all
-from core.db import active_frame_id, q, qi, transaction, wget_for_frame, wset
+from core.db import active_frame_id, q, qi, transaction, wget_for_frame
 from language_runtime import current_language_id, story_language
 from core.pipeline_context import (
     ChatData, PipelineContext, TurnData, beat_onset, current_step_key,
@@ -38,7 +37,8 @@ from story.scene import (
 
 from .background import background_react
 from .character import character_step
-from .common import (_assert_plan_materialized, _dict, _present_cast_bodies,
+from .common import (_assert_plan_materialized, _dict, _list,
+                     _present_cast_bodies, normalize_character_refs,
                      player_speech_lines, widen_reactors_to_acted_upon,
                      widen_reactors_to_enclosure,
                      widen_reactors_to_engaged, widen_reactors_to_hearers,
@@ -760,6 +760,8 @@ def _run_parallel_group(bus, turn_id, group, keys, ctx):
     jobs = [(k, (lambda kk=k: compute_step(kk, ctx, variant_count(turn_id, kk))))
             for k in members]
     yield from _stream_parallel(bus, jobs, holders)
+    # Finished under a Stop: none of them is saved (`_saved_only_if_not_stopped`).
+    _saved_only_if_not_stopped(ctx, *members)
     # Every member has ALREADY finished by the time this loop runs --
     # `_stream_parallel` joins them all. Raising on the first failure in plan
     # order therefore threw away the paid, completed output of any sibling
@@ -778,12 +780,53 @@ def _run_parallel_group(bus, turn_id, group, keys, ctx):
         ctx[k] = h["v"]
         saved = _with_engine_notes(
             h["v"], ctx, k, parallel_with=[m for m in members if m != k])
-        sid, vid, n = save_step(turn_id, k, lbl, keys.index(k), saved,
-                                reasoning=h.get("reasoning"))
+        # THE SAME DEDUP AS THE SERIAL PATH (`_save_or_reuse_variant`). The
+        # group saved through `save_step` directly, so the deterministic pair
+        # the dedup was written for -- `compile_world_context` and
+        # `perception_act`, a group on every beat without a skip -- still
+        # minted a byte-identical variant on every rerun and resume: 135 and
+        # 32 of them in the owner's last 400 turns (audit of 2026-11-01,
+        # agents_runtime_loops_mapping F19), 0 for the serial
+        # `perception_outcome`.
+        sid, vid, n = _save_or_reuse_variant(
+            turn_id, k, lbl, keys.index(k), saved, h.get("reasoning"))
         _extension_step_saved(ctx, k, saved)
         yield _evt(k, lbl, sid, vid, n, saved)
     if failure is not None:
         raise failure
+
+
+#: The stages whose own writes are durable the moment they return: the
+#: commit's transaction has landed, and its step row is the record that it
+#: has. Saved even when a Stop arrived while they ran.
+_DURABLE_ON_RETURN = frozenset({"commit"})
+
+
+def _saved_only_if_not_stopped(ctx, *keys):
+    """NOTHING THAT FINISHED UNDER A STOP IS SAVED: raise `Aborted` (after
+    filing each step's provider calls, as a failed step does) when the run's
+    abort flag is set, for every stage but one whose writes have already
+    landed (`_DURABLE_ON_RETURN`).
+
+    `compute_step` asks before a stage starts, and nothing asked after it
+    ended -- while a stage that CATCHES `Aborted` as an ordinary failure, as
+    `RuntimeError`'s subclass invites, hands back a degraded answer that
+    looks like any other. The skip stage did exactly that: every mind asked
+    when the user pressed Stop got the default day, `skip_lives` returned
+    normally, and the step was saved fresh, so Resume took it as lived and
+    the commit made it canon (audit of 2026-11-01, agents_runtime_loops_
+    mapping F2). Nothing can tell a stage that finished just before the Stop
+    from one that swallowed it, so neither is kept; the resume runs it
+    again."""
+    keys = [key for key in keys if key not in _DURABLE_ON_RETURN]
+    if not keys:
+        return
+    try:
+        _check_cancel()
+    except Aborted:
+        for key in keys:
+            _failed_step(ctx, key)
+        raise
 
 
 def _step_stream(bus, turn_id, key, label, ordn, ctx, nonce):
@@ -793,6 +836,7 @@ def _step_stream(bus, turn_id, key, label, ordn, ctx, nonce):
     if "e" in holder:
         _failed_step(ctx, key)
         raise holder["e"]
+    _saved_only_if_not_stopped(ctx, key)
     ctx[key] = holder["v"]
     # ctx keeps the stage's own output; only what is PERSISTED carries the
     # notes, so no downstream stage reads a key its schema never declared.
@@ -839,6 +883,149 @@ def _save_or_reuse_variant(turn_id, key, label, ordn, saved, reasoning):
     return (standing["sid"], standing["vid"],
             variant_count(turn_id, key))
 
+def _plan_head(chat_id):
+    """THE STEPS A BEAT RUNS BEFORE ITS PLAN CAN BE BUILT: every extension
+    stage anchored before the interpretation, then the interpretation itself,
+    as `[(key, label), ...]` -- the interpretation alone for nearly every
+    chat.
+
+    The plan is built FROM the interpretation, so the runtime runs the
+    interpretation first and the plan after it; a stage spliced in front of
+    it is still the plan's own step, and the splices are a pure function of
+    durable settings and manifests (`extension_runtime.apply_plan_splices`),
+    so the head the plan will have is known before it exists. The runtime
+    ran the interpretation at ord 0 and walked the built plan from index 1
+    whatever index 0 held: with `[ext:demo:pre, director_interpret, ...]` it
+    computed the interpretation TWICE, the extension stage never, committed,
+    and then failed the committed turn on the completion invariant -- every
+    turn of every chat with such a stage (audit of 2026-11-01,
+    agents_runtime_loops_mapping F11). `docs/guides/EXTENSIONS.md` names
+    `director_interpret` first among the anchors a stage may use."""
+    interpret = ("director_interpret", step_label("director_interpret"))
+    spliced = _extension_splices([interpret], chat_id)
+    keys = [key for key, _label in spliced]
+    if "director_interpret" not in keys:
+        return [interpret]
+    return list(spliced[:keys.index("director_interpret") + 1])
+
+
+def _stored_plan(chat_id, turn_id, turn, interpretation):
+    """The plan a normal beat's STORED interpretation builds against the live
+    world -- the plan `resume_key_for_turn` reports from, and the one a rerun
+    is checked against before it rewinds anything (`_refusal_before_the_
+    rewind`)."""
+    from agents.offscreen_beat import is_offscreen_beat
+    # A SKIP THIS BEAT'S RUN LIVED THROUGH plans the rest of the beat at
+    # its far end, as the run replanned after it (`_replan_after_skip`):
+    # the stored step is read back, with the cast it brought home.
+    _cast = active_cast(chat_id, turn["frame_id"])
+    _skip = None
+    if not step_is_stale(turn_id, _skip_lives_stage.STEP_KEY):
+        _skip = active_content(turn_id, _skip_lives_stage.STEP_KEY)
+    if isinstance(_skip, dict):
+        _cast = _skip_lives_stage.cast_at_far_end(
+            chat_id, turn["frame_id"], _cast, _skip)
+    else:
+        _skip = None
+    return build_plan(
+        interpretation,
+        _cast,
+        chat_id=chat_id,
+        frame_id=turn["frame_id"],
+        turn_idx=turn["idx"],
+        offscreen=is_offscreen_beat(chat_id, turn),
+        skip=_skip,
+    )
+
+
+#: Plan keys whose place in the plan the REACTOR GATES decide. The gates read
+#: awareness and presence off the world a rerun's restore rewinds, so the plan
+#: the run builds after its restore can hold one the live world's plan does
+#: not -- the reactor the beat knocked out was awake before it
+#: (`resume_key_for_turn`'s shaken sleeper, the other way round). A rerun from
+#: one of these that the turn holds a row for is decided after the restore,
+#: as it always was; every other key is decided before it.
+_GATED_PLAN_KEYS = frozenset({"interaction_loop", "reaction_loop"})
+
+
+def _gated_plan_key(key):
+    return key in _GATED_PLAN_KEYS or str(key).startswith("character:")
+
+
+def _stale_before(turn_id, keys, from_key):
+    """The `StaleStepError` a run from `from_key` raises reading back the
+    steps before it, or None -- the hydration's own reading: a step with no
+    answer is where the run starts (nothing after it is read back), and a
+    stale one is refused."""
+    for key in keys[:keys.index(from_key)] if from_key in keys else keys:
+        if active_content(turn_id, key) is None:
+            return None
+        if step_is_stale(turn_id, key):
+            return StaleStepError(
+                f"step '{key}' is stale and must be resumed or rerun before "
+                "continuing from a later stage")
+    return None
+
+
+def _refusal_before_the_rewind(chat_id, turn_id, turn_row, from_key,
+                               establishment):
+    """The error a `from_key` run would raise, decided while the world is
+    untouched -- or None.
+
+    A RERUN THE RUNTIME REFUSES TOUCHES NOTHING. The `from_key` paths restored
+    the pre-turn checkpoint, swept every later one, took back the unseen
+    off-screen beats, claimed the turn and marked its commit stale -- and
+    only then raised. Reproduced (audit of 2026-11-01, agents_runtime_loops_
+    mapping F1): two committed turns, a rerun of the first from a key its plan
+    does not hold, and after the refusal checkpoints [1, 2] were [1], the
+    world marker its commit wrote was gone and the commit read stale. The
+    route passes the drawer's "Run from here" key unvalidated, and that
+    button is drawn on every step row -- an orphan kept for its variants, an
+    `ext:` step of an extension since disabled. The single-step reroll
+    already refused first.
+
+    Decided against the plan the stored interpretation builds
+    (`_stored_plan`), which is the one Resume reports from; the run keeps
+    its own checks after the restore as a backstop, for a gated key
+    (`_GATED_PLAN_KEYS`) whose place only the restored world can say."""
+    if from_key is None:
+        return None
+    if establishment:
+        keys = [key for key, _label in establishment_plan(chat_id)]
+        if from_key not in keys:
+            return RuntimeError(
+                f"step '{from_key}' is not in the establishment plan")
+        return _stale_before(turn_id, keys, from_key)
+    head = [key for key, _label in _plan_head(chat_id)]
+    if from_key in head:
+        return _stale_before(turn_id, head, from_key)
+    if step_is_stale(turn_id, "director_interpret"):
+        return StaleStepError(
+            "step 'director_interpret' is stale and must be resumed "
+            "or rerun before continuing from a later stage")
+    interpretation = active_content(turn_id, "director_interpret")
+    if not isinstance(interpretation, dict):
+        # nothing to build the plan on: the run restarts from the
+        # interpretation, as `resume_key_for_turn` would say
+        return None
+    keys = [key for key, _label in _stored_plan(chat_id, turn_id, turn_row,
+                                                interpretation)]
+    if from_key in keys:
+        return _stale_before(turn_id, keys, from_key)
+    held = q("SELECT 1 FROM steps WHERE turn_id=? AND key=? LIMIT 1",
+             (turn_id, from_key), one=True)
+    if not (held and _gated_plan_key(from_key)):
+        return RuntimeError(f"step '{from_key}' is not in this turn's plan")
+    # A gated key the restored world may plan: everything the plan holds
+    # before the reactors is read back for it, and must be fresh.
+    before = []
+    for key in keys:
+        if _gated_plan_key(key) or key == "director_resolve":
+            break
+        before.append(key)
+    return _stale_before(turn_id, before, from_key)
+
+
 def resume_key_for_turn(turn_id, chat_id):
     """Find the first missing or stale step in a turn's plan.
 
@@ -876,34 +1063,29 @@ def resume_key_for_turn(turn_id, chat_id):
     if not turn:
         return "director_interpret"
 
-    if turn["idx"] == 0:
+    from agents.offscreen_beat import is_offscreen_beat
+    # THE RUN'S OWN QUESTION (`_run_pipeline`'s `establishment`): an idx-0
+    # turn is an opening only when it is not a bubble's own beat. This asked
+    # `idx == 0` alone, so a complete off-screen beat at index 0 -- the first
+    # beat of a world stood up with no player -- was reported unfinished at
+    # `director_establish`: the drawer offered Resume, `_require_turn_
+    # resolved` answered 409 to every new turn in its frame, and the Resume
+    # raised "not in this turn's plan" (audit of 2026-11-01,
+    # agents_runtime_loops_mapping F12).
+    if turn["idx"] == 0 and not is_offscreen_beat(chat_id, turn):
         plan = establishment_plan(chat_id)
     else:
         interpretation = active_content(turn_id, "director_interpret")
         if not isinstance(interpretation, dict):
+            # The head of the plan (`_plan_head`) runs before the plan can be
+            # built: the first of it with no fresh answer is where to resume.
+            for key, _label in _plan_head(chat_id):
+                if (key == "director_interpret"
+                        or active_content(turn_id, key) is None
+                        or step_is_stale(turn_id, key)):
+                    return key
             return "director_interpret"
-        from agents.offscreen_beat import is_offscreen_beat
-        # A SKIP THIS BEAT'S RUN LIVED THROUGH plans the rest of the beat at
-        # its far end, as the run replanned after it (`_replan_after_skip`):
-        # the stored step is read back, with the cast it brought home.
-        _cast = active_cast(chat_id, turn["frame_id"])
-        _skip = None
-        if not step_is_stale(turn_id, _skip_lives_stage.STEP_KEY):
-            _skip = active_content(turn_id, _skip_lives_stage.STEP_KEY)
-        if isinstance(_skip, dict):
-            _cast = _skip_lives_stage.cast_at_far_end(
-                chat_id, turn["frame_id"], _cast, _skip)
-        else:
-            _skip = None
-        plan = build_plan(
-            interpretation,
-            _cast,
-            chat_id=chat_id,
-            frame_id=turn["frame_id"],
-            turn_idx=turn["idx"],
-            offscreen=is_offscreen_beat(chat_id, turn),
-            skip=_skip,
-        )
+        plan = _stored_plan(chat_id, turn_id, turn, interpretation)
 
     rows = q(
         """
@@ -990,9 +1172,13 @@ def build_plan(interp, cast_rows, chat_id=None, frame_id=None, *, extra_players=
         plan.append((_skip_lives_stage.STEP_KEY, step_label(_skip_lives_stage.STEP_KEY)))
     plan.append(("perception_act", step_label("perception_act")))
 
-    valid_ids = {int(row["id"]) for row in cast_rows}
-    reactors = [int(char_id) for char_id in (fl.get("reactors") or [])
-                if int(char_id) in valid_ids]
+    # Read as `interaction_loop` reads it (`normalize_character_refs`: an id, a
+    # digit string, a name, the engine's handle), never `int()` of whatever is
+    # there: the step-edit route stores any JSON, and an edited interpretation
+    # with `"reactors": ["Ann"]` raised `ValueError` in every replan -- every
+    # resume and rerun, and `resume_key_for_turn` under the new-turn route's
+    # gate (audit of 2026-11-01, agents_runtime_loops_mapping F13).
+    reactors = normalize_character_refs(_list(fl.get("reactors")), cast_rows)
 
     # A CAST MEMBER A BUBBLE RETURNED THIS BEAT was out of the interpret's
     # world when it chose the reactors (`widen_reactors_to_rejoined`). Widened
@@ -1280,8 +1466,9 @@ PERCEPTION_STEP_KEYS = (
 
 #: EVERY VALUE A STAGE PUTS ON THE CONTEXT THAT IS NOT A DECLARED FIELD, and
 #: how it survives a resume. `tools/project_check.py` holds this against the
-#: source: a `ctx["..."] =` / `ctx._extra["..."] =` writer anywhere in
-#: `agents/` or `story/` must name a `PipelineContext` field or appear here.
+#: source: a `ctx["..."] =` / `ctx._extra["..."] =` / `setattr(ctx, ...)`
+#: writer anywhere in the engine's packages (not only `agents/` and `story/`,
+#: since 2026-11-01) must name a `PipelineContext` field or appear here.
 #:
 #: The register exists because the omission is invisible by construction
 #: (review 2026-09-07 A31). `_rehydrate_side_channels` rebuilt five values and
@@ -1345,6 +1532,9 @@ SIDE_CHANNELS = {
     "absent_reactors_noted": "memo: which absent reactors this turn has "
                              "already warned about, so one drop is one "
                              "warning",
+    "_gate_reads": "in-stage: the scene and awareness map the reactor gates "
+                   "share while one stage widens and gates its reactors "
+                   "(`loops._gates_read_once`), dropped as the block ends",
     "beat_declared": "in-stage: one interaction loop's own ledger of what "
                      "each mouth has already said this beat",
     "beat_left_open": "in-stage: one interaction loop's own ledger of what "
@@ -1360,6 +1550,17 @@ SIDE_CHANNELS = {
                                    "is (see persist/commit.py)",
     "_skip_far_end": "memo: the skip's far end (`skip_stage.FarEnd`), made "
                      "again from the hydrated `skip_lives` content on a miss",
+    "_extension_routing": "diagnostic: which extension rewrote what a mind or "
+                          "the narrator was handed (`extension_runtime`'s "
+                          "payload hooks), read back at commit as the turn's "
+                          "attribution record. NOT rebuilt: a resume or rerun "
+                          "that does not re-run the character stage commits "
+                          "without that stage's notes",
+    "_engine_notices_rewritten": "in-stage: the commit's own stamp that the "
+                                 "beat's one rewrite of the notice key has "
+                                 "happened (`commit_common.mark_engine_"
+                                 "notices_rewritten`); a re-run commit stamps "
+                                 "it again",
 }
 
 
@@ -1787,6 +1988,14 @@ def _run_pipeline(chat_id, turn_id, from_key=None, only_key=None, refuse_blockin
         yield {"type": "done", "turn_id": turn_id}
         return
 
+    # EVERY REFUSAL BEFORE THE REWIND, as the reroll above makes its own
+    # (`_refusal_before_the_rewind`): a run refused here has restored,
+    # swept, claimed and marked nothing.
+    refusal = _refusal_before_the_rewind(chat_id, turn_id, turn_row, from_key,
+                                         establishment)
+    if refusal is not None:
+        raise refusal
+
     if has_existing_steps:
         _restore_and_refresh()
         yield from _restored_notice
@@ -1879,24 +2088,40 @@ def _run_pipeline(chat_id, turn_id, from_key=None, only_key=None, refuse_blockin
         }
         return
 
-    start_key = None
-    if from_key not in (None, "director_interpret"):
-        if step_is_stale(turn_id, "director_interpret"):
+    # THE HEAD OF THE PLAN (`_plan_head`): the interpretation, after any
+    # extension stage anchored before it, each at its own plan index. A run
+    # from a key past the head reads the head back; a run from inside it
+    # reads back what precedes the key and computes the rest of the head.
+    head = _plan_head(chat_id)
+    head_keys = [key for key, _label in head]
+    if from_key is None:
+        head_from = 0
+    elif from_key in head_keys:
+        head_from = head_keys.index(from_key)
+    else:
+        head_from = len(head)
+    start_key = from_key if head_from == len(head) else None
+    for index, (key, _label) in enumerate(head[:head_from]):
+        content = active_content(turn_id, key)
+        if key == "director_interpret" and not isinstance(content, dict):
+            content = None
+        if content is None:
+            # A MISSING (absent, or no active variant) step of the head means
+            # there is nothing valid to build the plan or any later stage on
+            # -- restart from it (mirroring resume_key_for_turn) instead of
+            # substituting {} and failing the materialization assert only
+            # after everything, commit included, has already run.
+            head_from, start_key = index, None
+            break
+        if step_is_stale(turn_id, key):
             raise StaleStepError(
-                "step 'director_interpret' is stale and must be resumed "
+                f"step '{key}' is stale and must be resumed "
                 "or rerun before continuing from a later stage"
             )
-        interp = active_content(turn_id, "director_interpret")
-        if isinstance(interp, dict):
-            ctx["director_interpret"] = interp
-            start_key = from_key
-        # A MISSING (absent, or no active variant) director_interpret means
-        # there is nothing valid to build the plan or any later stage on --
-        # restart from director_interpret (mirroring resume_key_for_turn)
-        # instead of substituting {} and failing the materialization assert
-        # only after everything, commit included, has already run.
+        ctx[key] = content
+        _rehydrate_side_channels(ctx, key, content)
 
-    if start_key is None:
+    if head_from < len(head):
         # A BODY THAT WALKED BACK IN HER OWN BUBBLE'S BEAT COMES HOME BEFORE THE
         # INTERPRET: a bubble's scheduled beat never merges its own frame
         # (`spatial_frames.detect_merge`), so this beat is where she rejoins,
@@ -1906,8 +2131,14 @@ def _run_pipeline(chat_id, turn_id, from_key=None, only_key=None, refuse_blockin
         if not is_offscreen_beat(chat_id, turn_row):
             cast_rows = _merge_bubbles_the_beat_reaches(
                 ctx, chat_id, turn_row, filed_under="director_interpret") or cast_rows
+        # ...the stages anchored before the interpretation, in their places...
+        for index in range(head_from, len(head) - 1):
+            key, label = head[index]
+            yield from _step_stream(bus, turn_id, key, label, index, ctx,
+                                    variant_count(turn_id, key))
+        # ...and the interpretation, the head's last step.
         yield from _step_stream(bus, turn_id, "director_interpret",
-            step_label("director_interpret"), 0, ctx,
+            step_label("director_interpret"), len(head) - 1, ctx,
             variant_count(turn_id, "director_interpret"))
 
     # A BUBBLE THIS BEAT WALKS THE PLAYER INTO REJOINS BEFORE THE BEAT
@@ -1958,7 +2189,9 @@ def _run_pipeline(chat_id, turn_id, from_key=None, only_key=None, refuse_blockin
         # Refuse before deleting orphans or marking anything stale -- an
         # unknown from_key must surface as an error the caller resolves,
         # exactly like the establishment branch, not silently degrade into
-        # a full recompute of the whole turn.
+        # a full recompute of the whole turn. A BACKSTOP now: the refusal is
+        # decided before the rewind (`_refusal_before_the_rewind`), and only a
+        # gated key the restored world unplanned still reaches this line.
         raise RuntimeError(
             f"step '{from_key}' is not in this turn's plan"
         )
@@ -1971,9 +2204,12 @@ def _run_pipeline(chat_id, turn_id, from_key=None, only_key=None, refuse_blockin
             continue
         delete_step(s["id"])
 
-    start_i = keys.index(start_key) if (start_key in keys) else 1
+    # The walk starts after the head, which ran or was read back above.
+    first = (keys.index("director_interpret") + 1
+             if "director_interpret" in keys else 1)
+    start_i = keys.index(start_key) if (start_key in keys) else first
     mark_steps_stale(turn_id, keys[start_i:])
-    i = 1
+    i = first
     while i < len(plan):
         key, label = plan[i]
         if i < start_i:
@@ -2156,16 +2392,15 @@ def run_pipeline(
         }
 
     except Exception:
-        try:
-            # ...unless a rewind took this beat back while it ran (the world is
-            # the restored one, its pending notices not this run's), or this
-            # run's own rewind was refused before it wrote anything
-            from persist.beat_order import RewindRefused
-            if (not isinstance(sys.exc_info()[1], RewindRefused)
-                    and q("SELECT 1 FROM turns WHERE id=?", (turn_id,), one=True)):
-                wset(chat_id, "pending", [])
-        except Exception:
-            pass
+        # THE CAST'S PENDING NOTICES ARE KEPT. An arrival or a departure the
+        # cast routes queued on `pending` is cleared by the commit that heard
+        # it (`persist.commit`'s `pending` domain), and only by it. This branch
+        # wiped the list on any failure -- since the first upload, with no
+        # stated reason -- so a provider error at `director_interpret` (the
+        # measured HTTP 402, PQ10) left the retry's interpretation never told
+        # the character had come, while a Stop, which takes the `Aborted`
+        # branch above, kept it (audit of 2026-11-01, agents_runtime_loops_
+        # mapping F3).
         _discard_stepless_turn(chat_id, turn_id)
         raise
 

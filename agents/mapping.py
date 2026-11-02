@@ -110,7 +110,7 @@ def is_contained_destination(target, scene):
     (chats 74-76): every containment room the Director minted would have
     been filed as a door the plan forgot.
     """
-    folded = normalize_room_id(str(target or ""))
+    folded = _folds(target)
     if not folded:
         return False
     if contained_interior_holder(target, scene):
@@ -121,11 +121,18 @@ def is_contained_destination(target, scene):
     # Director's to mint, never a door the plan forgot.
     for eid, entity in ((scene or {}).get("entities") or {}).items():
         entity = entity if isinstance(entity, dict) else {}
-        if folded in ({normalize_room_id(str(eid)),
-                       normalize_room_id(str(entity.get("name") or ""))}
-                      - {""}):
+        if folded & (_folds(eid) | _folds(entity.get("name"))):
             return True
     return False
+
+
+def _folds(text):
+    """The spellings one name folds to: `normalize_room_id`'s ASCII slug and
+    the same slug in every script (`language_runtime.fold_key`), so a name
+    written in a script the slug empties -- 宿屋, ホール -- still compares
+    with itself. For ASCII the two are one string."""
+    from language_runtime import fold_key
+    return {normalize_room_id(str(text or "")), fold_key(text, "_")} - {""}
 
 
 def contained_interior_holder(target, scene):
@@ -137,7 +144,7 @@ def contained_interior_holder(target, scene):
     target names an entity itself rather than its inside: standing at a body
     is not standing in one, and a room is what this answers about.
     """
-    folded = normalize_room_id(str(target or ""))
+    folded = _folds(target)
     if not folded:
         return ""
     rooms = (scene or {}).get("rooms") or {}
@@ -147,20 +154,20 @@ def contained_interior_holder(target, scene):
     holder = ""
     for eid, entity in ((scene or {}).get("entities") or {}).items():
         entity = entity if isinstance(entity, dict) else {}
-        spellings = {normalize_room_id(str(eid)),
-                     normalize_room_id(str(entity.get("name") or ""))} - {""}
-        if folded in spellings:
+        spellings = _folds(eid) | _folds(entity.get("name"))
+        if folded & spellings:
             # The entity itself, not a place inside it.
             return ""
-        if any(folded.startswith(sp + "_") for sp in spellings):
+        if any(fold.startswith(sp + "_") for fold in folded for sp in spellings):
             holder = holder or str(eid)
         for rid in entity.get("interior_rooms") or ():
-            if normalize_room_id(str(rid)) == folded:
+            if _folds(rid) & folded:
                 return str(eid)
     return holder
 
 
-def _transit_destination_needs(scene, planned_for, *, turn_idx, frame_id):
+def _transit_destination_needs(scene, planned_for, *, turn_idx, frame_id,
+                               aliases=None):
     """A room need for every vehicle moving toward no room, and one for
     every vehicle moving THROUGH no room.
 
@@ -191,8 +198,19 @@ def _transit_destination_needs(scene, planned_for, *, turn_idx, frame_id):
     nobody built it -- off the map, in no room, its `destination_room` the
     place's name (`spatial.docked_off_the_map`, `mechanics._fire_due_events`)
     -- and stands there the beat the place is a room, so that place is one
-    somebody has to plan, as it was while the vessel was under way."""
-    from world.planning_needs import planning_need
+    somebody has to plan, as it was while the vessel was under way.
+
+    A DESTINATION THE SCENE HOLDS UNDER ANY SPELLING IS HELD: its id, its
+    name, its name's words, an alias the registry keeps (`scene_room_id`,
+    the reading the mechanics give the same field). This compared the
+    spelling to the scene's keys exactly, so a ferry bound for "Cope's
+    Boatyard" asked the Room to plan a duplicate of `copes_boatyard` (audit of
+    2026-11-01, world_misc_causal F8). And A VESSEL BOUND NOWHERE is the
+    vessel's need, one per vessel: filed under its own name, it asked for a
+    ROOM called the vessel -- chats 154, 157 and 158 each hold an open
+    `room:the tardis` need, chat 154's scene holding `tardis_console_room`
+    inside that very vessel."""
+    from world.planning_needs import need_identity, planning_need
     from world.spatial import docked_off_the_map, room_of_record
     needs = []
     rooms = (scene or {}).get("rooms") or {}
@@ -209,10 +227,13 @@ def _transit_destination_needs(scene, planned_for, *, turn_idx, frame_id):
         label = str(ent.get("name") or eid)
         route = str(transit.get("route_room") or "").strip()
         origin = str(transit.get("departed_from") or "").strip()
-        if not (destination and (destination in rooms or planned_for(destination))):
+        held = scene_room_id(scene, destination, aliases) if destination else ""
+        if not (held or (destination and planned_for(destination))):
             needs.append(planning_need(
                 "room", "transit_destination_unplanned",
-                subject=destination or label,
+                subject=destination or "%s -> ?" % label,
+                identity=None if destination else need_identity(
+                    "room", "vehicle:%s:destination" % eid),
                 surface={"vehicle": str(eid),
                          "route_room": route,
                          "eta_seconds": str(transit.get("eta_seconds") or "")},
@@ -239,11 +260,26 @@ def _transit_destination_needs(scene, planned_for, *, turn_idx, frame_id):
     return needs
 
 
-def classify_movement(interp, scene, *, planned_for):
+def _held_room_aliases(cid, scene):
+    """`{room id: [spelling, ...]}`: the further names the world keeps for
+    the rooms the scene holds -- the reader the prose Director resolves a
+    destination through (`director_prose.room_aliases`), so the compiler and
+    the Director answer "is this room held?" alike. Fail-open: no aliases,
+    and every room answers to its own spellings as before."""
+    try:
+        from .director_prose import room_aliases
+        return room_aliases(cid, (scene or {}).get("rooms") or {})
+    except Exception:  # noqa: BLE001 -- the rooms' own spellings stand
+        return {}
+
+
+def classify_movement(interp, scene, *, planned_for, aliases=None):
     """Where the beat is going, and whether the world has it.
 
     ``planned_for(query)`` answers with the plan's record for a room the
-    plan holds under that spelling, or None. Returns
+    plan holds under that spelling, or None. ``aliases`` is `{room id:
+    [spelling, ...]}`, the further names the world keeps for the rooms the
+    scene holds (`_held_room_aliases`). Returns
     ``{"to_room", "status"}`` with status one of ``known`` (a scene room),
     ``planned`` (the plan holds it; the Director furnishes it on entry),
     ``contained`` (an entity or its inside -- the Director's to mint, see
@@ -264,7 +300,14 @@ def classify_movement(interp, scene, *, planned_for):
     # 2026-09-07 B2: this compared the model's spelling to the scene keys
     # EXACTLY while commit's mint dedup folded, so one beat could raise a
     # planning need here and a redirect there for the same room.
-    held = scene_room_id(scene, target)
+    #
+    # AND TO EVERY NAME THE REGISTRY KEEPS FOR IT, as the prose Director reads
+    # the same destination (`director_prose.destination_place`): a room minted
+    # "Scullery" and renamed "Kitchen" was held for the Director and
+    # unplanned here, so the compiler filed a need and `canonical_movement`
+    # left the old spelling standing for the commit's destination ledgers
+    # (audit of 2026-11-01, agents_runtime_loops_mapping F7).
+    held = scene_room_id(scene, target, aliases)
     if held:
         out = {"to_room": held, "status": "known"}
         if held != target:
@@ -303,34 +346,47 @@ def classify_movement(interp, scene, *, planned_for):
     return {"to_room": target, "status": "unplanned"}
 
 
-def _location_query_status(query, scene, *, planned_for, destination=None):
+def _location_query_status(query, scene, *, planned_for, destination=None,
+                           aliases=None):
     """A location query is answered by the scene, by the plan, or by nobody.
 
     The Director writes the query as a DESCRIPTION, not an id -- "Reeve's
     Hall interior and occupants", "Ford Inn kitchen Harrowmere" (21 of 21
     on the Harrowmere replay named a room this way and none was an id) --
-    so a room answers it when the room's own spelling, uid or name, is the
-    query or sits inside it, which is the reading `structure.planned_context`
-    has always applied to the plan. And a query that rides a beat whose
-    destination the world already holds is a request for lore ABOUT that
-    room, not for the room: the destination answers it.
+    so a room answers it when the room's own spelling, uid, name or an alias
+    the world keeps, stands in the query as a WHOLE name
+    (`structure.rooms_named_whole`, the reading `structure.planned_context`
+    applies to the plan). And a query that rides a beat whose destination
+    the world already holds is a request for lore ABOUT that room, not for
+    the room: the destination answers it.
     """
     if not query:
         return None
 
     if destination in ("known", "planned", "contained"):
         return destination
-    folded = normalize_room_id(str(query))
-    if not folded:
+    from language_runtime import fold_key
+    from world.structure import rooms_named_whole
+    if not fold_key(query):
         return None
     rooms = (scene or {}).get("rooms") or {}
+    aliases = aliases if isinstance(aliases, dict) else {}
+    # Same spellings as every other reader (`spatial.room_spellings`, the
+    # registry's aliases); only the PREDICATE differs, because a query is a
+    # description and a description holds the room's spelling rather than
+    # being it. Held as a WHOLE name: the bare substring test this was let a
+    # held `inn` answer "the inner keep" and "the old spinning mill", so no
+    # `location_query_unmatched` need was ever raised for either (audit of
+    # 2026-11-01, agents_runtime_loops_mapping F5).
+    forms = {}
     for rid, room in rooms.items():
-        # Same spellings as every other reader (`spatial.room_spellings`);
-        # only the PREDICATE differs, because a query is a description and a
-        # description contains the room's spelling rather than being it.
-        if any(sp == folded or sp in folded
-               for sp in room_spellings(rid, room)):
-            return "known"
+        spellings = set(room_spellings(rid, room)) | {str(rid)}
+        if isinstance(room, dict) and str(room.get("name") or "").strip():
+            spellings.add(str(room["name"]))
+        spellings.update(str(alias) for alias in aliases.get(str(rid)) or ())
+        forms[str(rid)] = spellings
+    if rooms_named_whole(query, forms):
+        return "known"
     if planned_for(query):
         return "planned"
     if is_contained_destination(query, scene):
@@ -477,7 +533,7 @@ def compile_world_context(ctx, nonce):
     ahead of it. ``nonce`` is accepted for the step-handler signature and
     unused -- a reroll of this step is the same compilation.
     """
-    from world.planning_needs import planning_need
+    from world.planning_needs import NEED_KINDS, planning_need
     from world.structure import planned_context
 
     chat = ctx.chat
@@ -525,6 +581,7 @@ def compile_world_context(ctx, nonce):
             relevant_books.append(bid)
 
     scene = get_scene(cid, chat)
+    aliases = _held_room_aliases(cid, scene)
 
     def planned_for(spelling):
         try:
@@ -533,11 +590,12 @@ def compile_world_context(ctx, nonce):
             ctx.add_warning(f"planned room context not attached: {exc}")
             return None
 
-    movement = classify_movement(interp, scene, planned_for=planned_for)
+    movement = classify_movement(interp, scene, planned_for=planned_for,
+                                 aliases=aliases)
     location_query = interp.get("location_query") or None
     query_status = _location_query_status(
         location_query, scene, planned_for=planned_for,
-        destination=movement["status"])
+        destination=movement["status"], aliases=aliases)
 
     planned = None
     if movement["status"] == "planned":
@@ -568,8 +626,16 @@ def compile_world_context(ctx, nonce):
         if not subject:
             continue
         # A request for a room the plan holds is not a need: the plan is
-        # the answer, and the Director is handed it (`planned_rooms`).
-        if str(request.get("kind") or "room") == "room" and (
+        # the answer, and the Director is handed it (`planned_rooms`). The
+        # plan holds only rooms, so a plan room under the request's name
+        # answers any request but one that SAYS it is a person or a thing --
+        # whatever word it uses for a place, or none. This asked the plan
+        # only of `room` and of no kind, and the ledger then filed the
+        # kindless one as a PERSON (audit of 2026-11-01, world_misc_causal
+        # F9): one request, two kinds. An unstated kind is now `thing` in
+        # both readers (`planning_needs.need_kind`).
+        stated = str(request.get("kind") or "").strip().casefold()
+        if not (stated in NEED_KINDS and stated != "room") and (
                 planned_for(subject) or planned_for(request.get("location_id"))):
             continue
         try:
@@ -583,7 +649,8 @@ def compile_world_context(ctx, nonce):
             ctx.add_warning(f"generation request not recorded: {exc}")
     for need in _transit_destination_needs(scene, planned_for,
                                            turn_idx=turn_idx,
-                                           frame_id=frame_id):
+                                           frame_id=frame_id,
+                                           aliases=aliases):
         needs.append(need)
     # One need per identity: the same door reached twice in one beat, under
     # whatever reasons, is one need (the first reason is kept).

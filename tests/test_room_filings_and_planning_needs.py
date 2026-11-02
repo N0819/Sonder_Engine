@@ -397,9 +397,13 @@ def test_the_room_is_told_why_a_need_is_open_and_not_only_its_kind(temp_db):
                      ("Reasons", "", time.time()))
     wset(cid, "scene", {"rooms": {"hall": {"name": "Hall", "adjacent": []}},
                         "positions": {"Player": "hall"}})
+    # `setting_fact` was the measured reason, and it is RETIRED: a need of
+    # that reason is closed as it is read (`RETIRED_NEED_REASONS`, audit of
+    # 2026-11-01, world_misc_causal F11), so the reason this pins is carried
+    # by a live one that is also filed as a `thing`.
     record_planning_needs(cid, [
-        planning_need("thing", "setting_fact",
-                      subject="A Euclid-class containment breach has occurred.",
+        planning_need("thing", "rendered_unplanned",
+                      subject="a brass astrolabe on the lectern",
                       surface={"room": "hall"}),
         planning_need("thing", "generation_request",
                       subject="comes back off the vaulting a half-second later",
@@ -408,10 +412,11 @@ def test_the_room_is_told_why_a_need_is_open_and_not_only_its_kind(temp_db):
     report = frontier_report(cid, None)
     assert report["open_needs"] == {"thing": 2}
     assert report["open_needs_by_reason"] == {
-        "setting_fact": 1, "generation_request": 1}
+        "rendered_unplanned": 1, "generation_request": 1}
     rows = [n for room in _plan_here(cid, None, ["hall"]).values()
             for n in room.get("needs") or ()]
-    assert {n["reason"] for n in rows} == {"setting_fact", "generation_request"}
+    assert {n["reason"] for n in rows} == {"rendered_unplanned",
+                                           "generation_request"}
 
 
 # ---- one read and one write for the beat (review 2026-09-07 C20) ------------

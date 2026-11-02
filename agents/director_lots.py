@@ -38,8 +38,8 @@ from __future__ import annotations
 
 import time
 
-from world.lots import (LOT_KEY, LOT_OF_KEY, LOT_ROOMS_MAX, is_unexpanded_lot,
-                        normalize_lot)
+from world.lots import (LOT_KEY, LOT_OF_KEY, LOT_ROOMS_MAX, LOT_STOREYS_MAX,
+                        is_unexpanded_lot, normalize_lot)
 
 #: The call's step key, by which the capture files it (`persist/llm_capture.py`).
 LOT_STEP = "director_rooms_layout_lot"
@@ -138,11 +138,13 @@ def planned_rooms_of(lot_uid, rows, answer, *, turn_idx=None):
     `sleeps` `{uid: how many sleep there}` where the answer says.
     `({}, notes, {})` when nothing can stand.
 
-    Held: at most `LOT_ROOMS_MAX` rooms, ids unique; ONE entry on the ground
-    storey (the first room the answer marks, else its first room on the
-    ground, else none); a join to a room the answer does not hold dropped; a
-    stair only between neighbouring storeys; every room reached from the
-    entry, the rest set aside. The entry keeps the lot's name, its far look
+    Held: at most `LOT_ROOMS_MAX` rooms, ids unique; every room on a storey
+    the lot has -- the plan's `storeys` above the ground (`LOT_STOREYS_MAX`
+    where it gives none) and the one below only with its `cellar` -- the rest
+    set aside; ONE entry on the ground storey (the first room the answer
+    marks, else its first room on the ground, else none); a join to a room
+    the answer does not hold dropped; a stair only between neighbouring
+    storeys; every room reached from the entry, the rest set aside. The entry keeps the lot's name, its far look
     and its ways onto the ground; its purpose becomes its own, and what the
     lot said of the whole building is kept on its record (`building`), as
     its footprint is."""
@@ -170,6 +172,27 @@ def planned_rooms_of(lot_uid, rows, answer, *, turn_idx=None):
             level = 0
         rooms[rid] = {"item": item, "level": level}
         order.append(rid)
+    # THE STOREYS THE PLAN GIVES. The architect is told the lot's `storeys`
+    # and whether a storey lies below the ground, and any integer `level` was
+    # planted: a lot planned `storeys: 1` with no cellar stood on levels
+    # -1..4, no note, its record and its building disagreeing and the layout
+    # tier laying out a tower (audit of 2026-11-01, agents_runtime_loops_
+    # mapping F14). A room on a storey the lot does not have is set aside and
+    # said; what only it reached is set aside below, by the reachability
+    # walk. Where the plan gives no storeys, `LOT_STOREYS_MAX` -- the storeys
+    # a lot may ask for -- bounds the answer as it bounds the ask.
+    lowest = -1 if lot.get("cellar") else 0
+    highest = int(lot.get("storeys") or LOT_STOREYS_MAX) - 1
+    off_storey = set()
+    for rid in list(order):
+        level = rooms[rid]["level"]
+        if lowest <= level <= highest:
+            continue
+        notes.append(f"{rid}: on storey {level}, which the lot does not have "
+                     f"(storeys {lowest} to {highest}), set aside")
+        off_storey.add(rid)
+        order.remove(rid)
+        del rooms[rid]
     if not order:
         return {}, notes + ["the answer names no room"], {}
     entry = next((r for r in order if rooms[r]["item"].get("entry") is True
@@ -195,7 +218,7 @@ def planned_rooms_of(lot_uid, rows, answer, *, turn_idx=None):
                 continue
             to = normalize_room_id(str(join.get("to") or ""))
             if to not in rooms or to == rid:
-                if to:
+                if to and to not in off_storey:
                     notes.append(f"{rid}: a join to {to}, no room of the answer, dropped")
                 continue
             vertical = normalize_vertical(join.get("vertical"))
@@ -303,32 +326,62 @@ def _file_failure(cid, lot_uid, turn_idx, error):
         wset(cid, LOT_RUNS_KEY, runs)
 
 
-def deal_berths(cid, lot_uid, sleeps, *, frame_id=None):
+def deal_berths(cid, lot_uid, sleeps, *, frame_id=None, notes=None):
     """THE LOT'S SLEEPERS GO TO THE ROOMS THEY SLEEP IN: every charter body
     berthed at the lot, by key, dealt over the rooms the architect says people
     sleep in (`sleeps`, `{uid: how many}`), in the plan's order, each filled to
     its count and the rest to the last; how many were moved. Their `place`
     stays where it is -- the entry still stands where it stood -- so a body at
     home is still at home. Nothing moves where no room says it sleeps anyone,
-    and the lot's uid, the entry's, stays a berth that names a place."""
+    and the lot's uid, the entry's, stays a berth that names a place.
+
+    DEALT BY ARITHMETIC, AND THE OVERFLOW SAID. This built one list slot per
+    bed from the answer's unbounded `sleeps` -- "sleeps": 100000000 built a
+    hundred-million-element list in the job's thread -- and put every
+    sleeper past the beds in the last room without a word: twelve bodies over
+    beds for 2 + 2 + 1 berthed eight in the one-bed garret, past the charter's
+    own `BERTH_CEILING` (audit of 2026-11-01, world_layout_bridge_structure
+    F10). Where the overflow goes is unchanged -- the last sleeping room --
+    and is the owner's to change; it is now appended to `notes`.
+
+    ONE READ-MODIFY-WRITE UNDER THE WRITE LOCK: the registry is read and saved
+    inside one `transaction()`, so a commit's charter flush cannot land between
+    them and be overwritten (agents_runtime_loops_mapping F4)."""
     if not sleeps:
         return 0
+    from core.db import transaction
     from world.charter_runtime import registry_for_update, save_registry
-    registry = registry_for_update(cid, frame_id)
-    berthed = []
-    for ckey, charter in sorted((registry.get("items") or {}).items()):
-        bodies = ((charter or {}).get("state") or {}).get("bodies") or {}
-        for bkey in sorted(bodies):
-            body = bodies[bkey]
-            if isinstance(body, dict) and str(body.get("berth") or "") == lot_uid:
-                berthed.append(body)
-    if not berthed:
-        return 0
-    slots = [uid for uid, n in sleeps.items() for _ in range(int(n))]
-    last = list(sleeps)[-1]
-    for k, body in enumerate(berthed):
-        body["berth"] = slots[k] if k < len(slots) else last
-    save_registry(cid, registry, frame_id)
+    beds = []
+    for uid, count in sleeps.items():
+        try:
+            beds.append((uid, max(0, int(count))))
+        except (TypeError, ValueError):
+            beds.append((uid, 0))
+    with transaction():
+        registry = registry_for_update(cid, frame_id)
+        berthed = []
+        for ckey, charter in sorted((registry.get("items") or {}).items()):
+            bodies = ((charter or {}).get("state") or {}).get("bodies") or {}
+            for bkey in sorted(bodies):
+                body = bodies[bkey]
+                if isinstance(body, dict) and str(body.get("berth") or "") == lot_uid:
+                    berthed.append(body)
+        if not berthed:
+            return 0
+        dealt = 0
+        for uid, count in beds:
+            take = min(count, len(berthed) - dealt)
+            for body in berthed[dealt:dealt + take]:
+                body["berth"] = uid
+            dealt += take
+        last = beds[-1][0]
+        over = berthed[dealt:]
+        for body in over:
+            body["berth"] = last
+        if over and notes is not None:
+            notes.append(f"{len(over)} sleepers past the {dealt} beds the "
+                         f"building's rooms hold, berthed in {last}")
+        save_registry(cid, registry, frame_id)
     return len(berthed)
 
 
@@ -361,16 +414,30 @@ def expand_lot(cid, lot_uid, scene=None, *, call=None, language_id=None,
             logger.info("lot: chat=%s lot=%s not expanded: %s", cid, lot_uid,
                         "; ".join(notes[:6]))
             return []
-        if job is not None and jobs.is_cancelled(job):
-            return []
-        # THE PLAN MAY HAVE MOVED WHILE THE CALL RAN: the lot re-planned, or
-        # expanded by the beat that walked into it
-        if registry_rows(cid).get(lot_uid, {}).get("planned") != entry["planned"]:
-            return []
-        structure = _structure_as_held(cid, {"key": str(entry["planned"].get("structure") or "")})
-        _structure, planted = plant_structure(cid, structure, rooms)
-        dealt = deal_berths(cid, lot_uid, {uid: n for uid, n in sleeps.items() if uid in planted},
-                            frame_id=frame_id)
+        # ONE LOCK FROM THE RE-CHECK TO THE BERTHS. The re-check, the
+        # planting and the charter registry's read-modify-write ran as three
+        # separate writes, the last outside any transaction: two expansions of
+        # one lot -- the job's and a beat's, or two frames' jobs -- returning
+        # from their calls together could both pass the re-check and both
+        # plant, and a commit's charter flush landing inside `deal_berths` was
+        # overwritten (audit of 2026-11-01, agents_runtime_loops_mapping F4,
+        # agents_director_prose_movement_rooms F6). `transaction()` is the
+        # process-wide write lock and BEGIN IMMEDIATE; the planting's and the
+        # dealing's own transactions nest inside it as savepoints.
+        from core.db import transaction
+        with transaction():
+            if job is not None and jobs.is_cancelled(job):
+                return []
+            # THE PLAN MAY HAVE MOVED WHILE THE CALL RAN: the lot re-planned,
+            # or expanded by the beat that walked into it
+            if registry_rows(cid).get(lot_uid, {}).get("planned") != entry["planned"]:
+                return []
+            structure = _structure_as_held(
+                cid, {"key": str(entry["planned"].get("structure") or "")})
+            _structure, planted = plant_structure(cid, structure, rooms)
+            dealt = deal_berths(
+                cid, lot_uid, {uid: n for uid, n in sleeps.items() if uid in planted},
+                frame_id=frame_id, notes=notes)
         if dealt:
             notes.append(f"{dealt} sleepers berthed in the building's rooms")
         logger.info("lot: chat=%s lot=%s expanded into %d rooms in %.1fs%s", cid, lot_uid,
@@ -432,19 +499,59 @@ def expand_entered_lots(cid, develop, scene, language_id, *, call=None, turn_idx
                         frame_id=None):
     """The beat's half: `develop` (`{room: brief}`, the planned rooms the beat
     enters) with each lot among them expanded first and its brief read again
-    as its building's entry. A lot that is not expanded keeps its brief."""
+    as its building's entry. A lot that is not expanded keeps its brief, and
+    the beat is told so.
+
+    EVERY LOT'S BRIEF IS READ AGAIN, WHOEVER EXPANDED IT. `develop` was built
+    with the stage's payload, and the rooms-in-view job expands exactly the
+    lot an actor is heading for: a lot it planted between the payload and
+    this call was skipped here as already expanded and kept its LOT brief --
+    the whole building's purpose, designed as one room, which is what the
+    lot exists to prevent; the same when this beat's own expansion lost the
+    race to the job. And a lot the beat could not expand left no trace of it
+    (audit of 2026-11-01, agents_director_prose_movement_rooms F5): each
+    outcome is now a decision on the step, and a lot left as one room a
+    warning."""
     if not develop:
         return develop
+    from core.pipeline_context import note_step_decision, note_step_warning
     from world.structure import planned_room_brief, registry_rows
     rows = registry_rows(cid)
-    lots = [rid for rid in develop if is_unexpanded_lot((rows.get(rid) or {}).get("planned"))]
+    lots = [rid for rid in develop
+            if normalize_lot(((rows.get(rid) or {}).get("planned") or {}).get(LOT_KEY))
+            is not None]
     if not lots:
         return develop
     out = dict(develop)
     for rid in lots:
-        if expand_lot(cid, rid, scene, call=call, language_id=language_id, turn_idx=turn_idx,
-                      frame_id=frame_id):
+        try:
+            if is_unexpanded_lot((rows.get(rid) or {}).get("planned")):
+                if expand_lot(cid, rid, scene, call=call, language_id=language_id,
+                              turn_idx=turn_idx, frame_id=frame_id):
+                    note_step_decision("lot_expansion", rid, "expanded",
+                                       "expanded by the beat that entered it")
+                elif is_unexpanded_lot((registry_rows(cid).get(rid) or {}).get("planned")):
+                    runs = _lot_runs(cid).get(rid) or {}
+                    why = str(runs.get("error") or "not asked: waiting after a "
+                              "failure, or described by the story already")
+                    note_step_decision("lot_expansion", rid, "not expanded", why[:200])
+                    note_step_warning(
+                        f"lot {rid}: not expanded into its building ({why[:160]}); "
+                        "the beat designs it as one room")
+                    continue
             brief = (planned_room_brief(cid, scene, [rid]) or {}).get(rid)
-            if brief:
-                out[rid] = brief
+        except Exception as exc:  # noqa: BLE001 -- a lot never stops a beat; said
+            note_step_warning(f"lot {rid}: its building could not be read "
+                              f"({type(exc).__name__}: {str(exc)[:160]}); the "
+                              "beat designs it from the brief it had")
+            continue
+        if brief:
+            out[rid] = brief
     return out
+
+
+def _lot_runs(cid):
+    """`LOT_RUNS_KEY`'s record, `{lot uid: {turn, failed, error}}`, or {}."""
+    from core.db import wget
+    runs = wget(cid, LOT_RUNS_KEY) or {}
+    return runs if isinstance(runs, dict) else {}

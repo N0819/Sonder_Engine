@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import copy
 import json
 import random
@@ -426,6 +427,13 @@ def deterministic_micro_perception(ctx, actor_id, actor_result, scene, *,
         proximity = measured_proximity_rel(scene, observer_name, actor_name)
         additions = []
         observations = []
+        # The third-body admission's two sets, read once for this observer on
+        # its first act (`_micro_body_forms`, `_micro_seen_bodies`): neither
+        # depends on the event, and both were rebuilt for every action event
+        # -- the seen set a `visual_level_between` per positioned subject --
+        # per observer, per round (audit of 2026-11-01, agents_runtime_loops_
+        # mapping, Efficiency 3).
+        admission = None
         for event_index, event in enumerate(actor_result.get("sequence") or []):
             previous_count = len(additions)
             if event.get("type") in ("speech", "communication"):
@@ -567,11 +575,13 @@ def deterministic_micro_perception(ctx, actor_id, actor_result, scene, *,
                 # sentence that named an unseen body's state in a composed
                 # view named it here too. Same helper, from the module that
                 # owns it, so the three cannot drift.
+                if admission is None:
+                    admission = (_micro_body_forms(ctx, scene, observer_name),
+                                 _micro_seen_bodies(scene, observer_name,
+                                                    observer_senses))
                 surface, _cut = _act_surface_admission(
                     surface, actor=actor_name, observer=observer_name,
-                    forms_by_body=_micro_body_forms(ctx, scene, observer_name),
-                    perceived=_micro_seen_bodies(
-                        scene, observer_name, observer_senses),
+                    forms_by_body=admission[0], perceived=admission[1],
                     who="%s -> %s" % (actor_name, observer_name))
                 fidelity = "rendered"
                 if surface and _detail == "shapes":
@@ -608,6 +618,49 @@ def _cap_label(label):
     text = str(label or "")
     return text[:1].upper() + text[1:]
 
+#: THE WORLD THE REACTOR GATES READ, read once while a stage chooses who
+#: answers (`_gates_read_once`): the context's in-stage channel
+#: `{"scene"?, "amap"?}` (registered in `runtime.SIDE_CHANNELS`), absent outside
+#: the block, when each gate reads for itself as it always did. On the context
+#: rather than in a contextvar: nothing outside the one block it lives in can
+#: see it, and a background job's copied context never carries it.
+_GATE_READS_KEY = "_gate_reads"
+
+
+@contextlib.contextmanager
+def _gates_read_once(ctx):
+    """While a stage widens and gates its reactors, `_drop_absent` and
+    `_drop_non_awake` read the scene and the awareness map ONCE between them.
+
+    `interaction_loop` gates after each of its widenings, and each gate read
+    the world for itself: a `get_scene` (a database read, a JSON parse -- 0.55
+    ms for the largest stored scene, 54.8 KB -- plan overlays and the onset
+    overlay) and an `awareness_map` query per widening, about twenty scene
+    reads a beat with reactors (audit of 2026-11-01, agents_runtime_loops_
+    mapping, Efficiency 1). Nothing either gate reads changes while the stage
+    chooses who answers -- no stage writes the scene, and the loop's first
+    call comes after -- so one read stands for all of them, and the memo ends
+    with the block."""
+    if not isinstance(getattr(ctx, "_extra", None), dict):
+        yield                   # a stand-in context: each gate reads for itself
+        return
+    ctx._extra[_GATE_READS_KEY] = {}
+    try:
+        yield
+    finally:
+        ctx._extra.pop(_GATE_READS_KEY, None)
+
+
+def _gate_read(ctx, field, read):
+    extra = getattr(ctx, "_extra", None)
+    memo = extra.get(_GATE_READS_KEY) if isinstance(extra, dict) else None
+    if not isinstance(memo, dict):
+        return read()
+    if field not in memo:
+        memo[field] = read()
+    return memo[field]
+
+
 def _drop_non_awake(ctx, reactor_ids):
     """Remove unconscious/asleep/sedated cast from a reactor list -- a non-awake
     mind neither perceives nor reacts. build_plan does the same before planning;
@@ -616,7 +669,7 @@ def _drop_non_awake(ctx, reactor_ids):
     guard as a final backstop)."""
     if not reactor_ids:
         return reactor_ids
-    amap = awareness_map(ctx.chat.id)
+    amap = _gate_read(ctx, "amap", lambda: awareness_map(ctx.chat.id))
     id_to_name = {c["id"]: character_name_from_text(c["sheet"]) for c in ctx.cast}
     return [rid for rid in reactor_ids
             if awareness_of(amap, id_to_name.get(rid, "")) not in NON_AWAKE_GATED]
@@ -653,7 +706,7 @@ def _drop_absent(ctx, reactor_ids):
     """
     if not reactor_ids:
         return reactor_ids
-    scene = get_scene(ctx.chat.id, ctx.chat)
+    scene = _gate_read(ctx, "scene", lambda: get_scene(ctx.chat.id, ctx.chat))
     present = {b["id"] for b in _present_cast_bodies(scene, ctx.cast)}
     kept = [rid for rid in reactor_ids if rid in present]
     if len(kept) != len(reactor_ids):
@@ -1112,49 +1165,53 @@ def interaction_loop(ctx, nonce):
 
     interp = _dict(ctx.director_interpret)
     flow = _dict(interp.get("flow"))
-    initial_reactors = _drop_absent(ctx, _drop_non_awake(
-        ctx, normalize_character_refs(_list(flow.get("reactors")), ctx.cast)))
-    # The same widening the planner applied: a body elsewhere that heard
-    # the player's line is called to (`common.widen_reactors_to_hearers`).
-    if player_speech_lines(interp):
+    # One read of the scene and of the awareness map for every gate below
+    # (`_gates_read_once`): nothing either reads changes while the loop
+    # chooses who answers.
+    with _gates_read_once(ctx):
+        initial_reactors = _drop_absent(ctx, _drop_non_awake(
+            ctx, normalize_character_refs(_list(flow.get("reactors")), ctx.cast)))
+        # The same widening the planner applied: a body elsewhere that heard
+        # the player's line is called to (`common.widen_reactors_to_hearers`).
+        if player_speech_lines(interp):
+            initial_reactors = _drop_absent(ctx, _drop_non_awake(ctx, [
+                int(cid) for cid in widen_reactors_to_hearers(
+                    ctx.chat.id, ctx.cast, interp, list(initial_reactors))]))
+        # ...and a body elsewhere that answered the player last beat
+        # (`common.widen_reactors_to_engaged`).
         initial_reactors = _drop_absent(ctx, _drop_non_awake(ctx, [
-            int(cid) for cid in widen_reactors_to_hearers(
+            int(cid) for cid in widen_reactors_to_engaged(
+                ctx.chat.id, ctx.cast, list(initial_reactors), ctx.turn.idx,
+                ctx.turn.frame_id)]))
+        # ...and the body the player is inside, or holds inside them
+        # (`common.widen_reactors_to_enclosure`).
+        initial_reactors = _drop_absent(ctx, _drop_non_awake(ctx, [
+            int(cid) for cid in widen_reactors_to_enclosure(
+                ctx.chat.id, ctx.cast, list(initial_reactors))]))
+        # ...and a cast member a bubble returned this beat, whom the interpret
+        # never saw (`common.widen_reactors_to_rejoined`). The planner gave her
+        # the loop; without this the loop itself stopped on "no reactors"
+        # (scratch story 166 idx 13, the second replay).
+        initial_reactors = _drop_absent(ctx, _drop_non_awake(ctx, [
+            int(cid) for cid in widen_reactors_to_rejoined(
+                ctx.chat.id, ctx.cast, list(initial_reactors), ctx.turn.idx,
+                ctx.turn.frame_id)]))
+        # ...and a body the declaration's own acts are aimed at, whom addressing
+        # somebody else no longer silences (`common.widen_reactors_to_acted_upon`;
+        # Brackwater chat 166 idx 30, the brother at the table).
+        initial_reactors = _drop_absent(ctx, _drop_non_awake(ctx, [
+            int(cid) for cid in widen_reactors_to_acted_upon(
                 ctx.chat.id, ctx.cast, interp, list(initial_reactors))]))
-    # ...and a body elsewhere that answered the player last beat
-    # (`common.widen_reactors_to_engaged`).
-    initial_reactors = _drop_absent(ctx, _drop_non_awake(ctx, [
-        int(cid) for cid in widen_reactors_to_engaged(
-            ctx.chat.id, ctx.cast, list(initial_reactors), ctx.turn.idx,
-            ctx.turn.frame_id)]))
-    # ...and the body the player is inside, or holds inside them
-    # (`common.widen_reactors_to_enclosure`).
-    initial_reactors = _drop_absent(ctx, _drop_non_awake(ctx, [
-        int(cid) for cid in widen_reactors_to_enclosure(
-            ctx.chat.id, ctx.cast, list(initial_reactors))]))
-    # ...and a cast member a bubble returned this beat, whom the interpret
-    # never saw (`common.widen_reactors_to_rejoined`). The planner gave her
-    # the loop; without this the loop itself stopped on "no reactors"
-    # (scratch story 166 idx 13, the second replay).
-    initial_reactors = _drop_absent(ctx, _drop_non_awake(ctx, [
-        int(cid) for cid in widen_reactors_to_rejoined(
-            ctx.chat.id, ctx.cast, list(initial_reactors), ctx.turn.idx,
-            ctx.turn.frame_id)]))
-    # ...and a body the declaration's own acts are aimed at, whom addressing
-    # somebody else no longer silences (`common.widen_reactors_to_acted_upon`;
-    # Brackwater chat 166 idx 30, the brother at the table).
-    initial_reactors = _drop_absent(ctx, _drop_non_awake(ctx, [
-        int(cid) for cid in widen_reactors_to_acted_upon(
-            ctx.chat.id, ctx.cast, interp, list(initial_reactors))]))
-    # ...and every mind a skip's far end leaves awake in the room the beat
-    # opens on for the player, whom the interpret chose its reactors before
-    # (`skip_stage.widen_reactors_to_skip_far_end`): the planner gave them the
-    # loop, and the loop must not stop on "no reactors" without them.
-    if ctx.get("skip_lives"):
-        from .skip_stage import widen_reactors_to_skip_far_end
-        initial_reactors = _drop_absent(ctx, _drop_non_awake(ctx, [
-            int(cid) for cid in widen_reactors_to_skip_far_end(
-                ctx.chat.id, ctx.cast, list(initial_reactors),
-                ctx.get("skip_lives"), interp)]))
+        # ...and every mind a skip's far end leaves awake in the room the beat
+        # opens on for the player, whom the interpret chose its reactors before
+        # (`skip_stage.widen_reactors_to_skip_far_end`): the planner gave them the
+        # loop, and the loop must not stop on "no reactors" without them.
+        if ctx.get("skip_lives"):
+            from .skip_stage import widen_reactors_to_skip_far_end
+            initial_reactors = _drop_absent(ctx, _drop_non_awake(ctx, [
+                int(cid) for cid in widen_reactors_to_skip_far_end(
+                    ctx.chat.id, ctx.cast, list(initial_reactors),
+                    ctx.get("skip_lives"), interp)]))
 
     # WHO THE BEAT LANDED ON GOES FIRST, and the beat says who that is in two
     # places: who was spoken to, and who was acted upon. Order is causality
@@ -1936,9 +1993,9 @@ def reaction_loop(ctx, nonce):
 
     # Get perceivers from perception_act
     perception_views = (ctx.perception_act or {}).get("views") or {}
-    reactor_ids = flow.get("reactors") or []
-    valid_ids = {int(row["id"]) for row in ctx.cast}
-    reactor_ids = [int(rid) for rid in reactor_ids if int(rid) in valid_ids]
+    # Every reference form `interaction_loop` reads (F13: an edited
+    # interpretation naming a reactor raised `ValueError` here).
+    reactor_ids = normalize_character_refs(_list(flow.get("reactors")), ctx.cast)
     # The body a contested act is AIMED AT is who this phase is for, whoever
     # else the beat addressed (`common.widen_reactors_to_acted_upon`); the
     # planner planned this phase on the widened list, so read the same one.
