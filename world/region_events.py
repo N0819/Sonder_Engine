@@ -80,13 +80,18 @@ def normalize_region_event(op):
     kind of change it is in the author's words (a fire, a flood, a siege --
     illustrations, not a list to match); the profile and effects are the
     engine's numbers."""
+    # Every list field through the one reader of a list field
+    # (`plot_packages.as_list`): a bare word is one room, one structure, one
+    # piece of evidence -- never its letters (audit 2026-11-01, F3).
+    from story.plot_packages import as_list
     op = op if isinstance(op, dict) else {}
     label = _text(op.get("label") or op.get("kind"), 80)
     if not label:
         raise ValueError("region_event says what kind of change it is (label)")
     fp = op.get("footprint") if isinstance(op.get("footprint"), dict) else {}
-    rooms = [_text(r, 120) for r in (fp.get("rooms") or ()) if _text(r, 120)]
-    structures = [_text(s, 120) for s in (fp.get("structures") or ()) if _text(s, 120)]
+    rooms = [_text(r, 120) for r in as_list(fp.get("rooms")) if _text(r, 120)]
+    structures = [_text(s, 120) for s in as_list(fp.get("structures"))
+                  if _text(s, 120)]
     epicentre = _text(fp.get("epicentre"), 120)
     radius = int(_number(fp.get("radius_hops"), 0))
     if not rooms and not structures and not epicentre:
@@ -130,7 +135,7 @@ def normalize_region_event(op):
         "shock": max(0.0, min(1.0, _number(ef.get("shock"), intensity))),
         "harm": harm,
         "displace": bool(ef.get("displace", True)),
-        "artifacts": [_text(a, 80) for a in (ef.get("artifacts") or ())
+        "artifacts": [_text(a, 80) for a in as_list(ef.get("artifacts"))
                       if _text(a, 80)][:ARTIFACTS_PER_WAVE * 4],
         "news": _text(ef.get("news"), 200),
     }

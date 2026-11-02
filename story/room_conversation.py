@@ -228,12 +228,22 @@ def normalize_mandate(entry):
     if status not in MANDATE_STATUSES:
         status = "active"
     limits = entry.get("limits") if isinstance(entry.get("limits"), dict) else {}
+    # EVERY CAPABILITY A GRANT NAMES IS KEPT (story_room_carriers F17,
+    # 2026-11-01). A fixed `[:24]` cut a grant enumerating 33 of the 34
+    # members to 24 when it was stored -- `region_events` among the ones
+    # dropped, granted by name and refused at use -- while its writer was
+    # shown the uncut row. The vocabulary is closed and refused at the grant,
+    # so its size is the bound; duplicates are dropped first so a repeated
+    # name cannot crowd a real one out.
+    from story.mandates import MANDATE_CAPABILITIES
+    capabilities = list(dict.fromkeys(
+        str(c) for c in (entry.get("capabilities") or [])
+        if str(c or "").strip()))[:len(MANDATE_CAPABILITIES)]
     return {
         "uid": str(entry.get("uid") or ""),
         "text": _line(entry.get("text"), 600),
         "scope": _line(entry.get("scope"), 200),
-        "capabilities": [str(c) for c in (entry.get("capabilities") or [])
-                         if str(c or "").strip()][:24],
+        "capabilities": capabilities,
         "limits": {str(k): v for k, v in limits.items()
                    if isinstance(v, (int, float, str))},
         "granted_turn": int(entry.get("granted_turn") or 0),
@@ -280,19 +290,24 @@ def mandates(cid, frame_id=None):
 def revoke_mandate(cid, uid, frame_id=None, *, turn_idx=None):
     """The player withdraws a grant. Returns the mandate as it now stands,
     or None for a uid the ledger does not hold. Revoking a revoked or
-    expired mandate is a no-op that still returns it."""
-    stored = mandates(cid, frame_id)
-    found = None
-    for m in stored:
-        if m["uid"] == str(uid):
-            found = m
-            if m["status"] == "active":
-                m["status"] = "revoked"
-                m["revoked_turn"] = int(
-                    current_turn_idx(cid) if turn_idx is None else turn_idx)
-    if found is None:
-        return None
-    wset_for_frame(cid, ROOM_MANDATES_KEY, stored, frame_id)
+    expired mandate is a no-op that still returns it.
+
+    One act under the write lock (story_room_carriers F5, 2026-11-01): the
+    rows are read inside the transaction, so a grant the Planner wrote a
+    moment ago is not erased by this save, nor this revocation by its."""
+    revoked_turn = int(current_turn_idx(cid) if turn_idx is None else turn_idx)
+    with transaction():
+        stored = mandates(cid, frame_id)
+        found = None
+        for m in stored:
+            if m["uid"] == str(uid):
+                found = m
+                if m["status"] == "active":
+                    m["status"] = "revoked"
+                    m["revoked_turn"] = revoked_turn
+        if found is None:
+            return None
+        wset_for_frame(cid, ROOM_MANDATES_KEY, stored, frame_id)
     return found
 
 

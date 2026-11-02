@@ -618,7 +618,9 @@ def _t_inspect_charters(cid, frame_id, *, charter=None, body=None,
         # institution: every other field here is the registry's own.
         placements = {}
     wanted = (str(section),) if section else CHARTER_SECTIONS
-    summary = {}
+    # Every section's rows, built once: the page is cut from them at
+    # whatever size fits (below).
+    built = {}
     for key, item in sorted(items.items()):
         if charter and key != str(charter):
             continue
@@ -629,6 +631,11 @@ def _t_inspect_charters(cid, frame_id, *, charter=None, body=None,
             "bodies": lambda s, k=key: _charter_body_rows(s, k, placements),
             "roster": _charter_roster_rows,
         }
+        built[key] = (item, state, {name: build[name](state)
+                                    for name in CHARTER_SECTIONS})
+
+    def _entry(key, rows_per_page):
+        item, state, rows_by = built[key]
         entry = {"key": key, "name": item.get("name") or state.get("key") or key,
                  "clock_hours": state.get("clock_hours"),
                  "places": sorted({str(p) for p in (
@@ -638,7 +645,7 @@ def _t_inspect_charters(cid, frame_id, *, charter=None, body=None,
                  ) if p}),
                  "counts": {}, "withheld": {}}
         for name in CHARTER_SECTIONS:
-            rows = build[name](state)
+            rows = rows_by[name]
             entry["counts"][name] = len(rows)
             if name not in wanted:
                 continue
@@ -653,15 +660,58 @@ def _t_inspect_charters(cid, frame_id, *, charter=None, body=None,
         entry["counts"]["unfilled_posts"] = len(unfilled)
         if not entry["withheld"]:
             entry.pop("withheld")
-        summary[key] = entry
-    out = {"charters": summary, "sections": list(wanted),
-           "rows_per_page": rows_per_page,
-           "paging": "every section is paged, never truncated: `withheld` "
-                     "names the rows held back and the call that returns them"}
-    if charter:
-        out["diagnostics"] = charter_diagnostics(
-            cid, frame_id, charter_key=str(charter), body_key=str(body or ""))
-    return out
+        return entry
+
+    def _out(keys, rows_per_page, withheld=()):
+        out = {"charters": {key: _entry(key, rows_per_page) for key in keys},
+               "sections": list(wanted), "rows_per_page": rows_per_page,
+               "paging": "every section is paged, never truncated: `withheld` "
+                         "names the rows held back and the call that returns "
+                         "them"}
+        if withheld:
+            out["charters_withheld"] = [_withheld_charter(key, built[key])
+                                        for key in withheld]
+        if charter:
+            out["diagnostics"] = charter_diagnostics(
+                cid, frame_id, charter_key=str(charter), body_key=str(body or ""))
+        return out
+
+    # PAGED, NEVER TRUNCATED -- AT EVERY SIZE (audit 2026-11-01, F8). Past
+    # `TOOL_RESULT_CHARS` the result cut (`fit_result`) drops a dict-valued
+    # key WHOLE, and the overview of a twelve-institution town lost its
+    # `charters` at once under a line still saying nothing was truncated:
+    # the Room asked about the town and was answered with no institution,
+    # the caravanserai failure this tool was rebuilt to end. So the page is
+    # cut to fit: each section shows fewer rows (every one still saying what
+    # it holds back and the call that returns it), and when even one row a
+    # section does not fit, the institutions themselves are paged -- those
+    # that fit shown, the rest named with their counts and the call that
+    # opens each.
+    keys = list(built)
+    size = rows_per_page
+    while True:
+        out = _out(keys, size)
+        if _encoded_length(out) <= TOOL_RESULT_CHARS or size <= 1:
+            break
+        size = max(1, size // 2)
+    if _encoded_length(out) <= TOOL_RESULT_CHARS:
+        return out
+    shown = []
+    for i, key in enumerate(keys):
+        trial = _out(shown + [key], size, withheld=keys[i + 1:])
+        if shown and _encoded_length(trial) > TOOL_RESULT_CHARS:
+            break
+        shown.append(key)
+    return _out(shown, size, withheld=keys[len(shown):])
+
+
+def _withheld_charter(key, built):
+    """An institution the overview could not fit, named so the Room can ask
+    for it: its name, its counts and the call that opens it."""
+    item, state, rows_by = built
+    return {"key": key, "name": item.get("name") or state.get("key") or key,
+            "counts": {name: len(rows) for name, rows in rows_by.items()},
+            "ask": "inspect_charters(charter=%r)" % key}
 
 
 def _t_inspect_events(cid, frame_id, *, n=None, full=False):

@@ -467,10 +467,23 @@ def sketch_payload(cid, frame_id, report, *, turn_idx=None):
                 if p["status"] != "retired"]
 
     # WHAT THE GRANTS ALLOW. Each through `coverage`, the one reader of the
-    # standing mandates, so a total grant resolves here as it does at publish.
+    # standing mandates, so a total grant resolves here as it does at publish
+    # -- over the grants read ONCE for the payload (story_room_carriers
+    # efficiency 3): each question re-read and re-swept every grant, eleven
+    # reads for one sketch.
+    try:
+        from story.mandates import active_mandates
+        standing = active_mandates(cid, frame_id, turn_idx)
+    except Exception as exc:
+        logger.info("sketch: the standing grants are unavailable: %s", exc)
+        standing = None
+
     def granted(*caps):
+        if standing is None:
+            return False
         try:
-            return bool(coverage(cid, frame_id, list(caps), turn_idx=turn_idx)["ok"])
+            return bool(coverage(cid, frame_id, list(caps), turn_idx=turn_idx,
+                                 rows=standing)["ok"])
         except Exception:
             return False
     grants = {"rooms": granted("plan_rooms"),
@@ -549,12 +562,9 @@ def sketch_payload(cid, frame_id, report, *, turn_idx=None):
     # a sketch shown none of it planted the cliff-top chapel the loop would
     # have left alone (review of the 2026-10-08 landing).
     said = {}
-    try:
-        from story.mandates import active_mandates
+    if standing is not None:
         said["grants"] = [{"text": row["text"], "scope": row["scope"]}
-                          for row in active_mandates(cid, frame_id, turn_idx)]
-    except Exception as exc:
-        logger.info("sketch: the standing grants are unavailable: %s", exc)
+                          for row in standing]
     try:
         from story import room_conversation as room
         said["lines"] = [str(m["text"]).strip()
@@ -666,16 +676,31 @@ def _room_ref(context, text, new):
 
 def _edge(joins, raw):
     """The planned room's way to the room it joins: the way's own words as
-    the edge's label, its barrier where the engine reads one in them (a
-    word it cannot read leaves the way open rather than sealing it, as
-    `normalize_barrier` would), and its vertical sense when given."""
+    the edge's label, its BARRIER as the answer states it in the engine's own
+    closed vocabulary (`barrier`, the field `plan_rooms` takes), and its
+    vertical sense when given. A barrier word the vocabulary cannot read
+    leaves the way open rather than sealing it, as `normalize_barrier` would.
+
+    THE BARRIER IS A FIELD, NOT A READING OF THE LABEL (story_room_carriers
+    F14, 2026-11-01). It was read out of the free-prose `way` by
+    `normalize_barrier`, an ASCII reader that folds `[^a-z0-9]`, so every
+    Japanese way -- '鍵のかかった鉄の門', '細い窓' -- came back unread and
+    the join was an open passage: a room reached through a window was
+    walkable (Home 9's class, `room_slice.room_graph`). An answer stating
+    `barrier` is read by that field alone. An answer that states none -- a
+    card that does not yet ask for it -- keeps the old reading of the label
+    as a stopgap, which reads only the scripts that reader reads; the card
+    asking for the field (requested of the language packs' owner) is what
+    retires it."""
     from world.spatial import normalize_barrier, normalize_vertical
     edge = {"to": joins}
     way = _given(raw.get("way"), 120)
     if way:
         edge["name"] = way
+    stated = _given(raw.get("barrier"), 40)
+    if stated or way:
         unread = set()
-        barrier = normalize_barrier(way, unresolved=unread)
+        barrier = normalize_barrier(stated or way, unresolved=unread)
         if not unread and barrier != "wall":
             edge["barrier"] = barrier
     vertical = normalize_vertical(raw.get("vertical"))

@@ -11,6 +11,18 @@ No timer grants knowledge, no prose is generated, and no other mind reads the
 envelope. A listener learns later through the ordinary speech -> perception ->
 memory path.
 
+A MIND THAT IS NOT AWAKE TAKES IN NOTHING AND PASSES ON NOTHING (audit
+2026-11-01, story_room_carriers F2). Perception already excludes an asleep,
+sedated or unconscious mind from its call (`story.scene.NON_AWAKE_GATED`); the
+carriers did not ask, so a body knocked out in the square woke an eyewitness
+to an accusation spoken while she was out, a telling to a sleeper copied the
+report into him, a courier handed a letter to a sleeping addressee and a
+sedated reader read a bill. Every carrier verb now reads the same map
+perception reads -- the committed conditions with this beat's own state_diff
+laid over them (`awareness`) -- and closes the channel on a mind that is not
+awake: nothing is acquired, delivered or read, and a telling, a question, a
+read, a send, a post or a tear-down naming one is refused with the reason.
+
 TELLING IS THE SECOND LAYER, and it is an explicit COPY rather than knowledge
 by proximity. Standing beside someone who knows a thing teaches you nothing;
 being told does. `apply_tellings` makes the Director name speaker, listener and
@@ -116,6 +128,74 @@ SURFACE_SCAN_FACTOR = 4
 #: is a moment and a moment holds one telling to a few people.
 TELL_FANOUT_CAP = 3
 
+#: Where a report met as it STANDS came from (story_room_carriers F3): a body
+#: walking in on what landed there earlier is not an eyewitness to it.
+STANDING_PROVENANCE = "standing_surface"
+#: Where a report seen as it happened came from.
+WITNESSED_PROVENANCE = "witnessed_surface"
+
+#: WHAT KIND OF THING TOLD A REPORT, written beside `told_by` by the writer,
+#: which knows (story_room_carriers F10): a person, a crowd, a courier or a
+#: notice. `agents.character.tellers_as_known` relabels a teller the mind has
+#: not met only when it is a PERSON -- a rider, a crowd and a bill are written
+#: "never a name" (`couriers.courier_voice`, `crowds.crowd_voice`,
+#: `artifacts.artifact_voice`), and read from the string every one of them
+#: became "the unfamiliar person". A closed set the engine owns; the reader
+#: drops it before the mind's payload is sent.
+TELLER_KINDS = ("person", "crowd", "courier", "artifact")
+
+
+def plain_op(op):
+    """One carrier op as a plain dict: a validated model through the schema
+    module's own dump (`llm.schemas._dump`, the one Pydantic-major branch),
+    anything else as it came, for the caller to refuse by name.
+
+    `op.dict() if hasattr(op, "dict")` was the shape here, and it is a second
+    major branch: `.dict()` is gone in Pydantic 3, where it would have passed
+    a model object on (story_scene_schema audit, 2026-11-01)."""
+    try:
+        from pydantic import BaseModel
+    except ImportError:                          # pragma: no cover
+        return op
+    if isinstance(op, BaseModel):
+        from llm.schemas import _dump
+        return _dump(op)
+    return op
+
+
+def plain_ops(ops):
+    """`plain_op` over a list of ops; None is none."""
+    return [plain_op(op) for op in (ops or [])]
+
+
+def awareness(ctx):
+    """``{folded name: record}`` for every mind that is not fully awake this
+    beat: the committed `awareness` conditions with this beat's own resolved
+    state_diff laid over them, exactly as perception reads them
+    (`agents/perception_outcome_stage`), so a knockout resolved this beat
+    closes the channels this beat."""
+    from story.scene import apply_awareness_diff, awareness_map
+    resolved = (getattr(ctx, "director_resolve", None)
+                or getattr(ctx, "director_establish", None) or {})
+    diff = resolved.get("state_diff") if isinstance(resolved, dict) else None
+    return apply_awareness_diff(awareness_map(ctx.chat.id),
+                                diff if isinstance(diff, dict) else {})
+
+
+def not_awake(amap, entry):
+    """The level of a mind that takes in nothing -- asleep, sedated or
+    unconscious (`story.scene.NON_AWAKE_GATED`) -- under any name it answers
+    to, or "" for a mind that is awake (dazed included: present, if
+    degraded). A crowd, a courier or a notice has no mind and is never gated."""
+    from story.scene import NON_AWAKE_GATED
+    if not entry or entry.get("crowd") is not None:
+        return ""
+    for key in _keys_of(entry):
+        level = str(((amap or {}).get(key) or {}).get("level") or "")
+        if level in NON_AWAKE_GATED:
+            return level
+    return ""
+
 
 def _character_room(scene, sheet):
     identity = character_identity(sheet or {})
@@ -145,7 +225,7 @@ def reports_for_state(state, cap=PAYLOAD_CAP):
             # heard a story second-hand should know it heard a story, and from
             # whom -- that is what makes a wrong report read as somebody being
             # wrong rather than as the engine being wrong.
-            "retellings", "told_by",
+            "retellings", "told_by", "told_by_kind",
             "provenance") if k in row}
         for row in rows[-cap:]
     ]
@@ -169,6 +249,15 @@ def standing_surfaces_reader(cid, frame_id, skip_event_ids=()):
 
     `skip_event_ids` drops surfaces the caller is already handling as this
     beat's own new events, so a body does not acquire one twice.
+
+    ONLY WHAT STILL STANDS (story_room_carriers F3, 2026-11-01). The window
+    is for consequences "met as state when someone next stands where they
+    landed" -- the barred gate -- and an act that PASSES leaves no state to
+    meet: an accusation spoken at 14:00 was filed on a body that walked into
+    the empty chapel at 20:00. A surface whose producer says it does not
+    stand (`payload["stands"]` false) is never offered here; one that says
+    nothing is offered as before, and every surface this window offers is
+    filed as met standing (`STANDING_PROVENANCE`), never as seen.
     """
     skip = {str(e) for e in skip_event_ids or ()}
     cache = {}
@@ -195,6 +284,8 @@ def standing_surfaces_reader(cid, frame_id, skip_event_ids=()):
                 str((payload or {}).get("witnessed") or "").split())
             if not witnessed:
                 continue
+            if isinstance(payload, dict) and payload.get("stands") is False:
+                continue                      # an act: nothing of it stands
             found.append((dict(row), payload, witnessed[:320]))
             if len(found) >= ARRIVAL_SURFACES:
                 break
@@ -202,6 +293,15 @@ def standing_surfaces_reader(cid, frame_id, skip_event_ids=()):
         return found
 
     return surfaces
+
+
+def _sight_rank(report):
+    """How directly a held report was taken in: 2 seen as it happened, 1
+    met standing where it landed, 0 anything told, read or carried."""
+    if int(report.get("retellings") or 0) != 0:
+        return 0
+    return {WITNESSED_PROVENANCE: 2, STANDING_PROVENANCE: 1}.get(
+        str(report.get("provenance") or ""), 0)
 
 
 def advance_carriers(ctx, scene, world_event_result):
@@ -246,6 +346,7 @@ def advance_carriers(ctx, scene, world_event_result):
 
     public_surfaces = len(event_rows)
     carrier_opportunities = acquired = moved = 0
+    amap = awareness(ctx)
     # Every body that can hold a report, the player among them -- see
     # `_carriers` for why the list is extant cast plus persona rather than the
     # active cast this loop started out reading.
@@ -253,6 +354,9 @@ def advance_carriers(ctx, scene, world_event_result):
                            chat=getattr(ctx, "chat", None), ctx=ctx):
         current_room = entry["room"]
         state = entry["state"]
+        # What a body carries moves with it whether it is awake or not; what
+        # it takes in does not (F2): an unconscious body acquires nothing.
+        absent = bool(not_awake(amap, entry))
         reports = [dict(r) for r in state.get(STATE_KEY) or []
                    if isinstance(r, dict) and r.get("world_event_id")]
         changed = False
@@ -274,13 +378,19 @@ def advance_carriers(ctx, scene, world_event_result):
                 changed = True
 
         known = {str(r.get("world_event_id")): r for r in reports}
-        here = standing(current_room)
-        for row, payload, witnessed in event_rows + here:
+        here = [] if absent else standing(current_room)
+        seen_now = [] if absent else event_rows
+        for i, (row, payload, witnessed) in enumerate(seen_now + here):
             if str(row["location_id"]) != current_room:
                 continue
             carrier_opportunities += 1
             event_id = str(row["event_id"])
             existing = known.get(event_id)
+            # SEEN, OR MET STANDING (F3). A body present on the beat an
+            # event fired saw it; one that walks in on what it left met the
+            # state, and is no eyewitness to the act.
+            provenance = (WITNESSED_PROVENANCE if i < len(seen_now)
+                          else STANDING_PROVENANCE)
             firsthand = {
                 "world_event_id": str(row["event_id"]),
                 "source_event_id": str(payload.get("source_event_id") or ""),
@@ -297,15 +407,14 @@ def advance_carriers(ctx, scene, world_event_result):
                 # what they saw.
                 "retellings": 0,
                 "told_by": "",
-                "provenance": "witnessed_surface",
+                "provenance": provenance,
             }
             if existing is not None:
-                if str(existing.get("provenance") or "") \
-                        == "witnessed_surface" \
-                        and int(existing.get("retellings") or 0) == 0:
+                if _sight_rank(existing) >= _sight_rank(firsthand):
                     continue
-                # Seeing beats hearsay. Replace in place so chronology and the
-                # report cap do not change merely because confidence improved.
+                # Seeing beats meeting the aftermath, and both beat hearsay.
+                # Replace in place so chronology and the report cap do not
+                # change merely because confidence improved.
                 reports[reports.index(existing)] = firsthand
                 known[event_id] = firsthand
                 acquired += 1
@@ -364,7 +473,7 @@ def _crowds_acquire(ctx, event_rows, surfaces):
         if not room:
             continue
         here = surfaces(room)
-        for row, payload, witnessed in event_rows + here:
+        for j, (row, payload, witnessed) in enumerate(event_rows + here):
             if str(row["location_id"]) != room:
                 continue
             opportunities += 1
@@ -377,7 +486,9 @@ def _crowds_acquire(ctx, event_rows, surfaces):
                 "acquired_turn": int(ctx.turn.idx),
                 "retellings": 0,
                 "told_by": "",
-                "provenance": "witnessed_surface",
+                # Seen as it happened, or met standing (F3).
+                "provenance": (WITNESSED_PROVENANCE if j < len(event_rows)
+                               else STANDING_PROVENANCE),
             })
             if updated is not crowd:
                 standing[i] = crowd = updated
@@ -1194,10 +1305,10 @@ def apply_tellings(ctx, scene, ops, *, names=(), places=()):
     no access to.
     """
     applied, rejected = 0, []
-    ops = [op.dict() if hasattr(op, "dict") else op for op in (ops or [])]
-    ops = [op for op in ops if isinstance(op, dict)]
+    ops = [op for op in plain_ops(ops) if isinstance(op, dict)]
     if not ops:
         return applied, rejected
+    amap = awareness(ctx)
 
     cid = ctx.chat.id
     frame_id = ctx.turn.frame_id
@@ -1243,6 +1354,14 @@ def apply_tellings(ctx, scene, ops, *, names=(), places=()):
             continue
         if speaker is listener:
             rejected.append("%s cannot tell themselves" % speaker["name"])
+            continue
+        # A mind that is not awake neither tells nor is told (F2).
+        gated = [(who, not_awake(amap, who)) for who in (speaker, listener)]
+        gated = [(who, level) for who, level in gated if level]
+        if gated:
+            rejected.append("%s is %s and %s nothing" % (
+                gated[0][0]["name"], gated[0][1],
+                "tells" if gated[0][0] is speaker else "hears"))
             continue
         if speaker.get("crowd") is None and speaker_key not in spoke:
             rejected.append(
@@ -1342,6 +1461,8 @@ def apply_tellings(ctx, scene, ops, *, names=(), places=()):
             "hops": 0,
             "retellings": retellings,
             "told_by": speaker["name"],
+            "told_by_kind": ("crowd" if speaker.get("crowd") is not None
+                             else "person"),
             "provenance": "told",
         }
         if listener.get("crowd") is not None:

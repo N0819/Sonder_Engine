@@ -81,8 +81,9 @@ import json
 
 from world import crowds as crowds_model
 from world import degradation
-from story.carriers import (REPORT_CAP, STATE_KEY, TELL_FANOUT_CAP, _cast_index,
-                      save_state)
+from story.carriers import (REPORT_CAP, STANDING_PROVENANCE, STATE_KEY,
+                            TELL_FANOUT_CAP, _cast_index, awareness, not_awake,
+                            plain_ops, save_state)
 
 
 #: The world-KV key couriers live under, spelled once, frame-scoped in
@@ -194,6 +195,9 @@ EN_ROUTE = "en_route"
 ARRIVED = "arrived"        # standing at the destination, delivery not yet made
 DELIVERED = "delivered"
 SILENCED = "silenced"
+#: A route that ended at its gate with nobody the story holds to take the
+#: message: an addressee the world no longer has (story_room_carriers F20).
+UNDELIVERED = "undelivered"
 _LIVE = (EN_ROUTE, ARRIVED)
 
 #: How many finished routes to keep as a record beside the live ones. The
@@ -378,19 +382,24 @@ def advance_couriers(couriers, neighbors, clock_seconds, scene=None):
             continue
         route = [str(r) for r in courier.get("route") or []]
         leg = max(0, int(courier.get("leg") or 0))
-        pace = float(courier.get("pace_seconds") or PACES[DEFAULT_PACE])
+        flat = float(courier.get("pace_seconds") or PACES[DEFAULT_PACE])
         moved_at = float(courier.get("moved_at") or 0.0)
         stop_legs = {int(x) for x in courier.get("stop_legs") or []}
         stops_due = [int(x) for x in courier.get("stops_due") or []]
         passed = []
-        # WHAT THIS LEG COSTS, from the room it crosses where the world
-        # measured one (`courier_edge_seconds`); the stored flat pace
-        # otherwise, which is every unmeasured world unchanged.
-        pace = courier_edge_seconds(scene, route[leg], route[leg + 1], pace) \
-            if leg + 1 < len(route) else pace
-        while leg + 1 < len(route) and now - moved_at >= pace:
-            nxt = route[leg + 1]
+        # WHAT EACH LEG COSTS, priced as it is crossed, from the room it
+        # crosses where the world measured one (`courier_edge_seconds`); the
+        # stored flat pace otherwise, which is every unmeasured world
+        # unchanged. Priced once before the loop, the first edge's cost paid
+        # for every edge a sweep crossed: 1,845 s of road in 180 s, the time
+        # skip -- when one sweep crosses many edges -- the worst of it
+        # (story_room_carriers F11, 2026-11-01).
+        while leg + 1 < len(route):
             here = route[leg]
+            nxt = route[leg + 1]
+            pace = courier_edge_seconds(scene, here, nxt, flat)
+            if now - moved_at < pace:
+                break
             if nxt not in (neighbors.get(here) or ()):
                 break
             passed.append(here)
@@ -454,6 +463,7 @@ def _copy_of(courier, held, sealed, listener_room, turn):
         "hops": 0,
         "retellings": retellings,
         "told_by": courier_voice(courier),
+        "told_by_kind": "courier",
         "provenance": provenance,
     }
 
@@ -540,10 +550,23 @@ def _deliver(ctx, scene, courier, index, crowds_standing, *, turn):
     copies = [c for c in (_copy_of(courier, held, sealed, room, turn)
                           for held, sealed in carried_bundle(courier))
               if c is not None]
+    amap = courier.get("_awareness") or {}
 
     if addressee:
         entry = index.get(addressee)
-        if entry is None or entry.get("room") != room:
+        if entry is None:
+            # ADDRESSED TO NOBODY THE STORY HOLDS (story_room_carriers F20):
+            # there is nobody to wait for, and he held one of the road's
+            # `MAX_COURIERS` slots forever. He turns back with the message
+            # undelivered -- told to nobody, the direction that adds no
+            # knowledge -- and the commit says so.
+            courier = dict(courier)
+            courier["status"] = UNDELIVERED
+            courier["undelivered_turn"] = int(turn)
+            return courier, delivered_to, crowds_dirty
+        if entry.get("room") != room or not_awake(amap, entry):
+            # Absent, or there and not awake (F2): he waits at the gate,
+            # visible and interceptable, until they come or come round.
             return courier, delivered_to, crowds_dirty
         for copy in copies:
             if _give_report(ctx.chat.id, ctx.turn.frame_id, entry, copy):
@@ -571,6 +594,8 @@ def _deliver(ctx, scene, courier, index, crowds_standing, *, turn):
             entry = index[key]
             if entry.get("room") != room or told >= TELL_FANOUT_CAP:
                 continue
+            if not_awake(amap, entry):
+                continue              # a sleeper is told nothing (F2)
             if entry.get("name") in delivered_to:
                 continue
             given = False
@@ -685,6 +710,7 @@ def _exchange_stops(ctx, couriers, crowds_standing, *, names, places, turn,
                         "acquired_turn": int(turn),
                         "retellings": retellings,
                         "told_by": courier_voice(courier),
+                        "told_by_kind": "courier",
                         "provenance": "told",
                     })
                     if updated is not crowd:
@@ -711,7 +737,8 @@ def _exchange_stops(ctx, couriers, crowds_standing, *, names, places, turn,
                     "current_location": room,
                     "retellings": 0,
                     "told_by": "",
-                    "provenance": "witnessed_surface",
+                    # Met where it stands, not seen happen (F3).
+                    "provenance": STANDING_PROVENANCE,
                     "sealed": False,
                 })
                 known.add(str(row["event_id"]))
@@ -741,6 +768,7 @@ def _exchange_stops(ctx, couriers, crowds_standing, *, names, places, turn,
                     "current_location": room,
                     "retellings": max(0, int(held.get("retellings") or 0)),
                     "told_by": artifacts_model.artifact_voice(artifact),
+                    "told_by_kind": "artifact",
                     "provenance": "read",
                     "sealed": False,
                 })
@@ -770,6 +798,7 @@ def _exchange_stops(ctx, couriers, crowds_standing, *, names, places, turn,
                         "retellings": retellings,
                         "told_by": crowds_model.crowd_voice(
                             crowds_standing[crowd_here]),
+                        "told_by_kind": "crowd",
                         "provenance": "told",
                         "sealed": False,
                     })
@@ -836,8 +865,19 @@ def run_couriers(ctx, scene, ops, *, names=(), places=()):
     couriers = [dict(c) for c in wget(cid, COURIERS_WORLD_KEY, []) or []
                 if isinstance(c, dict)]
     before = json.dumps(couriers, sort_keys=True, ensure_ascii=False)
-    index = _cast_index(cid, frame_id, scene,
-                        chat=getattr(ctx, "chat", None), ctx=ctx)
+    ops = plain_ops(ops)
+
+    def _carrier_view():
+        return (_cast_index(cid, frame_id, scene,
+                            chat=getattr(ctx, "chat", None), ctx=ctx),
+                awareness(ctx))
+    # THE CARRIER INDEX AND THE AWARENESS MAP ONLY WHEN SOMETHING ASKS
+    # (story_room_carriers efficiency 1): an op asks before the sweep, a
+    # courier standing at his gate after it. A beat with neither moves the
+    # road and reads neither -- the index walk was measured at 45 ms a beat
+    # on chat 114, every beat, inside the commit.
+    index, amap = _carrier_view() if ops else ({}, {})
+    viewed = bool(ops)
     by_uid = {str(c.get("uid") or ""): c for c in couriers}
     rejected = []
     metrics = {"couriers_offered": 0, "dispatched": 0, "courier_moves": 0,
@@ -866,7 +906,6 @@ def run_couriers(ctx, scene, ops, *, names=(), places=()):
             return str(room_of(scene, player) or "")
         return ""
 
-    ops = [op.dict() if hasattr(op, "dict") else op for op in (ops or [])]
     for raw in ops:
         if not isinstance(raw, dict):
             rejected.append("courier op was not an object")
@@ -918,6 +957,11 @@ def run_couriers(ctx, scene, ops, *, names=(), places=()):
                                     "courier departs from an unknown room"
                                     % sender["name"])
                     continue
+                level = not_awake(amap, sender)
+                if level:
+                    rejected.append("%s is %s and sends nobody anywhere"
+                                    % (sender["name"], level))
+                    continue
             else:
                 # An EMPTY caravan is world texture like a crowd: it forms
                 # in a named, known room (the crowd-minting precedent) and
@@ -937,6 +981,16 @@ def run_couriers(ctx, scene, ops, *, names=(), places=()):
                 rejected.append("courier bound for unknown room %r"
                                 % destination)
                 continue
+            addressee = " ".join(str(raw.get("addressee") or "").split())
+            if addressee and index.get(addressee.casefold()) is None:
+                # A LETTER IS ADDRESSED TO SOMEBODY WHO CAN TAKE IT (F20): one
+                # addressed to "the Baron" where the story holds "Baron
+                # Aldric Venn" stood at the gate forever, holding a slot.
+                rejected.append(
+                    "courier addressee %r is nobody the story holds; address "
+                    "a letter to a character by name, or send it to the "
+                    "place" % addressee)
+                continue
             if destination == origin:
                 rejected.append("a courier to the room the sender stands in "
                                 "is a telling, not a route")
@@ -950,20 +1004,18 @@ def run_couriers(ctx, scene, ops, *, names=(), places=()):
                                 "more until one arrives or is stopped"
                                 % MAX_COURIERS)
                 continue
-            held = None
+            held = invented = None
             if carries_message:
                 held = _hold_report(sender, event_id) if event_id else None
                 if held is None and not event_id \
                         and str(raw.get("claim") or "").strip():
                     from story.carriers import _invented_claim
 
+                    # FILED ONLY IF THE SEND LANDS (story_room_carriers F8):
+                    # saved here, before the route and the duplicate checks,
+                    # a refused send left the sender holding a claim they
+                    # "made up" and never sent -- and told them so next beat.
                     invented = _invented_claim(raw.get("claim"), ctx, sender)
-                    state = sender.get("state") or {}
-                    state[STATE_KEY] = (
-                        [dict(r) for r in state.get(STATE_KEY) or []
-                         if isinstance(r, dict)] + [invented])[-REPORT_CAP:]
-                    save_state(cid, sender, state, frame_id=frame_id)
-                    sender["state"] = state
                     held = invented
                 if held is None:
                     rejected.append(
@@ -1002,6 +1054,7 @@ def run_couriers(ctx, scene, ops, *, names=(), places=()):
                 envelope["claim"] = degradation.degrade(
                     held.get("claim"), retellings, names=names, places=places)
                 envelope["told_by"] = sender["name"]
+                envelope["told_by_kind"] = "person"
                 envelope["provenance"] = "told"
             courier = new_courier(
                 cid, origin=origin, destination=destination,
@@ -1029,6 +1082,13 @@ def run_couriers(ctx, scene, ops, *, names=(), places=()):
                     continue
                 courier["freight"] = freight
                 metrics["freight_loaded"] += len(freight_events)
+            if invented is not None:
+                state = sender.get("state") or {}
+                state[STATE_KEY] = (
+                    [dict(r) for r in state.get(STATE_KEY) or []
+                     if isinstance(r, dict)] + [invented])[-REPORT_CAP:]
+                save_state(cid, sender, state, frame_id=frame_id)
+                sender["state"] = state
             couriers.append(courier)
             by_uid[courier["uid"]] = courier
             metrics["dispatched"] += 1
@@ -1054,6 +1114,11 @@ def run_couriers(ctx, scene, ops, *, names=(), places=()):
                     "%s is not where the %s is; a rider is questioned on "
                     "the road he is on"
                     % (raw.get("listener"), courier_voice(courier)))
+                continue
+            level = not_awake(amap, listener) if listener is not None else ""
+            if level:
+                rejected.append("%s is %s and questions nobody"
+                                % (listener["name"], level))
                 continue
             bundle = carried_bundle(courier)
             spoken = [(held, sealed) for held, sealed in bundle if not sealed]
@@ -1101,10 +1166,17 @@ def run_couriers(ctx, scene, ops, *, names=(), places=()):
                     "%s is not where the %s is; a route is cut where the "
                     "rider actually rides" % (by, courier_voice(courier)))
                 continue
+            stopper = index.get(str(by or "").strip().casefold())
+            level = not_awake(amap, stopper) if stopper is not None else ""
+            if level:
+                rejected.append("%s is %s and stops nobody"
+                                % (stopper["name"], level))
+                continue
             taker_key = str(raw.get("listener") or by or "") \
                 .strip().casefold()
             taker = index.get(taker_key)
-            if taker is not None and taker.get("room") == by_room:
+            if taker is not None and taker.get("room") == by_room \
+                    and not not_awake(amap, taker):
                 # The taker takes everything the body carried: a seized
                 # letter reads verbatim, a spoken story arrives one mouth on.
                 probe = dict(courier)
@@ -1135,6 +1207,8 @@ def run_couriers(ctx, scene, ops, *, names=(), places=()):
     crowds_dirty = _exchange_stops(
         ctx, couriers, crowds_standing, names=names, places=places,
         turn=turn, metrics=metrics)
+    if not viewed and any(c.get("status") == ARRIVED for c in couriers):
+        index, amap = _carrier_view()
     for i, courier in enumerate(couriers):
         if courier.get("status") != ARRIVED:
             continue
@@ -1148,14 +1222,21 @@ def run_couriers(ctx, scene, ops, *, names=(), places=()):
             metrics["freight_exchanges"] += len(freight_events)
             courier["arrival_freight_exchanged"] = True
         courier["_names"], courier["_places"] = list(names), list(places)
+        courier["_awareness"] = amap
         courier, delivered_to, dirty = _deliver(
             ctx, scene, courier, index, crowds_standing, turn=turn)
-        courier.pop("_names", None)
-        courier.pop("_places", None)
+        for transient in ("_names", "_places", "_awareness"):
+            courier.pop(transient, None)
         couriers[i] = courier
         crowds_dirty = crowds_dirty or dirty
         if delivered_to:
             metrics["courier_delivered"] += 1
+        if courier.get("status") == UNDELIVERED:
+            rejected.append(
+                "the %s waited at %s for %r, whom the story does not hold; he "
+                "turned back with the message undelivered"
+                % (courier_voice(courier), courier.get("at"),
+                   courier.get("addressee")))
 
     live = [c for c in couriers if c.get("status") in _LIVE]
     done = [c for c in couriers if c.get("status") not in _LIVE]

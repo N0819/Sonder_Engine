@@ -114,6 +114,26 @@ def _uid(identity, frame_id):
     return "prop_" + hashlib.sha256(material.encode("utf-8")).hexdigest()[:10]
 
 
+def _fresh_uid(identity, frame_id, taken, turn_idx):
+    """A uid no row of the ledger holds: the identity's own the first time a
+    proposal is filed, and one that says which filing it is after that.
+
+    A PROPOSAL FILED AGAIN IS A NEW PROPOSAL (story_room_carriers F6,
+    2026-11-01). The uid was the identity's (kind + title) alone, so "The
+    tide comes early", refused and filed again, was minted the refused one's
+    uid: judging the new one flipped the OLD row (`judge_proposal` acts on
+    the first row with the uid) and left the new one pending forever, offered
+    to every deliberation and never dropped by the cap. The beat it was filed
+    at and a count tell the filings apart, so no uid is ever reused while the
+    ledger still holds the one before it."""
+    uid = _uid(identity, frame_id)
+    n = 0
+    while uid in taken:
+        n += 1
+        uid = _uid("%s|refiled:%s:%d" % (identity, int(turn_idx or 0), n), frame_id)
+    return uid
+
+
 def normalize_proposal(entry, frame_id=None):
     entry = entry if isinstance(entry, dict) else {}
     kind = str(entry.get("kind") or "").strip().casefold()
@@ -315,6 +335,8 @@ def file_proposal(cid, frame_id, *, kind, title, wants_true, why_now,
                     _save(cid, frame_id, row)
                 return dict(existing)
         record = normalize_proposal({
+            "uid": _fresh_uid(identity, frame_id,
+                              {p["uid"] for p in row["proposals"]}, turn_idx),
             "kind": kind, "title": title, "wants_true": wants,
             "why_now": why_now, "must_not_contradict": must_not_contradict,
             "scale": scale, "dial": dial, "status": "open",

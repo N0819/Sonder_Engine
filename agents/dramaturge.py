@@ -433,7 +433,8 @@ def revise(cid, frame_id, proposal, judgement, *, dial, turn_idx=None, job=None)
     stood."""
     from core.jobs import is_cancelled
     from story import room_conversation as room
-    from story.room_proposals import revise_proposal, settle_proposal
+    from story.room_proposals import (get_proposal, revise_proposal,
+                                      settle_proposal)
     if is_cancelled(job):
         return proposal, ""
     turn_idx = room.current_turn_idx(cid) if turn_idx is None else int(turn_idx)
@@ -458,9 +459,17 @@ def revise(cid, frame_id, proposal, judgement, *, dial, turn_idx=None, job=None)
         return row, note or str(out["withdraw"])[:600]
     revision = out.get("revision") if isinstance(out.get("revision"), dict) else None
     if not revision:
-        row = settle_proposal(cid, frame_id, proposal["uid"], "withdrawn",
-                              turn_idx=turn_idx)
-        return row, note
+        # AN ANSWER THAT SAYS NEITHER IS NO ANSWER (audit 2026-11-01, F10).
+        # A revise cut off at the token ceiling, or answered in prose,
+        # reached here as neither a revision nor a withdrawal and was settled
+        # `withdrawn` -- a parse failure recorded as the author's choice, and
+        # reported so by `deliberate`. `propose` already reads an answer
+        # carrying none of its keys as a cut-off; this reads it the same way:
+        # the proposal stands as it was, and is judged again.
+        logger.warning("dramaturge: the revision of %s came back with neither "
+                       "a revision nor a withdrawal; the proposal stands as it "
+                       "was", proposal.get("uid"))
+        return get_proposal(cid, frame_id, proposal["uid"]) or proposal, ""
     row = revise_proposal(cid, frame_id, proposal["uid"],
                           wants_true=revision.get("wants_true"),
                           why_now=revision.get("why_now"),

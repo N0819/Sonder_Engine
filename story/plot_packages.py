@@ -60,8 +60,11 @@ from __future__ import annotations
 
 import copy
 import hashlib
+import math
 import re
 import time
+
+from core.logging_utils import logger
 
 #: The world key. Frame-scoped (core/db.FRAME_SCOPED_WORLD_KEYS).
 PACKAGES_KEY = "plot_packages"
@@ -137,6 +140,30 @@ def _text(value, limit=TEXT_CHARS):
     return " ".join(str(value or "").split())[:limit]
 
 
+def as_list(value):
+    """A list-valued field's items, the way its author meant them: a bare
+    string or a single object written where a list goes is ONE item -- never
+    its letters, never its keys -- a list or a tuple is itself, and anything
+    else (a number, a flag, null) is no items.
+
+    THE ONE READER OF EVERY LIST FIELD AN OPERATION, A CLOCK OR A REGION EVENT
+    CARRIES (audit 2026-11-01, F3). Each field used to be iterated where it
+    was read, so a bare string was iterated into characters:
+    `frontier: "yard"` minted the axes y, a, r, d; `aliases: "Old Tom"` six
+    one-letter aliases that entered `reserved_identities`; `advance_on:
+    "fire"` four triggers; and `frontier: "the quay road"` was refused because
+    one of its letters, 'e', is a direction. `_plan_geometry`'s `over` had
+    been fixed for exactly this ("'chapel' read as ['c','h','a','p','e','l']",
+    review L3) and the class had not. A model writes one item bare as often
+    as it writes a list of one, so reading a bare item as that item is what
+    the field says, not a guess."""
+    if isinstance(value, (str, dict)):
+        return [value] if value else []
+    if isinstance(value, (list, tuple)):
+        return list(value)
+    return []
+
+
 def _slug(text):
     return _ID_SAFE.sub("_", _text(text, 60).casefold()).strip("_") or "package"
 
@@ -194,6 +221,48 @@ def _normalize_entry(prefix, uid, entry, index):
 #: ruling forbids.
 TRIGGER_FIELDS = ("event_kind", "location_id")
 
+#: The two ways a clock is due by TIME.
+CLOCK_DUE_FIELDS = ("due_turns", "due_story_hours")
+#: What the ENGINE writes on a clock as it ticks, fires or refuses it -- never
+#: an author's to set on a draft (`edit_package`).
+CLOCK_ENGINE_MARKS = ("fired_turn", "fired_elapsed", "refused_turn", "filled",
+                      "ticked_turn_idx")
+
+
+def _due_number(value):
+    """A clock's due as the number it is due by: a finite number of zero or
+    more, or None for a value nothing can be due by -- absent, a word, a flag,
+    below zero, not finite."""
+    if value is None or isinstance(value, bool):
+        return None
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    if not math.isfinite(number) or number < 0:
+        return None
+    return number
+
+
+def _unreadable_dues(clock):
+    """The due fields a clock carries that are no number it can be due by.
+
+    A CLOCK THAT WILL NEVER TICK SAYS SO (D15), and this is the half that
+    said nothing (audit 2026-11-01, F9): `due_turns: "three"` and
+    `due_story_hours: "at dawn"` validated clean, and `_clock_due` swallowed
+    the failed read on every beat, so every operation on that fuse was
+    silently never landed."""
+    return [field for field in CLOCK_DUE_FIELDS
+            if clock.get(field) is not None
+            and _due_number(clock.get(field)) is None]
+
+
+def _clock_can_fire(clock):
+    """Whether anything could ever make this clock due: a due it can read,
+    or events it waits on."""
+    return bool(clock.get("advance_on")) or any(
+        _due_number(clock.get(field)) is not None for field in CLOCK_DUE_FIELDS)
+
 
 def _int(value, default=None):
     try:
@@ -223,7 +292,7 @@ def _normalize_clock(raw, out):
     """
     raw = raw if isinstance(raw, dict) else {}
     triggers = []
-    for item in (raw.get("advance_on") or ()):
+    for item in as_list(raw.get("advance_on")):
         if isinstance(item, str):
             item = {"event_kind": item}
         if not isinstance(item, dict):
@@ -283,7 +352,7 @@ def normalize_package(entry):
         "revision": max(0, int(entry.get("revision") or 0)),
         "spoiler_policy": policy,
         "scope": {
-            "locations": [_text(x, 120) for x in (scope.get("locations") or ())
+            "locations": [_text(x, 120) for x in as_list(scope.get("locations"))
                           if _text(x, 120)][:LIST_CAP],
             "earliest_time": scope.get("earliest_time"),
             "latest_time": scope.get("latest_time"),
@@ -318,8 +387,9 @@ def normalize_package(entry):
         "activated_turn": entry.get("activated_turn"),
     }
     for field, prefix in _LIST_FIELDS.items():
-        items = entry.get(field) or []
-        items = (items if isinstance(items, list) else [])[:LIST_CAP]
+        # One truth, one question, one clock written bare is that one entry,
+        # never nothing (`as_list`).
+        items = as_list(entry.get(field))[:LIST_CAP]
         out[field] = [_normalize_entry(prefix, uid, item, i)
                       for i, item in enumerate(items)]
         if field == "clocks":
@@ -381,6 +451,34 @@ def _require(cid, uid, frame_id=None):
     return pkg
 
 
+def _update_store(cid, frame_id, change):
+    """Read the frame's package store, change it and write it back as ONE
+    act under the write lock. ``change(stored)`` mutates the store in place
+    and returns ``(answer, write)``; the store is saved only when ``write``
+    is true, and a ValueError it raises refuses the act with nothing written.
+
+    EVERY WRITER OF THE STORE GOES THROUGH HERE (audit 2026-11-01, F1). The
+    store is one JSON row written back whole, and its writers run on four
+    threads -- the Planner's reply (`converse_stream`'s daemon thread), a
+    fill or Dramaturge job, the commit tail's clock pass and the panel -- and
+    each used to save the store it had read a moment earlier, so a write
+    that landed between another writer's read and its save was erased by
+    construction: a clock's `applied` marks reverted (its operations landed
+    again the next beat), or a published package put back to `draft` with
+    its operations already in the world. `room_frontier._update` closed the
+    same class for its own row. The read is INSIDE the transaction, which
+    takes the process write lock and BEGIN IMMEDIATE before it, so no other
+    writer can land between this read and this save."""
+    from core.db import transaction
+
+    with transaction():
+        stored = packages(cid, frame_id)
+        answer, write = change(stored)
+        if write:
+            save_packages(cid, stored, frame_id)
+    return answer
+
+
 def _latest_turn_idx(cid, frame_id=None):
     from core.db import q
 
@@ -392,6 +490,18 @@ def _latest_turn_idx(cid, frame_id=None):
     # room prepared before the first beat invisible to the one beat that
     # places the opening in it.
     return int(row["idx"]) if row and row["idx"] is not None else -1
+
+
+def _latest_turn_id(cid):
+    """The id of the turn row `_latest_turn_idx` reads, or None before the
+    story's first beat -- what an out-of-band write is stamped with when it
+    has no turn of its own, as `commit_room_registry.
+    sync_room_registry_with_scene` stamps a hand edit's retirements."""
+    from core.db import q
+
+    row = q("SELECT id FROM turns WHERE chat_id=? ORDER BY idx DESC LIMIT 1",
+            (cid,), one=True)
+    return int(row["id"]) if row else None
 
 
 def _registry_revision(cid, frame_id=None):
@@ -420,32 +530,36 @@ def _bump(pkg, action, note="", turn_idx=None):
 def new_package(cid, *, title, premise="", spoiler_policy="open", scope=None,
                 authority=None, frame_id=None, created_by="writers_room"):
     """Open a draft. Refuses past `PACKAGES_CAP` live packages."""
-    stored = packages(cid, frame_id)
-    live = [p for p in stored.values() if p["status"] != "retired"]
-    if len(live) >= PACKAGES_CAP:
-        raise ValueError(
-            "the frame holds %d packages that are not retired (cap %d); "
-            "resolve or retire one first" % (len(live), PACKAGES_CAP))
     title = _text(title, 200)
-    if not title:
-        raise ValueError("a package has a title")
     now = time.time()
     turn_idx = _latest_turn_idx(cid, frame_id)
-    pkg = normalize_package({
-        "uid": package_uid(cid, title, now), "title": title,
-        "premise": premise, "spoiler_policy": spoiler_policy,
-        "scope": scope or {}, "authority": authority or {},
-        "status": "draft", "revision": 1,
-        "base": {"turn_idx": turn_idx,
-                 "registry_revision": _registry_revision(cid, frame_id),
-                 "pinned_at": now},
-        "provenance": {"created_turn": turn_idx, "created_at": now,
-                       "created_by": created_by},
-    })
-    _note(pkg, "created", turn_idx=turn_idx)
-    stored[pkg["uid"]] = pkg
-    save_packages(cid, stored, frame_id)
-    return pkg
+    # Read before the write lock: the registry's revision can mean a parse of
+    # the whole charter registry, and nothing below depends on holding it.
+    registry_revision = _registry_revision(cid, frame_id) if title else ""
+
+    def _open(stored):
+        live = [p for p in stored.values() if p["status"] != "retired"]
+        if len(live) >= PACKAGES_CAP:
+            raise ValueError(
+                "the frame holds %d packages that are not retired (cap %d); "
+                "resolve or retire one first" % (len(live), PACKAGES_CAP))
+        if not title:
+            raise ValueError("a package has a title")
+        pkg = normalize_package({
+            "uid": package_uid(cid, title, now), "title": title,
+            "premise": premise, "spoiler_policy": spoiler_policy,
+            "scope": scope or {}, "authority": authority or {},
+            "status": "draft", "revision": 1,
+            "base": {"turn_idx": turn_idx,
+                     "registry_revision": registry_revision,
+                     "pinned_at": now},
+            "provenance": {"created_turn": turn_idx, "created_at": now,
+                           "created_by": created_by},
+        })
+        _note(pkg, "created", turn_idx=turn_idx)
+        stored[pkg["uid"]] = pkg
+        return pkg, True
+    return _update_store(cid, frame_id, _open)
 
 
 def edit_package(cid, uid, fields, *, frame_id=None, reason=""):
@@ -454,16 +568,25 @@ def edit_package(cid, uid, fields, *, frame_id=None, reason=""):
     stays with `superseded_by`, the new one carries `supersedes` and the
     reason -- a visible correction, never a silent mutation (v2 § 5.1).
     Anything else on a landed package is refused."""
-    stored = packages(cid, frame_id)
-    pkg = stored.get(str(uid))
-    if pkg is None:
-        raise ValueError("no package %r" % uid)
     fields = dict(fields or {})
     unknown = [k for k in fields if k not in _TEXT_FIELDS
                and k not in _LIST_FIELDS
                and k not in ("spoiler_policy", "scope", "authority")]
-    if unknown:
-        raise ValueError("unknown package fields: %s" % ", ".join(sorted(unknown)))
+
+    def _edit(stored):
+        pkg = stored.get(str(uid))
+        if pkg is None:
+            raise ValueError("no package %r" % uid)
+        if unknown:
+            raise ValueError("unknown package fields: %s"
+                             % ", ".join(sorted(unknown)))
+        return _edit_one(cid, frame_id, pkg, fields, reason, stored), True
+    return _update_store(cid, frame_id, _edit)
+
+
+def _edit_one(cid, frame_id, pkg, fields, reason, stored):
+    """`edit_package`'s change, made on the store as it stands under the
+    write lock. Returns the package as it now stands in ``stored``."""
     if pkg["status"] in LANDED:
         if set(fields) != {"truths"}:
             raise ValueError(
@@ -490,12 +613,21 @@ def edit_package(cid, uid, fields, *, frame_id=None, reason=""):
         _bump(pkg, "truth_superseded", reason, _latest_turn_idx(cid, frame_id))
         pkg["validation"]["ok"] = True
         stored[pkg["uid"]] = pkg
-        save_packages(cid, stored, frame_id)
         return pkg
     if pkg["status"] not in EDITABLE:
         raise ValueError("a %s package is not editable" % pkg["status"])
     merged = dict(pkg)
     merged.update(fields)
+    if "clocks" in fields:
+        # THE ENGINE'S OWN MARKS ARE NOT AN AUTHOR'S TO WRITE (audit
+        # 2026-11-01, F9). A draft clock carrying `fired_turn: 0` was a clock
+        # that never fires, one carrying `filled: N` a clock that fires at
+        # once; a draft has never fired, so every mark it carries was written
+        # by its author and is dropped here.
+        merged["clocks"] = [
+            {k: v for k, v in clock.items() if k not in CLOCK_ENGINE_MARKS}
+            if isinstance(clock, dict) else clock
+            for clock in as_list(fields["clocks"])]
     fresh = normalize_package(merged)
     for key in ("operations", "base", "provenance", "validation", "status",
                 "revision", "published_turn", "activated_turn"):
@@ -503,7 +635,6 @@ def edit_package(cid, uid, fields, *, frame_id=None, reason=""):
     _bump(fresh, "edited", ", ".join(sorted(fields)),
           _latest_turn_idx(cid, frame_id))
     stored[fresh["uid"]] = fresh
-    save_packages(cid, stored, frame_id)
     return fresh
 
 
@@ -511,54 +642,55 @@ def draft_operation(cid, uid, op, *, frame_id=None):
     """Append one typed operation to a draft. Refused: an unknown kind
     (THE author-layer gate -- see the module docstring), a malformed one,
     or a draft already at `OPS_CAP`."""
-    stored = packages(cid, frame_id)
-    pkg = stored.get(str(uid))
-    if pkg is None:
-        raise ValueError("no package %r" % uid)
-    if pkg["status"] not in EDITABLE:
-        raise ValueError("a %s package takes no new operations" % pkg["status"])
-    op = dict(op or {})
-    kind = str(op.get("op") or "")
-    # `kind` is accepted as the kind key only when its value IS a kind, so a
-    # plan_entity's own `kind` (person | thing | creature) is never read as
-    # the operation's.
-    if not kind and str(op.get("kind") or "") in OPERATIONS:
-        kind = str(op.pop("kind"))
-    if kind not in OPERATIONS:
-        raise ValueError(
-            "operation kind %r is not one the room may perform; an operation is "
-            "an object whose `op` names its kind and whose other keys are that "
-            "kind's fields; the kinds are %s"
-            % (kind, ", ".join(sorted(OPERATIONS))))
-    if len(pkg["operations"]) >= OPS_CAP:
-        raise ValueError("a package carries at most %d operations" % OPS_CAP)
-    shaped = OPERATIONS[kind]["shape"](op)
-    shaped["op"] = kind
-    for mark in ("applied", "prepared", "deferred", "refused", "waves"):
-        shaped.pop(mark, None)
-    pkg["operations"].append(shaped)
-    _bump(pkg, "operation_drafted", kind, _latest_turn_idx(cid, frame_id))
-    stored[pkg["uid"]] = pkg
-    save_packages(cid, stored, frame_id)
-    return pkg
+    def _draft(stored):
+        pkg = stored.get(str(uid))
+        if pkg is None:
+            raise ValueError("no package %r" % uid)
+        if pkg["status"] not in EDITABLE:
+            raise ValueError("a %s package takes no new operations"
+                             % pkg["status"])
+        raw = dict(op or {})
+        kind = str(raw.get("op") or "")
+        # `kind` is accepted as the kind key only when its value IS a kind,
+        # so a plan_entity's own `kind` (person | thing | creature) is never
+        # read as the operation's.
+        if not kind and str(raw.get("kind") or "") in OPERATIONS:
+            kind = str(raw.pop("kind"))
+        if kind not in OPERATIONS:
+            raise ValueError(
+                "operation kind %r is not one the room may perform; an "
+                "operation is an object whose `op` names its kind and whose "
+                "other keys are that kind's fields; the kinds are %s"
+                % (kind, ", ".join(sorted(OPERATIONS))))
+        if len(pkg["operations"]) >= OPS_CAP:
+            raise ValueError("a package carries at most %d operations" % OPS_CAP)
+        shaped = OPERATIONS[kind]["shape"](raw)
+        shaped["op"] = kind
+        for mark in ("applied", "prepared", "deferred", "refused", "waves"):
+            shaped.pop(mark, None)
+        pkg["operations"].append(shaped)
+        _bump(pkg, "operation_drafted", kind, _latest_turn_idx(cid, frame_id))
+        stored[pkg["uid"]] = pkg
+        return pkg, True
+    return _update_store(cid, frame_id, _draft)
 
 
 def remove_operation(cid, uid, index, *, frame_id=None):
-    stored = packages(cid, frame_id)
-    pkg = stored.get(str(uid))
-    if pkg is None:
-        raise ValueError("no package %r" % uid)
-    if pkg["status"] not in EDITABLE:
-        raise ValueError("a %s package keeps its operations" % pkg["status"])
-    try:
-        removed = pkg["operations"].pop(int(index))
-    except (IndexError, ValueError, TypeError):
-        raise ValueError("no operation at index %r" % index)
-    _bump(pkg, "operation_removed", removed.get("op"),
-          _latest_turn_idx(cid, frame_id))
-    stored[pkg["uid"]] = pkg
-    save_packages(cid, stored, frame_id)
-    return pkg
+    def _remove(stored):
+        pkg = stored.get(str(uid))
+        if pkg is None:
+            raise ValueError("no package %r" % uid)
+        if pkg["status"] not in EDITABLE:
+            raise ValueError("a %s package keeps its operations" % pkg["status"])
+        try:
+            removed = pkg["operations"].pop(int(index))
+        except (IndexError, ValueError, TypeError):
+            raise ValueError("no operation at index %r" % index)
+        _bump(pkg, "operation_removed", removed.get("op"),
+              _latest_turn_idx(cid, frame_id))
+        stored[pkg["uid"]] = pkg
+        return pkg, True
+    return _update_store(cid, frame_id, _remove)
 
 
 # ---------------------------------------------------------------------------
@@ -848,12 +980,7 @@ def _plan_geometry(raw):
     # the closure reads every drafted room through here since 2026-10-08, so
     # one malformed room failed the Room's review and a one-shot launch
     # (review 2026-10-08, L3).
-    raw_over = raw.get("over")
-    if isinstance(raw_over, str):
-        raw_over = [raw_over]
-    elif not isinstance(raw_over, (list, tuple)):
-        raw_over = ()
-    over = [str(x).strip() for x in raw_over
+    over = [str(x).strip() for x in as_list(raw.get("over"))
             if isinstance(x, (str, int)) and not isinstance(x, bool)
             and str(x).strip()]
     if over:
@@ -1043,7 +1170,7 @@ def _shape_plan_rooms(op):
     from world.structure import frontier_refusal
     for uid, raw in rooms.items():
         raw = raw if isinstance(raw, dict) else {}
-        for axis in raw.get("frontier") or ():
+        for axis in as_list(raw.get("frontier")):
             refusal = frontier_refusal(axis)
             if refusal:
                 raise ValueError("room %r: %s" % (uid, refusal))
@@ -1051,9 +1178,9 @@ def _shape_plan_rooms(op):
             "name": _text(raw.get("name"), 120) or str(uid),
             "purpose": _text(raw.get("purpose"), 400),
             "access": _text(raw.get("access"), 200),
-            "adjacent": [_plan_edge(e) for e in raw.get("adjacent") or ()
+            "adjacent": [_plan_edge(e) for e in as_list(raw.get("adjacent"))
                          if isinstance(e, dict) and e.get("to")],
-            "frontier": [_text(x, 60) for x in raw.get("frontier") or ()
+            "frontier": [_text(x, 60) for x in as_list(raw.get("frontier"))
                          if _text(x, 60)],
             **_plan_geometry(raw),
             **_plan_far_look(raw),
@@ -1336,7 +1463,8 @@ def _shape_plan_entity(op):
     return {
         "kind": _text(op.get("kind"), 20) or "person",
         "name": _text(op.get("name"), 120),
-        "aliases": [_text(a, 120) for a in op.get("aliases") or () if _text(a, 120)],
+        "aliases": [_text(a, 120) for a in as_list(op.get("aliases"))
+                    if _text(a, 120)],
         "role": _text(op.get("role"), 120),
         "brief": {"purpose": _text(brief.get("purpose"), 600),
                   "truths": _text(brief.get("truths"), 600),
@@ -1358,10 +1486,8 @@ def _shape_plan_entity(op):
         "look": _text(op.get("look"), 600),
         "sources": _plan_sources(op),
         "answers_need": _text(op.get("answers_need"), 60),
-        "known_by": [_text(n, 120) for n in (
-            op.get("known_by") if isinstance(op.get("known_by"), (list, tuple))
-            else [op.get("known_by")] if op.get("known_by") else ())
-            if _text(n, 120)],
+        "known_by": [_text(n, 120) for n in as_list(op.get("known_by"))
+                     if _text(n, 120)],
     }
 
 
@@ -1554,9 +1680,9 @@ def _shape_plan_creature(op):
     return {
         "name": _text(op.get("name"), 120),
         "lair": _text(op.get("lair"), 120),
-        "hunts": [_text(r, 120) for r in op.get("hunts") or () if _text(r, 120)],
+        "hunts": [_text(r, 120) for r in as_list(op.get("hunts")) if _text(r, 120)],
         "count": max(1, min(12, int(op.get("count") or 1))),
-        "prey": [_text(x, 20) for x in op.get("prey") or () if _text(x, 20)],
+        "prey": [_text(x, 20) for x in as_list(op.get("prey")) if _text(x, 20)],
         "senses_rooms": max(0, min(6, int(op.get("senses_rooms") or 2))),
         # WHETHER IT HAS EARS, and it has to be said. Declared and false by
         # default (`charter_creature.normalize_creature`): the engine may not
@@ -1571,7 +1697,7 @@ def _shape_plan_creature(op):
         # `active_phases` and an empty list means every hour, so a creature
         # planned "after dark" with no way to say so climbed the Stair in
         # the afternoon at clock zero (scratch play 2026-09-14, chat 7).
-        "active_phases": _phase_names(op.get("active_phases")),
+        "active_phases": _phase_names(as_list(op.get("active_phases"))),
         "rule": _text(op.get("rule"), 600),
         "look": _text(op.get("look"), 300),
         "noun": _text(op.get("noun"), 32),
@@ -1588,7 +1714,7 @@ def _phase_names(raw):
     as a phase no clock will ever stand in."""
     from world.day_cycle import PHASE_NAMES
     out = []
-    for item in (raw or ()) if isinstance(raw, (list, tuple)) else ():
+    for item in as_list(raw):
         word = str(item or "").strip().casefold()
         if word in PHASE_NAMES and word not in out:
             out.append(word)
@@ -1941,7 +2067,7 @@ def _shape_file_lore(op):
     if tag and tag not in KNOWLEDGE_TAGS:
         raise ValueError("file_lore knowledge_tag %r is not one of %s"
                          % (tag, ", ".join(KNOWLEDGE_TAGS)))
-    locations = [_text(x, 120) for x in op.get("knowledge_locations") or ()
+    locations = [_text(x, 120) for x in as_list(op.get("knowledge_locations"))
                  if _text(x, 120)]
     # Locations name where the entry APPLIES, and were read only under a
     # `local` range that nothing could set: given alone they meant nothing.
@@ -1952,11 +2078,10 @@ def _shape_file_lore(op):
                          % (reach, ", ".join(KNOWLEDGE_RANGES)))
     if reach == "local" and not locations:
         raise ValueError("a local file_lore names its knowledge_locations")
-    circles = op.get("circles")
-    if circles is not None:
-        circles = [_text(c, 80) for c in (
-            circles if isinstance(circles, (list, tuple)) else [circles])
-            if _text(c, 80)]
+    circles = None
+    if op.get("circles") is not None:
+        circles = [_text(c, 80) for c in as_list(op.get("circles"))
+                   if _text(c, 80)]
     return {
         "subject_id": subject,
         "subject_kind": _text(op.get("subject_kind"), 40) or "place",
@@ -2149,14 +2274,13 @@ def _apply_close_need(cid, frame_id, op, turn_idx):
 
 def _shape_set_vistas(op):
     from world.vistas import normalize_vista
-    raw = op.get("vistas")
     # Authored here, so a distance written is a distance given -- 10 km too
     # (the "not the default" rule is for vistas stored before the flag;
     # review round 3, 2026-10-05).
     vistas = [v for v in (normalize_vista(
         dict(item, distance_given=item.get("distance_km") is not None)
-        if isinstance(item, dict) else item) for item in (raw or ())) if v] \
-        if isinstance(raw, list) else []
+        if isinstance(item, dict) else item)
+        for item in as_list(op.get("vistas"))) if v]
     if not vistas:
         raise ValueError("set_vistas lists one or more vistas, each with a name "
                          "and a compass bearing (n, ne, e, se, s, sw, w, nw)")
@@ -2480,7 +2604,8 @@ def _shape_presimulate(op):
         raise ValueError("presimulate lives the town forward 0 < hours <= %g"
                          % PRESIM_HOURS_CAP)
     return {"hours": hours,
-            "charters": [_text(c, 80) for c in op.get("charters") or () if _text(c, 80)]}
+            "charters": [_text(c, 80) for c in as_list(op.get("charters"))
+                         if _text(c, 80)]}
 
 
 def _preview_presimulate(cid, frame_id, op, world):
@@ -2746,10 +2871,8 @@ def _shape_charter_ops(op):
     from world.charter_ops import (CHARTER_OPS, CHARTER_OPS_CAP,
                                    normalize_charter_op)
     charter = _text(op.get("charter"), 120)
-    raw = op.get("ops")
-    if isinstance(raw, dict):
-        raw = [raw]
-    if not isinstance(raw, (list, tuple)) or not raw:
+    raw = as_list(op.get("ops"))
+    if not raw:
         raise ValueError("charter_ops carries `ops`: the facts the event "
                          "moves, each one of %s" % ", ".join(sorted(CHARTER_OPS)))
     if len(raw) > CHARTER_OPS_CAP:
@@ -2816,7 +2939,7 @@ def _shape_incident(op):
     if shock < 0.0 or shock > 1.0:
         raise ValueError("incident shock is a number 0..1")
     harms = []
-    for raw in (op.get("harms") or ()) if isinstance(op.get("harms"), list) else ():
+    for raw in as_list(op.get("harms")):
         raw = raw if isinstance(raw, dict) else {}
         if _text(raw.get("charter"), 120) and _text(raw.get("body"), 120):
             harms.append({"charter": _text(raw.get("charter"), 120),
@@ -2967,11 +3090,8 @@ def _shape_director_note(op):
     if len(text) > DIRECTOR_NOTE_CHARS:
         raise ValueError("a director_note is at most %d characters; this one "
                          "is %d" % (DIRECTOR_NOTE_CHARS, len(text)))
-    rooms = op.get("rooms")
-    if isinstance(rooms, str):
-        rooms = [rooms]
     clean = []
-    for room in rooms if isinstance(rooms, (list, tuple)) else ():
+    for room in as_list(op.get("rooms")):
         room = _text(room, 120)
         if room and room not in clean:
             clean.append(room)
@@ -3157,23 +3277,44 @@ def _apply_region_event(cid, frame_id, op, turn_idx, *, by, elapsed, turn_id):
 
 def advance_region_waves(cid, frame_id, pkg, *, turn_idx, elapsed, turn_id):
     """Land every pending wave of the package's region events that is due.
-    Returns the number landed."""
+    Returns ``(landed, refused)``: the waves landed and the waves refused.
+
+    EACH WAVE LANDS WHOLE OR NOT AT ALL (audit 2026-11-01, F1): in a
+    savepoint of its own, so a wave whose seam raises leaves nothing
+    half-written, and is recorded as refused on its operation
+    (`refused_waves`) and in the package's history -- dropped from what is
+    pending rather than raised out of the clock pass with the waves before it
+    landed and unmarked, to land again on the next beat."""
+    from core.db import transaction
     from world.region_events import apply_wave
-    landed = 0
+    landed = refused = 0
     by = "writers_room:" + pkg["uid"]
-    for op in pkg["operations"]:
+    for i, op in enumerate(pkg["operations"]):
         if op["op"] != "region_event" or not op.get("waves"):
             continue
         still = []
         for wave in op["waves"]:
-            if float(wave.get("due_elapsed") or 0.0) <= float(elapsed or 0.0) + 1e-6:
-                apply_wave(cid, frame_id, op, wave, turn_idx=turn_idx,
-                           turn_id=turn_id, elapsed=elapsed, by=by)
-                landed += 1
-            else:
+            if float(wave.get("due_elapsed") or 0.0) > float(elapsed or 0.0) + 1e-6:
                 still.append(wave)
+                continue
+            try:
+                with transaction():
+                    apply_wave(cid, frame_id, op, wave, turn_idx=turn_idx,
+                               turn_id=turn_id, elapsed=elapsed, by=by)
+            except Exception as exc:
+                why = "%s: %s" % (type(exc).__name__, str(exc)[:300])
+                op.setdefault("refused_waves", []).append({
+                    "turn_idx": int(turn_idx or 0),
+                    "due_elapsed": wave.get("due_elapsed"), "error": why})
+                _note(pkg, "operation_refused",
+                      "op %d (region_event) wave: %s" % (i, why[:200]), turn_idx)
+                logger.warning("plot package %s: a wave of op %d failed: %s",
+                               pkg["uid"], i, why)
+                refused += 1
+                continue
+            landed += 1
         op["waves"] = still
-    return landed
+    return landed, refused
 
 
 OPERATIONS = {
@@ -3775,6 +3916,11 @@ def _package_checks(pkg, world):
                 and not triggers:
             errors.append("clock %s has no due (due_story_hours or due_turns) "
                           "and nothing it advances on (advance_on)" % clock["id"])
+        for field in _unreadable_dues(clock):
+            errors.append("clock %s: %s is %r, which is no number of %s; a "
+                          "clock due by a value nothing can read never fires"
+                          % (clock["id"], field, clock.get(field),
+                             "turns" if field == "due_turns" else "story hours"))
         # A CLOCK THAT WILL NEVER TICK SAYS SO HERE (D15), while it is still
         # a draft: a trigger filtering on something no event carries would
         # match everything it should not, and a kind this world has never
@@ -4000,39 +4146,59 @@ def validate_package(cid, uid, *, frame_id=None):
     114's (4 packages, 12,725 bytes): 0.407 ms median for the write, against
     a preview that dry-runs every operation. A stranded package is not worth
     0.4 ms.
+
+    Each of the three writes is its own act under the write lock
+    (`_update_store`, audit 2026-11-01 F1); the preview between them is a
+    read and holds no lock.
     """
-    stored = packages(cid, frame_id)
-    pkg = stored.get(str(uid))
-    if pkg is None:
-        raise ValueError("no package %r" % uid)
-    if pkg["status"] not in EDITABLE:
-        raise ValueError("a %s package is not validated again" % pkg["status"])
-    pkg["status"] = "validating"
-    save_packages(cid, stored, frame_id)
+    def _start(stored):
+        pkg = stored.get(str(uid))
+        if pkg is None:
+            raise ValueError("no package %r" % uid)
+        if pkg["status"] not in EDITABLE:
+            raise ValueError("a %s package is not validated again" % pkg["status"])
+        pkg["status"] = "validating"
+        return None, True
+    _update_store(cid, frame_id, _start)
     try:
         result = preview_package(cid, uid, frame_id=frame_id)
     finally:
-        stored = packages(cid, frame_id)
-        pkg = stored[str(uid)]
-        pkg["status"] = "draft"
-        save_packages(cid, stored, frame_id)
-    pkg["validation"] = {"ok": not result["errors"], "errors": result["errors"],
-                         "warnings": result["warnings"],
-                         "at_revision": pkg["revision"]}
-    _note(pkg, "validated", "ok" if not result["errors"]
-          else "%d error(s)" % len(result["errors"]))
-    stored[pkg["uid"]] = pkg
-    save_packages(cid, stored, frame_id)
-    return pkg["validation"]
+        def _back(stored):
+            pkg = stored.get(str(uid))
+            if pkg is None or pkg["status"] != "validating":
+                return None, False
+            pkg["status"] = "draft"
+            return None, True
+        _update_store(cid, frame_id, _back)
+
+    def _verdict(stored):
+        pkg = stored.get(str(uid))
+        if pkg is None:
+            raise ValueError("no package %r" % uid)
+        if pkg["status"] == "validating":
+            pkg["status"] = "draft"
+        pkg["validation"] = {"ok": not result["errors"],
+                             "errors": result["errors"],
+                             "warnings": result["warnings"],
+                             "at_revision": pkg["revision"]}
+        _note(pkg, "validated", "ok" if not result["errors"]
+              else "%d error(s)" % len(result["errors"]))
+        return pkg["validation"], True
+    return _update_store(cid, frame_id, _verdict)
 
 
 def prepare_package(cid, uid, *, frame_id=None):
     """Run the LONG operations (a model call, a presimulation) before
     publish, each landing under its own seam's guard. Each prepared
     operation records what it produced; publish then refuses nothing on
-    their account. A validated draft only."""
-    stored = packages(cid, frame_id)
-    pkg = stored.get(str(uid))
+    their account. A validated draft only.
+
+    THE LONG OPERATIONS RUN OUTSIDE THE WRITE LOCK -- a location generation
+    is minutes -- and each one's record is written as its own act on the
+    store as it then stands (`_update_store`, audit 2026-11-01 F1): saved
+    whole from the copy read before it ran, the record erased whatever any
+    other writer had saved in those minutes."""
+    pkg = packages(cid, frame_id).get(str(uid))
     if pkg is None:
         raise ValueError("no package %r" % uid)
     if pkg["status"] not in EDITABLE:
@@ -4044,39 +4210,71 @@ def prepare_package(cid, uid, *, frame_id=None):
         spec = OPERATIONS[op["op"]]
         if not spec["long"] or op.get("prepared"):
             continue
-        op["prepared"] = spec["prepare"](cid, frame_id, op)
+        as_drafted = copy.deepcopy(op)
+        result = spec["prepare"](cid, frame_id, op)
         prepared.append(i)
         # Persist after EACH long operation: a crash between two leaves
         # the first recorded as done, so a retry does not run it twice.
-        stored[pkg["uid"]] = pkg
-        save_packages(cid, stored, frame_id)
-    _note(pkg, "prepared", "%d operation(s)" % len(prepared))
+        _update_store(cid, frame_id, lambda stored, i=i, op=as_drafted,
+                      result=result: _mark_prepared(stored, uid, i, op, result))
     # The world moved under the long operations by design (rooms planted, a
     # registry saved); re-pin so publish does not read its own preparation
     # as a conflict.
-    pkg["base"] = {"turn_idx": _latest_turn_idx(cid, frame_id),
-                   "registry_revision": _registry_revision(cid, frame_id),
-                   "pinned_at": time.time()}
-    stored[pkg["uid"]] = pkg
-    save_packages(cid, stored, frame_id)
+    base = {"turn_idx": _latest_turn_idx(cid, frame_id),
+            "registry_revision": _registry_revision(cid, frame_id),
+            "pinned_at": time.time()}
+
+    def _repin(stored):
+        fresh = stored.get(str(uid))
+        if fresh is None:
+            return None, False
+        _note(fresh, "prepared", "%d operation(s)" % len(prepared))
+        fresh["base"] = base
+        return None, True
+    _update_store(cid, frame_id, _repin)
     return {"prepared": prepared}
 
 
-def publish_package(cid, uid, *, expected_revision=None, frame_id=None):
-    """Land the package: ONE short transaction over the short operations.
+#: What the engine writes on a drafted operation; two operations that differ
+#: only in these are the same operation.
+_OPERATION_MARKS = ("applied", "prepared", "deferred", "refused", "waves",
+                    "refused_waves")
 
-    Refused: an unvalidated draft, a revision other than the caller
-    expected, an unprepared long operation, or a CONFLICT -- history has
-    moved since the base was pinned AND re-validation against the moved
-    world fails. History that moved without breaking anything is a REBASE:
-    the base is re-pinned and noted, and the publish proceeds. Visibility
-    is next-turn by construction: `published_turn` is the latest turn row,
-    and `visible_packages` serves the package only to turns after it.
-    """
-    from core.db import transaction
 
-    stored = packages(cid, frame_id)
-    pkg = stored.get(str(uid))
+def _same_operation(a, b):
+    return ({k: v for k, v in (a or {}).items() if k not in _OPERATION_MARKS}
+            == {k: v for k, v in (b or {}).items() if k not in _OPERATION_MARKS})
+
+
+def _mark_prepared(stored, uid, index, op, result):
+    """Record a long operation's preparation on the store as it stands: on
+    the operation at ``index`` when it is still that operation, else on the
+    one equal to it. A package edited while the operation ran keeps the
+    record wherever that operation now is; one that no longer holds it
+    records nothing, and says so in the log."""
+    fresh = stored.get(str(uid))
+    if fresh is None:
+        return None, False
+    ops = fresh["operations"]
+    found = (ops[index] if index < len(ops) and _same_operation(ops[index], op)
+             else next((o for o in ops if _same_operation(o, op)), None))
+    if found is None:
+        logger.warning("plot package %s: op %d (%s) was prepared and is no "
+                       "longer in the package; its record is dropped",
+                       uid, index, op.get("op"))
+        return None, False
+    found["prepared"] = result
+    return None, True
+
+
+#: How many times a publish decides again when the package or the world
+#: moved between its decision and its write -- a race measured in the time a
+#: rebase preview takes. Past it the publish is refused, to be asked again.
+PUBLISH_ATTEMPTS = 3
+
+
+def _publish_checks(pkg, uid, expected_revision):
+    """The refusals a publish makes on the package itself."""
     if pkg is None:
         raise ValueError("no package %r" % uid)
     if pkg["status"] not in EDITABLE:
@@ -4091,61 +4289,123 @@ def publish_package(cid, uid, *, expected_revision=None, frame_id=None):
     if unprepared:
         raise ValueError("operations %s are long and unprepared; prepare the "
                          "package first" % unprepared)
-    # The grant is checked AGAIN here, not only at validation: a mandate
-    # revoked between the two prevents the write (v2 § 14.1), and a queued
-    # fill job publishes through this same seam.
-    refused = authority_errors(cid, frame_id, pkg)
-    if refused:
-        raise ValueError("; ".join(refused))
-    turn_idx = _latest_turn_idx(cid, frame_id)
-    revision_now = _registry_revision(cid, frame_id)
-    moved = (pkg["base"].get("turn_idx") != turn_idx
-             or (pkg["base"].get("registry_revision") or "") != revision_now)
-    if moved:
-        result = preview_package(cid, uid, frame_id=frame_id)
-        if result["errors"]:
-            pkg["validation"] = {"ok": False, "errors": result["errors"],
-                                 "warnings": result["warnings"],
-                                 "at_revision": pkg["revision"]}
-            _note(pkg, "conflict", "history moved: turn %s -> %s"
-                  % (pkg["base"].get("turn_idx"), turn_idx), turn_idx)
-            stored[pkg["uid"]] = pkg
+
+
+def publish_package(cid, uid, *, expected_revision=None, frame_id=None):
+    """Land the package: ONE short transaction over the short operations.
+
+    Refused: an unvalidated draft, a revision other than the caller
+    expected, an unprepared long operation, or a CONFLICT -- history has
+    moved since the base was pinned AND re-validation against the moved
+    world fails. History that moved without breaking anything is a REBASE:
+    the base is re-pinned and noted, and the publish proceeds. Visibility
+    is next-turn by construction: `published_turn` is the latest turn row,
+    and `visible_packages` serves the package only to turns after it.
+
+    DECIDED OUTSIDE THE LOCK, WRITTEN UNDER IT (audit 2026-11-01, F1). The
+    rebase preview dry-runs every operation and can take seconds, so it is
+    not made holding the write lock a beat's commit waits on. The
+    transaction then reads the store AGAIN and lands only if neither the
+    package nor the world moved since the decision -- otherwise it decides
+    again (`PUBLISH_ATTEMPTS`). It used to read the store before the
+    transaction and write the whole of it back inside, erasing a draft or a
+    clock's marks another thread had saved in between.
+
+    A RUIN AT PUBLISH IS RETIRED (audit F2): an unclocked `region_event`'s
+    first wave lands here, and a ruined room is retired in `room_registry`
+    only against a turn row, which publish never passed. It is stamped with
+    the latest turn row, the one `published_turn` names, as a hand edit's
+    retirements are (`commit_room_registry.sync_room_registry_with_scene`).
+    """
+    from core.db import transaction
+
+    for _attempt in range(PUBLISH_ATTEMPTS):
+        pkg = packages(cid, frame_id).get(str(uid))
+        _publish_checks(pkg, uid, expected_revision)
+        # The grant is checked AGAIN here, not only at validation: a mandate
+        # revoked between the two prevents the write (v2 § 14.1), and a
+        # queued fill job publishes through this same seam.
+        refused = authority_errors(cid, frame_id, pkg)
+        if refused:
+            raise ValueError("; ".join(refused))
+        turn_idx = _latest_turn_idx(cid, frame_id)
+        revision_now = _registry_revision(cid, frame_id)
+        moved = (pkg["base"].get("turn_idx") != turn_idx
+                 or (pkg["base"].get("registry_revision") or "") != revision_now)
+        if moved:
+            result = preview_package(cid, uid, frame_id=frame_id)
+            if result["errors"]:
+                _record_conflict(cid, frame_id, uid, pkg["revision"], result,
+                                 pkg["base"].get("turn_idx"), turn_idx)
+                raise ValueError("conflict: history moved under the package and "
+                                 "it no longer validates: "
+                                 + "; ".join(result["errors"][:4]))
+        with transaction():
+            stored = packages(cid, frame_id)
+            fresh = stored.get(str(uid))
+            if fresh is None or fresh["revision"] != pkg["revision"] \
+                    or fresh["status"] not in EDITABLE \
+                    or _latest_turn_idx(cid, frame_id) != turn_idx \
+                    or _registry_revision(cid, frame_id) != revision_now:
+                continue        # moved while this publish was decided: again
+            refused = authority_errors(cid, frame_id, fresh)
+            if refused:
+                raise ValueError("; ".join(refused))
+            if moved:
+                _note(fresh, "rebased", "history moved: turn %s -> %s"
+                      % (fresh["base"].get("turn_idx"), turn_idx), turn_idx)
+                fresh["base"] = {"turn_idx": turn_idx,
+                                 "registry_revision": revision_now,
+                                 "pinned_at": time.time()}
+            applied = []
+            elapsed = _elapsed_seconds(cid, frame_id)
+            turn_id = _latest_turn_id(cid)
+            for i, op in enumerate(fresh["operations"]):
+                spec = OPERATIONS[op["op"]]
+                if spec["long"]:
+                    applied.append({"index": i, "op": op["op"],
+                                    "result": op.get("prepared")})
+                    continue
+                if op.get("clock"):
+                    # A circumstance on a fuse: it lands when `fire_due_clocks`
+                    # sees the clock due, never at publish.
+                    op["deferred"] = True
+                    applied.append({"index": i, "op": op["op"],
+                                    "result": {"deferred": op["clock"]}})
+                    continue
+                result = _apply_operation(cid, frame_id, fresh, op, turn_idx,
+                                          elapsed=elapsed, turn_id=turn_id)
+                op["applied"] = result
+                applied.append({"index": i, "op": op["op"], "result": result})
+            fresh["status"] = "published"
+            fresh["published_turn"] = turn_idx
+            fresh["published_elapsed"] = elapsed
+            _note(fresh, "published", "%d operation(s)" % len(applied), turn_idx)
+            stored[fresh["uid"]] = fresh
             save_packages(cid, stored, frame_id)
-            raise ValueError("conflict: history moved under the package and it "
-                             "no longer validates: " + "; ".join(result["errors"][:4]))
-        _note(pkg, "rebased", "history moved: turn %s -> %s"
-              % (pkg["base"].get("turn_idx"), turn_idx), turn_idx)
-        pkg["base"] = {"turn_idx": turn_idx, "registry_revision": revision_now,
-                       "pinned_at": time.time()}
-    applied = []
-    elapsed = _elapsed_seconds(cid, frame_id)
-    with transaction():
-        for i, op in enumerate(pkg["operations"]):
-            spec = OPERATIONS[op["op"]]
-            if spec["long"]:
-                applied.append({"index": i, "op": op["op"],
-                                "result": op.get("prepared")})
-                continue
-            if op.get("clock"):
-                # A circumstance on a fuse: it lands when `fire_due_clocks`
-                # sees the clock due, never at publish.
-                op["deferred"] = True
-                applied.append({"index": i, "op": op["op"],
-                                "result": {"deferred": op["clock"]}})
-                continue
-            result = _apply_operation(cid, frame_id, pkg, op, turn_idx,
-                                      elapsed=elapsed, turn_id=None)
-            op["applied"] = result
-            applied.append({"index": i, "op": op["op"], "result": result})
-        pkg["status"] = "published"
-        pkg["published_turn"] = turn_idx
-        pkg["published_elapsed"] = elapsed
-        _note(pkg, "published", "%d operation(s)" % len(applied), turn_idx)
-        stored[pkg["uid"]] = pkg
-        save_packages(cid, stored, frame_id)
-    return {"uid": pkg["uid"], "revision": pkg["revision"],
-            "published_turn": turn_idx, "visible_from_turn": turn_idx + 1,
-            "applied": applied}
+            return {"uid": fresh["uid"], "revision": fresh["revision"],
+                    "published_turn": turn_idx, "visible_from_turn": turn_idx + 1,
+                    "applied": applied}
+    raise ValueError("the package or the story kept moving while it was being "
+                     "published; publish it again")
+
+
+def _record_conflict(cid, frame_id, uid, revision, result, base_turn, turn_idx):
+    """A publish refused as a conflict says so on the package -- on the
+    package as it stands, and only while it is still the revision that was
+    previewed."""
+    def _conflict(stored):
+        fresh = stored.get(str(uid))
+        if fresh is None or fresh["revision"] != revision \
+                or fresh["status"] not in EDITABLE:
+            return None, False
+        fresh["validation"] = {"ok": False, "errors": result["errors"],
+                               "warnings": result["warnings"],
+                               "at_revision": fresh["revision"]}
+        _note(fresh, "conflict", "history moved: turn %s -> %s"
+              % (base_turn, turn_idx), turn_idx)
+        return None, True
+    _update_store(cid, frame_id, _conflict)
 
 
 def _apply_operation(cid, frame_id, pkg, op, turn_idx, *, elapsed, turn_id):
@@ -4253,7 +4513,19 @@ def _tick_triggered_clocks(cid, frame_id, stored, turn_idx):
     return advanced
 
 
-def _clock_due(pkg, clock, turn_idx, elapsed):
+def _clock_due(pkg, clock, turn_idx, elapsed, *, played=None):
+    """Whether ``clock`` is due at beat ``turn_idx``.
+
+    ``played(since)`` answers how many of THIS FRAME's beats lie in
+    ``(since, turn_idx]``; without it every turn row between counts.
+
+    A CLOCK COUNTS ITS OWN FRAME'S BEATS (audit 2026-11-01, F14). Turn rows
+    are numbered across the whole chat, and a live causality bubble inserts
+    its beats into that numbering, so `published_turn + due_turns` against
+    the chat-wide index brought a player-frame clock due after one of the
+    player's beats when a bubble had played four meanwhile. The Dramaturge's
+    pacing and the fill's back-off count the same way
+    (`room_frontier._other_frames_beats`)."""
     if clock.get("fired_turn") is not None or clock.get("refused_turn") is not None:
         return False
     since_turn = pkg.get("published_turn")
@@ -4264,16 +4536,19 @@ def _clock_due(pkg, clock, turn_idx, elapsed):
     if clock.get("advance_on") and clock.get("segments") is not None:
         if _int(clock.get("filled"), 0) >= _int(clock.get("segments"), 1):
             return True
-    if clock.get("due_turns") is not None:
+    due_turns = _due_number(clock.get("due_turns"))
+    if due_turns is not None:
         try:
-            if int(since_turn) + int(clock["due_turns"]) <= int(turn_idx):
-                return True
+            beats = (played(int(since_turn)) if played is not None
+                     else int(turn_idx) - int(since_turn))
         except (TypeError, ValueError):
-            pass
-    if clock.get("due_story_hours") is not None and pkg.get("published_elapsed") is not None:
+            beats = None
+        if beats is not None and beats >= int(due_turns):
+            return True
+    due_hours = _due_number(clock.get("due_story_hours"))
+    if due_hours is not None and pkg.get("published_elapsed") is not None:
         try:
-            due_at = float(pkg["published_elapsed"]) + float(
-                clock["due_story_hours"]) * STORY_HOUR_SECONDS
+            due_at = float(pkg["published_elapsed"]) + due_hours * STORY_HOUR_SECONDS
             if due_at <= float(elapsed or 0.0) + 1e-6:
                 return True
         except (TypeError, ValueError):
@@ -4303,83 +4578,147 @@ def fire_due_clocks(cid, turn_idx, *, elapsed=None, frame_id=None, turn_id=None)
     when it is due. What cannot be undone is not done here: no seam this
     reaches deletes anything.
     """
-    stored = packages(cid, frame_id)
+    from core.db import transaction
+    from story.room_frontier import _other_frames_beats
+
     if elapsed is None:
         elapsed = _elapsed_seconds(cid, frame_id)
-    fired, landed_waves, dirty = [], 0, False
-    # THE SEGMENTS FIRST (D15): a clock that waits on events counts what the
-    # world wrote since it last counted, and a clock whose segments filled
-    # this beat is due in the same pass.
-    #
-    # A TICK WRITES NO PROVENANCE NOTE. The counter rides the clock and the
-    # projection carries it, so a note would say only what the reader can
-    # already see -- and it would say it on nearly every beat: a clock
-    # watching a kind this world writes often advances constantly (chat 114
-    # wrote 52 `consequence` rows in 14 turns) while `HISTORY_CAP` is 40, so
-    # a 47-beat probe evicted the package's whole authored record -- created,
-    # edited, validated, published -- and left the panel's history window
-    # showing nothing but `clock_advanced` (measured 2026-09-08). The counter
-    # still persists: an advance marks the package dirty and is saved below.
-    advanced = _tick_triggered_clocks(
-        cid, frame_id, list(stored.values()), turn_idx)
-    advanced_uids = {pkg["uid"] for pkg, _clock, _filled in advanced}
-    for pkg in stored.values():
-        if pkg["status"] not in ("published", "active"):
-            continue
-        changed = pkg["uid"] in advanced_uids
-        for clock in pkg["clocks"]:
-            if not _clock_due(pkg, clock, turn_idx, elapsed):
+    empty = {"fired": [], "waves": 0, "advanced": []}
+    # Most beats have nothing on a fuse -- no clock still waiting, no wave
+    # pending -- and are answered without the write lock. Anything that may
+    # move is read again under it below.
+    if not any(p["status"] in ("published", "active")
+               and (any(c.get("fired_turn") is None and c.get("refused_turn") is None
+                        for c in p["clocks"])
+                    or any(op.get("waves") for op in p["operations"]))
+               for p in packages(cid, frame_id).values()):
+        return empty
+    beats_since = {}
+
+    def _played(since):
+        """This frame's beats in (since, turn_idx] (`_clock_due`, F14)."""
+        if since not in beats_since:
+            beats_since[since] = int(turn_idx) - int(since) - _other_frames_beats(
+                cid, frame_id, since, turn_idx)
+        return beats_since[since]
+
+    # ONE ACT UNDER THE WRITE LOCK (audit 2026-11-01, F1). The pass used to
+    # read the store with no transaction, catch only ValueError and save
+    # once at the very end, so an operation that landed before a later one
+    # raised anything else (a KeyError in a charter surgery, a sqlite error)
+    # was never marked applied, and landed AGAIN on every following beat; and
+    # a publish or a draft another thread saved meanwhile was erased by the
+    # store this pass wrote back. Now the store is read under the lock, each
+    # operation lands in a SAVEPOINT of its own -- whole, or not at all, and
+    # a failure of any kind is recorded on it as a refusal -- and the marks
+    # are saved in the same transaction as the writes they mark.
+    with transaction():
+        stored = packages(cid, frame_id)
+        fired, landed_waves, dirty = [], 0, False
+        # THE SEGMENTS FIRST (D15): a clock that waits on events counts what
+        # the world wrote since it last counted, and a clock whose segments
+        # filled this beat is due in the same pass.
+        #
+        # A TICK WRITES NO PROVENANCE NOTE. The counter rides the clock and
+        # the projection carries it, so a note would say only what the reader
+        # can already see -- and it would say it on nearly every beat: a
+        # clock watching a kind this world writes often advances constantly
+        # (chat 114 wrote 52 `consequence` rows in 14 turns) while
+        # `HISTORY_CAP` is 40, so a 47-beat probe evicted the package's whole
+        # authored record -- created, edited, validated, published -- and
+        # left the panel's history window showing nothing but
+        # `clock_advanced` (measured 2026-09-08). The counter still persists:
+        # an advance marks the package dirty and is saved below.
+        advanced = _tick_triggered_clocks(
+            cid, frame_id, list(stored.values()), turn_idx)
+        advanced_uids = {pkg["uid"] for pkg, _clock, _filled in advanced}
+        for pkg in stored.values():
+            if pkg["status"] not in ("published", "active"):
                 continue
-            changed = True
-            refused = authority_errors(cid, frame_id, pkg)
-            if refused:
-                clock["refused_turn"] = int(turn_idx)
-                _note(pkg, "clock_refused", "%s: %s" % (clock["id"], "; ".join(refused)[:300]),
-                      turn_idx)
-                continue
-            world = None
-            for i, op in enumerate(pkg["operations"]):
-                if op.get("clock") != clock["id"] or op.get("applied") is not None:
+            changed = pkg["uid"] in advanced_uids
+            for clock in pkg["clocks"]:
+                if clock.get("fired_turn") is not None \
+                        or clock.get("refused_turn") is not None:
                     continue
-                world = world or _world_snapshot(cid, frame_id)
-                spec = OPERATIONS[op["op"]]
-                verdict = spec["preview"](cid, frame_id, op, world)
-                if verdict["errors"]:
-                    # The world moved under the fuse: a body that died cannot
-                    # arrive, a room that is gone cannot be shocked.
-                    op["refused"] = {"turn_idx": int(turn_idx), "errors": verdict["errors"]}
-                    _note(pkg, "operation_refused", "op %d (%s): %s"
-                          % (i, op["op"], "; ".join(verdict["errors"])[:200]), turn_idx)
+                if not _clock_can_fire(clock):
+                    # A CLOCK THAT WILL NEVER TICK SAYS SO (D15; audit F9),
+                    # once: one stored before its due was checked.
+                    unread = _unreadable_dues(clock)
+                    why = ("; ".join("%s is %r, which is no number"
+                                     % (field, clock.get(field)) for field in unread)
+                           or "it carries no due and waits on no event")
+                    clock["refused_turn"] = int(turn_idx)
+                    _note(pkg, "clock_refused", "%s: %s; it can never fire"
+                          % (clock["id"], why), turn_idx)
+                    logger.warning("plot package %s: clock %s can never fire (%s)",
+                                   pkg["uid"], clock["id"], why)
+                    changed = True
                     continue
-                try:
-                    op["applied"] = _apply_operation(
-                        cid, frame_id, pkg, op, turn_idx, elapsed=elapsed,
-                        turn_id=turn_id)
-                except ValueError as exc:
-                    # A seam refused at the hour: the same class as a preview
-                    # error, recorded the same way.
-                    op["refused"] = {"turn_idx": int(turn_idx), "errors": [str(exc)[:400]]}
-                    _note(pkg, "operation_refused", "op %d (%s): %s"
-                          % (i, op["op"], str(exc)[:200]), turn_idx)
+                if not _clock_due(pkg, clock, turn_idx, elapsed, played=_played):
                     continue
-                op.pop("deferred", None)
-            clock["fired_turn"] = int(turn_idx)
-            clock["fired_elapsed"] = float(elapsed or 0.0)
-            _note(pkg, "clock_fired", clock["id"], turn_idx)
-            fired.append((pkg["uid"], clock["id"]))
-        waves = advance_region_waves(cid, frame_id, pkg, turn_idx=turn_idx,
-                                     elapsed=elapsed, turn_id=turn_id)
-        if waves:
-            landed_waves += waves
-            _note(pkg, "region_waves", "%d wave(s)" % waves, turn_idx)
-            changed = True
-        if changed:
-            stored[pkg["uid"]] = pkg
-            dirty = True
-    if dirty:
-        # A refusal is a change too: the clock that could not fire says so
-        # on the record, or the next beat would ask the same question.
-        save_packages(cid, stored, frame_id)
+                changed = True
+                refused = authority_errors(cid, frame_id, pkg)
+                if refused:
+                    clock["refused_turn"] = int(turn_idx)
+                    _note(pkg, "clock_refused", "%s: %s"
+                          % (clock["id"], "; ".join(refused)[:300]), turn_idx)
+                    continue
+                world = None
+                for i, op in enumerate(pkg["operations"]):
+                    if op.get("clock") != clock["id"] or op.get("applied") is not None:
+                        continue
+                    try:
+                        world = world or _world_snapshot(cid, frame_id)
+                        spec = OPERATIONS[op["op"]]
+                        verdict = spec["preview"](cid, frame_id, op, world)
+                        errors = verdict["errors"]
+                        if not errors:
+                            with transaction():     # a savepoint: whole or nothing
+                                applied = _apply_operation(
+                                    cid, frame_id, pkg, op, turn_idx,
+                                    elapsed=elapsed, turn_id=turn_id)
+                    except ValueError as exc:
+                        # A seam refused at the hour: the same class as a
+                        # preview error, recorded the same way.
+                        errors = [str(exc)[:400]]
+                    except Exception as exc:
+                        # Anything else is refused on the record too -- never
+                        # let out of the pass with the landings before it
+                        # unmarked (F1).
+                        errors = ["%s: %s" % (type(exc).__name__, str(exc)[:380])]
+                        logger.warning("plot package %s: op %d (%s) failed when "
+                                       "its clock fired: %s", pkg["uid"], i,
+                                       op["op"], errors[0])
+                    if errors:
+                        # The world moved under the fuse (a body that died
+                        # cannot arrive, a room that is gone cannot be
+                        # shocked), or the seam refused at the hour.
+                        op["refused"] = {"turn_idx": int(turn_idx), "errors": errors}
+                        _note(pkg, "operation_refused", "op %d (%s): %s"
+                              % (i, op["op"], "; ".join(errors)[:200]), turn_idx)
+                        continue
+                    op["applied"] = applied
+                    op.pop("deferred", None)
+                clock["fired_turn"] = int(turn_idx)
+                clock["fired_elapsed"] = float(elapsed or 0.0)
+                _note(pkg, "clock_fired", clock["id"], turn_idx)
+                fired.append((pkg["uid"], clock["id"]))
+            waves, refused_waves = advance_region_waves(
+                cid, frame_id, pkg, turn_idx=turn_idx, elapsed=elapsed,
+                turn_id=turn_id)
+            if waves:
+                landed_waves += waves
+                _note(pkg, "region_waves", "%d wave(s)" % waves, turn_idx)
+                changed = True
+            if refused_waves:
+                changed = True
+            if changed:
+                stored[pkg["uid"]] = pkg
+                dirty = True
+        if dirty:
+            # A refusal is a change too: the clock that could not fire says
+            # so on the record, or the next beat would ask the same question.
+            save_packages(cid, stored, frame_id)
     return {"fired": fired, "waves": landed_waves,
             "advanced": [(pkg["uid"], clock["id"], filled)
                          for pkg, clock, filled in advanced]}
@@ -4458,50 +4797,59 @@ def activate_due_packages(cid, turn_idx, *, frame_id=None):
     """`published -> active` for every package a turn has now seen.
     Idempotent bookkeeping, called from the commit's out-of-band tail.
     Returns the uids activated."""
-    stored = packages(cid, frame_id)
-    activated = []
-    for pkg in stored.values():
-        if pkg["status"] == "published" and pkg.get("published_turn") is not None \
-                and int(pkg["published_turn"]) < int(turn_idx):
-            pkg["status"] = "active"
-            pkg["activated_turn"] = int(turn_idx)
-            _note(pkg, "activated", turn_idx=turn_idx)
-            activated.append(pkg["uid"])
-    if activated:
-        save_packages(cid, stored, frame_id)
-    return activated
+    def _due(pkg):
+        return (pkg["status"] == "published"
+                and pkg.get("published_turn") is not None
+                and int(pkg["published_turn"]) < int(turn_idx))
+
+    # Most beats activate nothing, and are answered without the write lock.
+    if not any(_due(p) for p in packages(cid, frame_id).values()):
+        return []
+
+    def _activate(stored):
+        activated = []
+        for pkg in stored.values():
+            if _due(pkg):
+                pkg["status"] = "active"
+                pkg["activated_turn"] = int(turn_idx)
+                _note(pkg, "activated", turn_idx=turn_idx)
+                activated.append(pkg["uid"])
+        return activated, bool(activated)
+    return _update_store(cid, frame_id, _activate)
 
 
 def resolve_package(cid, uid, *, note="", frame_id=None):
-    stored = packages(cid, frame_id)
-    pkg = stored.get(str(uid))
-    if pkg is None:
-        raise ValueError("no package %r" % uid)
-    if pkg["status"] not in ("published", "active"):
-        raise ValueError("a %s package is not resolved" % pkg["status"])
     turn_idx = _latest_turn_idx(cid, frame_id)
-    pkg["status"] = "resolved"
-    pkg["resolution"] = {"note": _text(note, 400), "turn_idx": turn_idx}
-    _note(pkg, "resolved", note, turn_idx)
-    save_packages(cid, stored, frame_id)
-    return pkg
+
+    def _resolve(stored):
+        pkg = stored.get(str(uid))
+        if pkg is None:
+            raise ValueError("no package %r" % uid)
+        if pkg["status"] not in ("published", "active"):
+            raise ValueError("a %s package is not resolved" % pkg["status"])
+        pkg["status"] = "resolved"
+        pkg["resolution"] = {"note": _text(note, 400), "turn_idx": turn_idx}
+        _note(pkg, "resolved", note, turn_idx)
+        return pkg, True
+    return _update_store(cid, frame_id, _resolve)
 
 
 def retire_package(cid, uid, *, note="", frame_id=None):
     """Retire from any state. What a landed package placed in the world
     STAYS: retiring is the room closing its file, not the world forgetting
     a room it planted."""
-    stored = packages(cid, frame_id)
-    pkg = stored.get(str(uid))
-    if pkg is None:
-        raise ValueError("no package %r" % uid)
-    if pkg["status"] == "retired":
-        return pkg
     turn_idx = _latest_turn_idx(cid, frame_id)
-    pkg["status"] = "retired"
-    _note(pkg, "retired", note, turn_idx)
-    save_packages(cid, stored, frame_id)
-    return stored.get(pkg["uid"], pkg)
+
+    def _retire(stored):
+        pkg = stored.get(str(uid))
+        if pkg is None:
+            raise ValueError("no package %r" % uid)
+        if pkg["status"] == "retired":
+            return pkg, False
+        pkg["status"] = "retired"
+        _note(pkg, "retired", note, turn_idx)
+        return pkg, True
+    return _update_store(cid, frame_id, _retire)
 
 
 # ---------------------------------------------------------------------------

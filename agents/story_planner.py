@@ -772,33 +772,43 @@ def _payload(cid, frame_id, *, text, task, transcript, step, calls_left,
         except Exception as exc:
             return [{"error": str(exc)[:200]}]
 
+    # WHAT HOLDS STILL FIRST, WHAT MOVES LAST (audit 2026-11-01, E1). The
+    # payload is the user message of every step of a reply -- up to forty --
+    # and a provider caches a PREFIX of it: the per-step `budget` and the
+    # `status` the reply rewrites sat before the static task and the
+    # transcript, so the task (a location design's lore, plan spec and brief,
+    # ~40k characters) and the transcript were re-billed uncached on every
+    # step. Static first (the story, the vocabulary, the task, what the
+    # player said, the cast's minds, the thread), then the transcript, which
+    # only grows, then everything a step can move, the budget last. The same
+    # keys and values; only their order.
     payload = {
         "story": memo_part(memo, "story", lambda: _story(cid)),
-        "clock": memo_part(memo, "clock", _clock),
-        "minds": memo_part(memo, "minds", _minds),
-        "conversation": memo_part(memo, "conversation",
-                                  lambda: _conversation(cid, frame_id)),
-        "mandates": memo_part(memo, "mandates",
-                              lambda: active_mandates(cid, frame_id, turn_idx)),
-        "withdrawn": memo_part(memo, "withdrawn", lambda: [
-            {"uid": m["uid"], "text": m["text"], "status": m["status"]}
-            for m in revoked_since(cid, frame_id, max(0, turn_idx - 1))]),
         "capabilities": list(MANDATE_CAPABILITIES),
         "limits": list(MANDATE_LIMITS),
-        "status": memo_part(memo, "status", lambda: room.status(cid, frame_id)),
-        "frontier": memo_part(memo, "frontier", _frontier),
-        "packages": memo_part(memo, "packages",
-                              lambda: list_packages(cid, frame_id=frame_id)),
-        "pending_proposals": memo_part(memo, "pending_proposals", lambda: [
-            {"uid": p["uid"], "kind": p["kind"], "title": p["title"],
-             "status": p["status"]} for p in pending_proposals(cid, frame_id)]),
-        "transcript": shown,
-        "budget": {"regime": regime, "step": step,
-                   "steps": int(steps_cap or PLANNER_STEPS_PER_REPLY),
-                   "calls_left": calls_left,
-                   "seconds_left": round(max(0.0, seconds_left), 1),
-                   **({"spend": spend} if spend else {})},
     }
+    if task is not None:
+        payload["task"] = task
+    if text is not None:
+        payload["player_says"] = text
+    payload["minds"] = memo_part(memo, "minds", _minds)
+    payload["conversation"] = memo_part(memo, "conversation",
+                                        lambda: _conversation(cid, frame_id))
+    payload["transcript"] = shown
+    payload["clock"] = memo_part(memo, "clock", _clock)
+    payload["mandates"] = memo_part(
+        memo, "mandates", lambda: active_mandates(cid, frame_id, turn_idx))
+    payload["withdrawn"] = memo_part(memo, "withdrawn", lambda: [
+        {"uid": m["uid"], "text": m["text"], "status": m["status"]}
+        for m in revoked_since(cid, frame_id, max(0, turn_idx - 1))])
+    payload["status"] = memo_part(memo, "status",
+                                  lambda: room.status(cid, frame_id))
+    payload["frontier"] = memo_part(memo, "frontier", _frontier)
+    payload["packages"] = memo_part(memo, "packages",
+                                    lambda: list_packages(cid, frame_id=frame_id))
+    payload["pending_proposals"] = memo_part(memo, "pending_proposals", lambda: [
+        {"uid": p["uid"], "kind": p["kind"], "title": p["title"],
+         "status": p["status"]} for p in pending_proposals(cid, frame_id)])
     # WORDS SAID ALOUD NEAR THE STORY WITH NO REPORT BEHIND THEM (the
     # owner's ruling on D6, 2026-10-09): a person a character invents stays
     # that character's claim, and the Room MAY make them real when it plans.
@@ -813,15 +823,16 @@ def _payload(cid, frame_id, *, text, task, transcript, step, calls_left,
         payload["unbacked_claims"] = claims["rows"]
         if claims.get("more"):
             payload["unbacked_claims_more"] = claims["more"]
-    if text is not None:
-        payload["player_says"] = text
-    if task is not None:
-        payload["task"] = task
     # THE FREE HAND (`story.mandates.free_hand_row`): its grant rides in
     # `mandates` like any other; this says what the card makes of it.
     from story.mandates import free_hand_row
     if free_hand_row(cid):
         payload["free_hand"] = True
+    payload["budget"] = {"regime": regime, "step": step,
+                         "steps": int(steps_cap or PLANNER_STEPS_PER_REPLY),
+                         "calls_left": calls_left,
+                         "seconds_left": round(max(0.0, seconds_left), 1),
+                         **({"spend": spend} if spend else {})}
     return payload
 
 
@@ -1339,8 +1350,11 @@ def run_planner(cid, frame_id, *, text=None, task=None, base_turn=None,
     # dropped by what the reply WRITES -- a tool that is not a pure read, an
     # applied grant, a rewritten status row -- and by a BEAT LANDING UNDER
     # IT: this loop runs in `converse_stream`'s daemon thread against no
-    # lock, which is why `story_rewound_past` is checked below, so each step
-    # hands the memo the database's own `data_version` (0.013 ms median), the
+    # lock, which is why `story_rewound_past` is checked below against the
+    # ``base_turn`` its caller passes -- the panel's reply does
+    # (`_planner_reply`, audit 2026-11-01 F19) and a task does; the launch's
+    # opening, prelude and location runs come before any beat to rewind --
+    # so each step hands the memo the database's own `data_version` (0.013 ms median), the
     # counter that moves on ANOTHER connection's commit -- the turn index
     # moves when a beat starts, not when it commits (C21, second skeptic).
     memo = ReplyMemo()
@@ -2209,8 +2223,14 @@ def _planner_reply(cid, frame_id, text, *, on_event=None):
     from story import room_conversation as room
     from story.room_bible import schedule_fold
     from story.room_proposals import ask_brief
+    # THE REPLY'S OWN WRITES ARE HELD TO THE STORY IT STARTED ON (audit
+    # 2026-11-01, F19). `run_planner`'s rewind guard runs only for a caller
+    # that passes a base turn, and this one -- the only production caller of
+    # the reply regime, in `converse_stream`'s daemon thread -- passed none,
+    # while the loop's own comment said the guard covered that thread: a
+    # publish could land onto a story the player had rewound underneath it.
     out = run_planner(cid, frame_id, text=text, regime="reply",
-                      on_event=on_event)
+                      on_event=on_event, base_turn=room.current_turn_idx(cid))
     if out.get("ask_dramaturge"):
         brief = out["ask_dramaturge"]
         # EVERY JOB CARRIES ITS BASE TURN (review 2026-09-07 A33). Both
@@ -2358,16 +2378,31 @@ def deliberate(cid, frame_id, proposals, *, base_turn=None, dial=0,
             except ValueError:
                 pass
         judged = set()
+        # A PACKAGE IMPLEMENTS THE PROPOSAL IT WAS BUILT FOR, AND NO OTHER
+        # (audit 2026-11-01, F4). An accepted verdict naming no package used
+        # to take the round's FIRST published one, so a round that accepted a
+        # storm and a rival's arrival, and could build only the storm, settled
+        # BOTH as implemented by it: the rival left the status row as built,
+        # and the grant question tied to it lapsed. The default stands only
+        # where it cannot be wrong -- one proposal accepted without a package,
+        # one package published; otherwise it stays `accepted`, being worked.
+        pending_uids = {p["uid"] for p in pending}
+        unnamed = {str(v.get("proposal_uid") or v.get("uid") or "")
+                   for v in out["verdicts"]
+                   if str(v.get("verdict") or "").casefold() == "accept"
+                   and not str(v.get("package_uid") or "")} & pending_uids
+        sole = (out["published"][0]
+                if len(unnamed) == 1 and len(out["published"]) == 1 else "")
         for v in out["verdicts"]:
             if is_cancelled(job):
                 break
             uid = str(v.get("proposal_uid") or v.get("uid") or "")
-            if uid not in {p["uid"] for p in pending}:
+            if uid not in pending_uids:
                 continue
             verdict = str(v.get("verdict") or "").casefold()
             package_uid = str(v.get("package_uid") or "")
-            if verdict == "accept" and not package_uid and out["published"]:
-                package_uid = out["published"][0]
+            if verdict == "accept" and not package_uid:
+                package_uid = sole
             try:
                 row = judge_proposal(
                     cid, frame_id, uid, verdict=verdict, reason=v.get("reason"),

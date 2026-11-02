@@ -170,6 +170,7 @@ def reading_copy(artifact, reader_room, turn):
         "hops": 0,
         "retellings": max(0, int(held.get("retellings") or 0)),
         "told_by": artifact_voice(artifact),
+        "told_by_kind": "artifact",
         "provenance": "read",
     }
 
@@ -192,7 +193,8 @@ def run_artifacts(ctx, scene, ops):
     from core.db import wget, wset
     from world.spatial import room_of
 
-    from story.carriers import REPORT_CAP, STATE_KEY, _cast_index, save_state
+    from story.carriers import (REPORT_CAP, STATE_KEY, _cast_index, awareness,
+                                not_awake, plain_ops, save_state)
     from story.couriers import _give_report, _hold_report, _player_name
 
     cid = ctx.chat.id
@@ -202,8 +204,16 @@ def run_artifacts(ctx, scene, ops):
     artifacts = [dict(a) for a in wget(cid, ARTIFACTS_WORLD_KEY, []) or []
                  if isinstance(a, dict)]
     before = json.dumps(artifacts, sort_keys=True, ensure_ascii=False)
-    index = _cast_index(cid, frame_id, scene,
-                        chat=getattr(ctx, "chat", None), ctx=ctx)
+    ops = plain_ops(ops)
+    # THE CARRIER INDEX ONLY WHEN AN OP ASKS (story_room_carriers efficiency
+    # 1): most beats post, read and tear down nothing, and the walk was
+    # measured at 45 ms a beat on chat 114, inside the commit.
+    if ops:
+        index = _cast_index(cid, frame_id, scene,
+                            chat=getattr(ctx, "chat", None), ctx=ctx)
+        amap = awareness(ctx)
+    else:
+        index, amap = {}, {}
     by_uid = {str(a.get("uid") or ""): a for a in artifacts}
     rejected = []
     metrics = {"artifact_ops_offered": 0, "artifacts_posted": 0,
@@ -224,7 +234,6 @@ def run_artifacts(ctx, scene, ops):
             return str(room_of(scene, player) or "")
         return ""
 
-    ops = [op.dict() if hasattr(op, "dict") else op for op in (ops or [])]
     for raw in ops:
         if not isinstance(raw, dict):
             rejected.append("artifact op was not an object")
@@ -249,6 +258,11 @@ def run_artifacts(ctx, scene, ops):
                 rejected.append("%s is nowhere the scene can place; no bill "
                                 "goes up in an unknown room" % poster["name"])
                 continue
+            level = not_awake(amap, poster)
+            if level:
+                rejected.append("%s is %s and nails nothing up"
+                                % (poster["name"], level))
+                continue
             asked_room = str(raw.get("room") or "").strip()
             if asked_room and asked_room != room:
                 rejected.append(
@@ -256,24 +270,26 @@ def run_artifacts(ctx, scene, ops):
                     "poster stands -- send a courier with a letter to post "
                     "it further away" % (poster["name"], room, asked_room))
                 continue
-            if sum(1 for a in artifacts if a.get("status") == POSTED) \
-                    >= MAX_ARTIFACTS:
+            # NOTICES, NOT CARCASSES (story_room_carriers F19): standing
+            # spoor has its own cap (`SPOOR_STANDING_CAP`) because it "must
+            # not compete for the same eight slots", and this count let eight
+            # carcasses forbid every bill in the story.
+            if sum(1 for a in artifacts if a.get("status") == POSTED
+                   and not a.get("spoor")) >= MAX_ARTIFACTS:
                 rejected.append("%d notices already stand; no more until "
                                 "one comes down" % MAX_ARTIFACTS)
                 continue
             event_id = str(raw.get("world_event_id") or "").strip()
             held = _hold_report(poster, event_id) if event_id else None
+            invented = None
             if held is None and not event_id \
                     and str(raw.get("claim") or "").strip():
                 from story.carriers import _invented_claim
 
+                # FILED ONLY IF THE BILL GOES UP (story_room_carriers F8):
+                # saved before the duplicate check, a refused post left the
+                # poster holding a claim they had "made up" and never posted.
                 invented = _invented_claim(raw.get("claim"), ctx, poster)
-                state = poster.get("state") or {}
-                state[STATE_KEY] = (
-                    [dict(r) for r in state.get(STATE_KEY) or []
-                     if isinstance(r, dict)] + [invented])[-REPORT_CAP:]
-                save_state(cid, poster, state, frame_id=frame_id)
-                poster["state"] = state
                 held = invented
             if held is None:
                 rejected.append(
@@ -300,6 +316,13 @@ def run_artifacts(ctx, scene, ops):
             if artifact["uid"] in by_uid:
                 rejected.append("that notice is already on the wall")
                 continue
+            if invented is not None:
+                state = poster.get("state") or {}
+                state[STATE_KEY] = (
+                    [dict(r) for r in state.get(STATE_KEY) or []
+                     if isinstance(r, dict)] + [invented])[-REPORT_CAP:]
+                save_state(cid, poster, state, frame_id=frame_id)
+                poster["state"] = state
             artifacts.append(artifact)
             by_uid[artifact["uid"]] = artifact
             metrics["artifacts_posted"] += 1
@@ -332,6 +355,11 @@ def run_artifacts(ctx, scene, ops):
                     "front of it" % (raw.get("reader"),
                                      artifact_voice(artifact)))
                 continue
+            level = not_awake(amap, reader) if reader is not None else ""
+            if level:
+                rejected.append("%s is %s and reads nothing"
+                                % (reader["name"], level))
+                continue
             copy = reading_copy(artifact, reader_room, turn)
             if copy is None:
                 rejected.append("the %s has nothing legible on it"
@@ -363,6 +391,12 @@ def run_artifacts(ctx, scene, ops):
                 rejected.append(
                     "%s is not where the %s hangs; a bill is torn down off "
                     "its own wall" % (by, artifact_voice(artifact)))
+                continue
+            remover = index.get(str(by or "").strip().casefold())
+            level = not_awake(amap, remover) if remover is not None else ""
+            if level:
+                rejected.append("%s is %s and tears nothing down"
+                                % (remover["name"], level))
                 continue
             removed = dict(artifact)
             removed["status"] = REMOVED
@@ -442,7 +476,15 @@ def post_spoor(cid, registry, turn, *, frame_id=None):
             kept.append(artifact)
             continue
         if artifact.get("status") != POSTED:
+            # A CARCASS TORN DOWN STAYS DOWN (story_room_carriers F7): the
+            # registry still holding its spoor record is not a second
+            # carcass. Left in `wanted`, it was posted again at the next
+            # landing under the same uid, beside the removed one -- the
+            # registry's spoor list and the artifact's status were two
+            # stores of one fact, and removal wrote only the second. It
+            # stays down until the registry forgets it.
             kept.append(artifact)
+            wanted.pop(artifact.get("uid"), None)
             continue
         if artifact.get("uid") in wanted:
             kept.append(artifact)
@@ -498,9 +540,14 @@ def schedule_artifact_wording(ctx):
     # makes it readable, and it was never an off-screen COGNITION question.
     # The spend is still bounded by `_WORDING_ATTEMPT_CAP` below and still runs
     # off the turn path.
+    #
+    # A CARCASS HAS NO WORDS ON IT (story_room_carriers F16): standing spoor
+    # is posted with no text, and was sent for "the actual words on the
+    # paper" -- which the Director is handed as what the prose may quote.
     pending = [
         dict(a) for a in wget(cid, ARTIFACTS_WORLD_KEY, []) or []
         if isinstance(a, dict) and a.get("status") == POSTED
+        and not a.get("spoor")
         and not str(a.get("text") or "").strip()
         and int(a.get("wording_failures") or 0) < _WORDING_ATTEMPT_CAP]
     if not pending:
@@ -538,9 +585,15 @@ def schedule_artifact_wording(ctx):
         finally:
             active_frame_id.reset(token)
 
+    # KEYED ON THE BILLS, NOT THE BEAT (story_room_carriers F21): keyed on
+    # the turn too, every beat while a bill was blank started another job for
+    # it -- `jobs.submit` joins only an identical key -- and with a failing
+    # provider both counted failures, spending `_WORDING_ATTEMPT_CAP` in one
+    # window. A cancelled job is never joined (`jobs.submit`), so a rewound
+    # beat's wording still starts fresh.
     return jobs.submit(
-        cid, "artifact_wording:t%d:%s" % (
-            turn_idx, ",".join(sorted(str(a.get("uid")) for a in pending))),
+        cid, "artifact_wording:%s" % ",".join(
+            sorted(str(a.get("uid")) for a in pending)),
         _produce, base_turn=turn_idx)
 
 
@@ -553,6 +606,7 @@ def mint_wording(artifact, roster):
     name, is refused -- an authored bill must not put a name into a room
     that the carrier network never delivered there.
     """
+    from agents.common import jparse
     from llm.providers import chat_complete
 
     held = (artifact or {}).get("report") or {}
@@ -567,8 +621,14 @@ def mint_wording(artifact, roster):
     last_error = "no attempt"
     for _attempt in range(2):
         try:
-            out = json.loads(chat_complete(
-                "utility", sys, user, temperature=0.7, max_tokens=400))
+            # The engine's reader of a model's JSON (`jparse`): it takes the
+            # answer out of a ``` fence and salvages one followed by talk,
+            # where a bare `json.loads` refused the whole answer (F21).
+            # `required`: an answer that is no JSON at all is a failure, never
+            # its own prose filed under `text` -- that key is the bill's words.
+            out = jparse(chat_complete(
+                "utility", sys, user, temperature=0.7, max_tokens=400),
+                required=True)
         except Exception as exc:  # noqa: BLE001 - recorded, never raised
             last_error = "%s: %s" % (type(exc).__name__, str(exc)[:200])
             continue
@@ -612,42 +672,49 @@ def land_artifact_wording(cid, uid, text, error, *, base_turn):
     A failure lands as a counted failure so the scheduler stops paying
     after `_WORDING_ATTEMPT_CAP`.
     """
-    from core.db import wget, wset
+    from core.db import transaction, wget, wset
 
     uid = str(uid or "")
     record = {"uid": uid, "landed": False, "error": str(error or "")}
     try:
-        artifacts = [dict(a) for a in wget(cid, ARTIFACTS_WORLD_KEY, []) or []
-                     if isinstance(a, dict)]
-        target = None
-        for artifact in artifacts:
-            if str(artifact.get("uid") or "") == uid:
-                target = artifact
-                break
-        if target is None:
-            record["error"] = record["error"] or \
-                "artifact gone before wording landed (rewind or branch)"
-            return record
-        if target.get("status") != POSTED:
-            record["error"] = record["error"] or \
-                "artifact came down before wording landed"
-            return record
-        if str(target.get("text") or "").strip():
-            record["error"] = record["error"] or "artifact already worded"
-            return record
-        if int(target.get("posted_turn") or 0) > int(base_turn):
-            # A same-uid artifact posted AFTER the job's base turn is a
-            # different bill wearing a recycled id; its wording was not
-            # minted from this claim's era.
-            record["error"] = "artifact re-posted after the job's base turn"
-            return record
-        if text:
-            target["text"] = str(text)
-            record["landed"] = True
-        else:
-            target["wording_failures"] = \
-                int(target.get("wording_failures") or 0) + 1
-        wset(cid, ARTIFACTS_WORLD_KEY, artifacts)
+        # ONE ACT UNDER THE WRITE LOCK (story_room_carriers F4, reproduced
+        # 2026-11-01). The job read the row with no transaction while a
+        # turn's commit wrote it inside one: its read saw the row before the
+        # commit, its `wset` waited on the lock until the commit ended, then
+        # wrote the stale list back -- the bill that commit posted was gone,
+        # and one it tore down stood again.
+        with transaction():
+            artifacts = [dict(a) for a in wget(cid, ARTIFACTS_WORLD_KEY, []) or []
+                         if isinstance(a, dict)]
+            target = None
+            for artifact in artifacts:
+                if str(artifact.get("uid") or "") == uid:
+                    target = artifact
+                    break
+            if target is None:
+                record["error"] = record["error"] or \
+                    "artifact gone before wording landed (rewind or branch)"
+                return record
+            if target.get("status") != POSTED:
+                record["error"] = record["error"] or \
+                    "artifact came down before wording landed"
+                return record
+            if str(target.get("text") or "").strip():
+                record["error"] = record["error"] or "artifact already worded"
+                return record
+            if int(target.get("posted_turn") or 0) > int(base_turn):
+                # A same-uid artifact posted AFTER the job's base turn is a
+                # different bill wearing a recycled id; its wording was not
+                # minted from this claim's era.
+                record["error"] = "artifact re-posted after the job's base turn"
+                return record
+            if text:
+                target["text"] = str(text)
+                record["landed"] = True
+            else:
+                target["wording_failures"] = \
+                    int(target.get("wording_failures") or 0) + 1
+            wset(cid, ARTIFACTS_WORLD_KEY, artifacts)
     except Exception as exc:  # noqa: BLE001 - a landing never raises
         record["error"] = "%s: %s" % (type(exc).__name__, str(exc)[:200])
     return record

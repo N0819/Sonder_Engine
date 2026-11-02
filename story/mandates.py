@@ -55,7 +55,7 @@ from __future__ import annotations
 import hashlib
 import time
 
-from core.db import wset_for_frame
+from core.db import transaction, wset_for_frame
 
 #: THE CLOSED VOCABULARY of what a grant can permit. The first nine are the
 #: authoring package operation kinds (`plot_packages.OPERATIONS`), one
@@ -332,7 +332,7 @@ def _open_questions(cid, frame_id):
             if isinstance(q, dict)}
 
 
-def request_open(cid, frame_id, request):
+def request_open(cid, frame_id, request, *, sweep=None):
     """Whether the ask a grant was scoped to still stands.
 
     A package's ask ends when the package is gone, retired or resolved --
@@ -341,6 +341,10 @@ def request_open(cid, frame_id, request):
     dropped. Anything else stands until it is closed outright, because the
     engine holds no row that could say otherwise, and a licence must not
     lapse on a guess.
+
+    ``sweep`` is a `_Sweep` a caller asking about many grants at once
+    shares between them, so the package ledger and the status row are read
+    once for the whole sweep rather than once per grant.
     """
     if not request:
         return True
@@ -349,16 +353,40 @@ def request_open(cid, frame_id, request):
     uid, kind = str(request.get("uid") or ""), str(request.get("kind") or "")
     if not uid:
         return True
+    sweep = sweep if sweep is not None else _Sweep(cid, frame_id)
     if kind == "package":
         try:
-            from story.plot_packages import get_package
-            pkg = get_package(cid, uid, frame_id=frame_id)
+            ledger = sweep.ledger()
         except Exception:
             return True
+        pkg = ledger.get(uid)
         return bool(pkg) and pkg["status"] not in ("resolved", "retired")
     if kind == "question":
-        return uid in _open_questions(cid, frame_id)
+        return uid in sweep.questions()
     return True
+
+
+class _Sweep:
+    """What one sweep of the standing grants reads about the asks they
+    answer, read at most once each (story_room_carriers efficiency 3,
+    2026-11-01): every package-scoped grant re-parsed the WHOLE package
+    ledger, and every read of the standing grants swept them -- about eleven
+    times for one sketch payload."""
+
+    def __init__(self, cid, frame_id):
+        self.cid, self.frame_id = cid, frame_id
+        self._ledger = self._questions = None
+
+    def ledger(self):
+        if self._ledger is None:
+            from story.plot_packages import packages
+            self._ledger = packages(self.cid, self.frame_id)
+        return self._ledger
+
+    def questions(self):
+        if self._questions is None:
+            self._questions = _open_questions(self.cid, self.frame_id)
+        return self._questions
 
 
 def _uid(cid, text, scope, granted_turn, index):
@@ -386,6 +414,28 @@ def _save(cid, frame_id, rows):
         rows = [r for r in rows if r is not oldest]
     wset_for_frame(cid, _key(), rows, frame_id)
     return rows
+
+
+def _update(cid, frame_id, change):
+    """Read, change and write the frame's grants as ONE act under the write
+    lock -- the `room_frontier._update` shape. ``change(rows)`` mutates the
+    rows in place and returns ``(answer, write)``; they are saved only when
+    ``write`` is true. Returns ``(answer, rows as stored)``.
+
+    FOUR THREADS WRITE THIS ROW (story_room_carriers F5, 2026-11-01): the
+    Planner's reply in `converse_stream`'s daemon thread, the fill and
+    Dramaturge jobs, the commit tail's sweep and the panel's revocation. Each
+    saved the rows it had read a moment earlier, so a grant written between
+    another writer's read and its save was erased, and a revocation could be
+    undone by a stale grant's save -- reproduced on a scratch database in
+    both orders. The read is inside the transaction, which takes the write
+    lock and BEGIN IMMEDIATE before it."""
+    with transaction():
+        rows = _load(cid, frame_id)
+        answer, write = change(rows)
+        if write:
+            rows = _save(cid, frame_id, rows)
+    return answer, rows
 
 
 def _turn_now(cid):
@@ -448,35 +498,51 @@ def grant_mandate(cid, frame_id, *, text, capabilities, scope=DEFAULT_SCOPE,
         raise ValueError("a mandate permits at least one capability or sets "
                          "at least one limit")
     granted_turn = int(_turn_now(cid) if turn_idx is None else turn_idx)
-    rows = _load(cid, frame_id)
-    # THE SAME SENTENCE IS ONE GRANT. A model re-emits a grant on every step
-    # of a reply it is still working (measured: two rows for one sentence,
-    # chat 111, 2026-09-03); the store, not the loop, is where a grant is
-    # made idempotent, so every writer gets the same answer.
     clean_scope = _text(scope, MANDATE_SCOPE_CHARS) or DEFAULT_SCOPE
-    for existing in rows:
-        if existing["status"] == "active" \
-                and existing["text"].casefold() == text.casefold() \
-                and existing["scope"].casefold() == clean_scope.casefold():
-            return dict(existing)
-    row = {
-        "uid": _uid(cid, text, _text(scope, MANDATE_SCOPE_CHARS) or DEFAULT_SCOPE,
-                    granted_turn, len(rows)),
-        "text": text,
-        "scope": _text(scope, MANDATE_SCOPE_CHARS) or DEFAULT_SCOPE,
-        "capabilities": wanted,
-        "limits": clean_limits,
-        "granted_turn": granted_turn,
-        "expires_turn": int(expires_turn) if expires_turn is not None else None,
-        "status": "active",
-        "revoked_turn": None,
-        "granted_at": time.time(),
-        "request": _request(cid, frame_id, request),
-        "renewed_from": str(renewed_from or ""),
-    }
-    rows.append(row)
-    _save(cid, frame_id, rows)
-    return dict(row)
+    asked = _request(cid, frame_id, request)
+    asked_uid = str((asked or {}).get("uid") or "")
+
+    def _grant(rows):
+        # THE SAME GRANT IS ONE GRANT. A model re-emits a grant on every
+        # step of a reply it is still working (measured: two rows for one
+        # sentence, chat 111, 2026-09-03); the store, not the loop, is where
+        # a grant is made idempotent, so every writer gets the same answer.
+        #
+        # THE SAME WORDS ARE NOT ALWAYS THE SAME GRANT (story_room_carriers
+        # F18, 2026-11-01): "Yes, go ahead." answering an ask for a courier
+        # and then an ask for a tower was answered with the courier's row,
+        # the tower's `plan_rooms` dropped and its request never recorded.
+        # Short assents are the commonest grant sentence, so a grant is the
+        # same only when it grants the same capabilities for the same ask.
+        for existing in rows:
+            if existing["status"] == "active" \
+                    and existing["text"].casefold() == text.casefold() \
+                    and existing["scope"].casefold() == clean_scope.casefold() \
+                    and set(existing["capabilities"]) == set(wanted) \
+                    and str((existing.get("request") or {}).get("uid") or "") \
+                    == asked_uid:
+                return existing["uid"], False
+        row = {
+            "uid": _uid(cid, text, clean_scope, granted_turn, len(rows)),
+            "text": text,
+            "scope": clean_scope,
+            "capabilities": wanted,
+            "limits": clean_limits,
+            "granted_turn": granted_turn,
+            "expires_turn": int(expires_turn) if expires_turn is not None else None,
+            "status": "active",
+            "revoked_turn": None,
+            "granted_at": time.time(),
+            "request": asked,
+            "renewed_from": str(renewed_from or ""),
+        }
+        rows.append(row)
+        return row["uid"], True
+    uid, rows = _update(cid, frame_id, _grant)
+    # THE ROW AS STORED (story_room_carriers F17): the caller was handed the
+    # row it built while the store kept a normalised copy of it, so the two
+    # were free to disagree -- and did, past 24 capabilities.
+    return dict(next(r for r in rows if r["uid"] == uid))
 
 
 def expire_mandates(cid, frame_id, turn_idx=None):
@@ -488,8 +554,13 @@ def expire_mandates(cid, frame_id, turn_idx=None):
     -- and the row says which of the two ended it, because a grant that
     disappears without a reason is one the player will have to be told
     about twice. Returns the uids that lapsed."""
-    turn = int(_turn_now(cid) if turn_idx is None else turn_idx)
-    rows = _load(cid, frame_id)
+    return _swept(cid, frame_id, turn_idx)[1]
+
+
+def _lapse(cid, frame_id, rows, turn):
+    """Mark every active row in ``rows`` whose licence has ended; returns
+    the uids marked. One `_Sweep` for all of them."""
+    sweep = _Sweep(cid, frame_id)
     lapsed = []
     for row in rows:
         if row["status"] != "active":
@@ -499,14 +570,30 @@ def expire_mandates(cid, frame_id, turn_idx=None):
             row["status"] = "expired"
             row["lapsed_reason"] = "term_ended"
             lapsed.append(row["uid"])
-        elif not request_open(cid, frame_id, row.get("request")):
+        elif not request_open(cid, frame_id, row.get("request"), sweep=sweep):
             row["status"] = "expired"
             row["lapsed_reason"] = "request_closed"
             row["expires_turn"] = turn
             lapsed.append(row["uid"])
-    if lapsed:
-        _save(cid, frame_id, rows)
     return lapsed
+
+
+def _swept(cid, frame_id, turn_idx=None):
+    """``(rows, lapsed)``: the frame's grants with every lapse swept, and
+    the uids that lapsed now. Read once and swept once, without the write
+    lock, when nothing has lapsed -- the common case on every read; when
+    something has, the lapse is written as one act on the rows as they then
+    stand (`_update`)."""
+    turn = int(_turn_now(cid) if turn_idx is None else turn_idx)
+    rows = _load(cid, frame_id)
+    if not _lapse(cid, frame_id, [dict(r) for r in rows], turn):
+        return rows, []
+
+    def _sweep_now(stored):
+        lapsed = _lapse(cid, frame_id, stored, turn)
+        return lapsed, bool(lapsed)
+    lapsed, rows = _update(cid, frame_id, _sweep_now)
+    return rows, lapsed
 
 
 def close_request(cid, frame_id, uid, *, turn_idx=None):
@@ -520,21 +607,22 @@ def close_request(cid, frame_id, uid, *, turn_idx=None):
     if not uid:
         return []
     turn = int(_turn_now(cid) if turn_idx is None else turn_idx)
-    rows = _load(cid, frame_id)
-    lapsed = []
-    for row in rows:
-        request = row.get("request") or {}
-        if str(request.get("uid") or "") != uid:
-            continue
-        request["closed"] = True
-        row["request"] = request
-        if row["status"] == "active":
-            row["status"] = "expired"
-            row["lapsed_reason"] = "request_closed"
-            row["expires_turn"] = turn
-            lapsed.append(row["uid"])
-    _save(cid, frame_id, rows)
-    return lapsed
+
+    def _close(rows):
+        lapsed = []
+        for row in rows:
+            request = row.get("request") or {}
+            if str(request.get("uid") or "") != uid:
+                continue
+            request["closed"] = True
+            row["request"] = request
+            if row["status"] == "active":
+                row["status"] = "expired"
+                row["lapsed_reason"] = "request_closed"
+                row["expires_turn"] = turn
+                lapsed.append(row["uid"])
+        return lapsed, True
+    return _update(cid, frame_id, _close)[0]
 
 
 def renew_mandate(cid, frame_id, uid, *, request=None, expires_turn=None,
@@ -626,22 +714,28 @@ def free_hand_row(cid):
 
 
 def active_mandates(cid, frame_id, turn_idx=None):
-    expire_mandates(cid, frame_id, turn_idx)
-    rows = [r for r in _load(cid, frame_id) if r["status"] == "active"]
+    rows = [r for r in _swept(cid, frame_id, turn_idx)[0]
+            if r["status"] == "active"]
     hand = free_hand_row(cid)
     return rows + [hand] if hand else rows
 
 
-def coverage(cid, frame_id, needed, *, turn_idx=None):
+def coverage(cid, frame_id, needed, *, turn_idx=None, rows=None):
     """Whether the standing active mandates together permit ``needed``
     (a set of capabilities). Returns ``{"ok", "cited": [uids], "missing":
     [capabilities]}``: the mandates that contributed, and what no mandate
-    covers. A need of nothing is covered by nothing."""
+    covers. A need of nothing is covered by nothing.
+
+    ``rows`` are the standing grants when the caller has already read them
+    (`active_mandates`) and is asking about several needs at once: the
+    planting sketch asks about one capability at a time, and each question
+    re-read and re-swept every grant (story_room_carriers efficiency 3)."""
     needed = [str(c) for c in dict.fromkeys(needed or ())]
     if not needed:
         return {"ok": True, "cited": [], "missing": []}
     cited, covered = [], set()
-    for row in active_mandates(cid, frame_id, turn_idx):
+    for row in (active_mandates(cid, frame_id, turn_idx) if rows is None
+                else rows):
         hit = [c for c in needed if permits(row, c) and c not in covered]
         if hit:
             cited.append(row["uid"])

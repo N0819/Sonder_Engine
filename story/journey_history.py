@@ -33,8 +33,35 @@ JOURNEY_EVENT_MAX = 20
 
 # A generated recollection shorter than this is a dossier line, not a moment.
 # Cited mode is exempt: it may only summarize the evidence it was handed, and
-# cannot be ordered to invent the detail that would make the count.
+# cannot be ordered to invent the detail that would make the count. Counted
+# by `memory_words`, in the script each word is written in.
 _GENERATED_MEMORY_FLOOR_WORDS = 30
+
+
+def memory_words(text):
+    """How many words a recollection holds, counted in the script each is
+    written in.
+
+    A token of a script that spaces its words is one word -- exactly
+    `.split()`, so an English memory counts as it always did. A token of a
+    script that does not space them counts the runs
+    `language_runtime.fold_words` reads in it: the kanji, kana and Latin runs
+    a Japanese clause is written in, the nearest thing to a word that script
+    has without a dictionary (a 108-character first-person recollection is
+    70 runs; a 21-character dossier line, 12).
+
+    `.split()` counted a whole Japanese recollection as ONE word, so in a
+    Japanese story every generated memory was "thin" and the launch raised
+    "fewer than three usable events" (story_room_carriers F9, 2026-11-01: a
+    97-character first-person memory, four events, every one dropped). The
+    sibling floor in `world/charter_history.py` has the same `.split()`.
+    """
+    from language_runtime import UNSPACED_SCRIPT, fold_words
+    count = 0
+    for token in str(text or "").split():
+        count += max(1, len(fold_words(token))) \
+            if UNSPACED_SCRIPT.search(token) else 1
+    return count
 
 _SYSTEM = """Create a vivid chronological travel history for one fictional
 character. Return JSON only: {summary,events:[{sequence,when,place,people,
@@ -224,7 +251,7 @@ def ground_journey_history(value, sources, *, generated=False,
             dropped.append({"sequence": raw.get("sequence"),
                             "reason": "not_first_person"})
             continue
-        if generated and len(memory.split()) < _GENERATED_MEMORY_FLOOR_WORDS:
+        if generated and memory_words(memory) < _GENERATED_MEMORY_FLOOR_WORDS:
             dropped.append({"sequence": raw.get("sequence"),
                             "reason": "thin_memory"})
             continue
