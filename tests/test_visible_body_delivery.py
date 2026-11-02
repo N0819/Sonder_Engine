@@ -339,24 +339,26 @@ class TestItSubtracts:
             self, monkeypatch):
         """A disguise decides what every observer sees. The card's own face is
         precisely the thing that is not on show, so it is withheld whole."""
-        import agents.perception as perception
+        from tests.helpers import patch_seam
 
         sheet = _card()
         sc = _scene()
-        monkeypatch.setattr(
-            perception, "active_disguises",
+        # The reader is `agents.perception_bodies`, which imported the map
+        # into its own globals; a patch on the facade intercepts nothing.
+        patch_seam(
+            monkeypatch, "agents.perception_bodies", "active_disguises",
             lambda chat_id: {"subject": {"description": "a stooped porter"}})
 
         assert _body_descriptions(_ctx(sheet), sc) == {}
 
     def test_a_transformed_body_delivers_nothing_from_its_card(
             self, monkeypatch):
-        import agents.perception as perception
+        from tests.helpers import patch_seam
 
         sheet = _card()
         sc = _scene()
-        monkeypatch.setattr(
-            perception, "active_transformations",
+        patch_seam(
+            monkeypatch, "agents.perception_bodies", "active_transformations",
             lambda chat_id: {"subject": {"appearance": "a grey wolf"}})
 
         assert _body_descriptions(_ctx(sheet), sc) == {}

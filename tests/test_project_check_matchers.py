@@ -151,8 +151,8 @@ def test_every_facade_family_is_checked():
     from project_check import FACADE_FAMILIES, facade_siblings
 
     assert set(FACADE_FAMILIES) == {
-        "agents.common", "agents.composer", "agents.director", "commit",
-        "mind.memory", "world.spatial"}
+        "agents.common", "agents.composer", "agents.director",
+        "agents.perception", "commit", "mind.memory", "world.spatial"}
     for facade, (home, stem) in FACADE_FAMILIES.items():
         assert facade_siblings(home, stem), facade
 

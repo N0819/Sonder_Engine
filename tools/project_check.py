@@ -1735,6 +1735,7 @@ def facade_siblings(home: Path, stem: str) -> set:
 FACADE_FAMILIES = {
     "agents.common": (ROOT / "agents", "common"),
     "agents.composer": (ROOT / "agents", "composer"),
+    "agents.perception": (ROOT / "agents", "perception"),
     "agents.director": (ROOT / "agents", "director"),
     "commit": (ROOT / "persist", "commit"),
     "mind.memory": (ROOT / "mind", "memory"),

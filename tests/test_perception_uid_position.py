@@ -169,13 +169,17 @@ def test_perception_act_resolves_uid_keyed_reactor_room(temp_db, monkeypatch):
     captured = {}
 
     import agents.perception as perception
+    from tests.helpers import patch_seam
     real_act = perception._composer_act
 
     def capture(ctx_, sc, interp, perceivers, *a, **kw):
         captured["perceivers"] = perceivers
         return real_act(ctx_, sc, interp, perceivers, *a, **kw)
 
-    monkeypatch.setattr(perception, "_composer_act", capture)
+    # `perception_act` calls the composer from `agents.perception_onset`,
+    # which defines both; the facade's re-export is rebound with it.
+    patch_seam(monkeypatch, "agents.perception_onset", "_composer_act",
+               capture)
 
     result = perception_act(ctx, nonce=0)
 

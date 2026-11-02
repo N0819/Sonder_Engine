@@ -341,6 +341,7 @@ class TestPerceptionOutcomeMultiplayerSources:
         self, temp_db, monkeypatch,
     ):
         import agents.perception as perception
+        from tests.helpers import patch_seam
 
         chat_id = _make_chat(temp_db)
         temp_db.wset(chat_id, "scene", _basic_scene({
@@ -375,7 +376,10 @@ class TestPerceptionOutcomeMultiplayerSources:
             all_perceivers.extend(perceivers or [])
             return {"views": {}, "observations": {}, "composer_ledger": {}}
 
-        monkeypatch.setattr(perception, "_composer_outcome", capture)
+        # The stage (`agents.perception_outcome_stage`) imported the composer
+        # into its own globals; a patch on the facade intercepts nothing.
+        patch_seam(monkeypatch, "agents.perception_outcome_stage",
+                   "_composer_outcome", capture)
 
         perception.perception_outcome(ctx, 0)
 

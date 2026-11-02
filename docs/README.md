@@ -290,6 +290,10 @@ as the argument for why:
   `agents/composer.py` into twelve `composer_*` siblings (IR leaf, person,
   figures, bodies, speech, acts, fields, landscape, things, standing, the two
   English renderers).
+- [`SPLIT_PERCEPTION.md`](design/SPLIT_PERCEPTION.md) — the 2026-11-01 split of
+  `agents/perception.py` into twelve `perception_*` siblings (common leaf, bodies,
+  senses, conduct, identity, scrub, stream, standing, the opening/onset/outcome
+  passes); the module-source and file pins it had to repoint.
 
 ## `experiments/` — records of runs that cannot be repeated
 

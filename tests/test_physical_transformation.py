@@ -228,15 +228,19 @@ def test_a_transformation_wins_over_a_disguise_that_outlived_it(temp_db,
     ears rise and saw human ears again on the very next beat.
     """
     from agents.perception import _subject_disguise_context
+    from tests.helpers import patch_seam
 
-    monkeypatch.setattr(
-        "agents.perception.active_disguises",
+    # The reader is `agents.perception_bodies`, which imported both maps into
+    # its own globals; patched on the facade, both read the empty table and
+    # this passed with no disguise in play at all.
+    patch_seam(
+        monkeypatch, "agents.perception_bodies", "active_disguises",
         lambda _c: {"hinami": {"subject": "Hinami",
                                "presented_appearance": "an ordinary human",
                                "concealed_terms": ["fox ears"],
                                "known_to": []}})
-    monkeypatch.setattr(
-        "agents.perception.active_transformations",
+    patch_seam(
+        monkeypatch, "agents.perception_bodies", "active_transformations",
         lambda _c: {"hinami": {"subject": "Hinami",
                                "appearance": "a kitsune, ears and tails bare"}})
 

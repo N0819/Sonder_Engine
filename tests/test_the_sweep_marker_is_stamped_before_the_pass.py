@@ -14,6 +14,7 @@ from __future__ import annotations
 import logging
 
 import agents.perception as perception
+from tests.helpers import patch_seam
 from world import scene_memo
 from world.scene_memo import SCENE_READS, scene_read_pass
 
@@ -39,9 +40,14 @@ def test_the_outcome_stage_stamps_the_marker_before_opening_the_pass(caplog, mon
         seen["pass_open"] = id(sc) in scene_memo._PASSES
         return {"views": {}}
 
-    monkeypatch.setattr(perception, "_composer_outcome_views", views)
-    monkeypatch.setattr(perception, "swept_this_beat",
-                        lambda res, p_name, cast, interp=None: {p_name, "Mara"})
+    # `_composer_outcome` reads both from `agents.perception_outcome_views`,
+    # which defines the views and imported `swept_this_beat` into its own
+    # globals; a patch on the facade intercepts neither.
+    patch_seam(monkeypatch, "agents.perception_outcome_views",
+               "_composer_outcome_views", views)
+    patch_seam(monkeypatch, "agents.perception_outcome_views",
+               "swept_this_beat",
+               lambda res, p_name, cast, interp=None: {p_name, "Mara"})
 
     class _Ctx:
         cast = ()

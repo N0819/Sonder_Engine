@@ -199,8 +199,16 @@ class TestAMicroRoundDeliversLines:
         times). The loop keeps them for the next declaration; the outcome
         renders the resolved beat once."""
         import inspect
+        from pathlib import Path
         from agents import perception
-        source = inspect.getsource(perception)
+        # The facade and every `agents/perception_*` sibling: the facade's
+        # own text is re-export lines, so an absence asked of it alone holds
+        # for nothing. The anchor proves the scan reaches the outcome code.
+        facade = Path(perception.__file__)
+        source = "\n".join(
+            path.read_text(encoding="utf-8") for path in
+            [facade, *sorted(facade.parent.glob("perception_*.py"))])
+        assert "def _composer_outcome_views(" in source
         assert "micro_round_percepts(" not in source
         code = "\n".join(
             line for line in inspect.getsource(

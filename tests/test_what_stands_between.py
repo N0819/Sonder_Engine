@@ -273,9 +273,10 @@ def test_no_answer_is_a_placeholder():
 def test_the_view_composes_far_looks_as_events():
     import inspect
     from agents import perception
-    source = inspect.getsource(perception)
-    assert "composer.landscape_look_percepts(found)" in source
-    assert 'p["own_looks"] = _own_looks(' in source
+    assert "composer.landscape_look_percepts(found)" in inspect.getsource(
+        perception._composer_standing_percepts)
+    assert 'p["own_looks"] = _own_looks(' in inspect.getsource(
+        perception._composer_outcome_views)
 
 
 def test_a_room_that_declares_no_ground_is_seen_where_its_building_is():

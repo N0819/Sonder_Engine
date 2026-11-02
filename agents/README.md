@@ -6,7 +6,10 @@ Each file owns one clear part of the turn pipeline:
 - `mapping.py` — the world-context compiler (`compile_world_context`): lorebook
   routing and retrieval, deterministic; it never invents, it records a
   planning need.
-- `perception.py` — opening, action-onset, and outcome observer views. Fully
+- `perception.py` — since 2026-11-01 a FACADE over twelve `perception_*.py` siblings
+  (`docs/design/SPLIT_PERCEPTION.md`); every former name is re-exported, a test
+  patches the sibling that defines the reader, and the no-model-seam test walks
+  the whole family. Opening, action-onset, and outcome observer views. Fully
   deterministic: there is no `perception` model role, and this module imports no
   model seam.
 - `composer.py` — since 2026-11-01 a FACADE over twelve `composer_*.py` siblings

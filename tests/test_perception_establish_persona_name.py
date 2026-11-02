@@ -31,14 +31,17 @@ def test_opening_turn_uses_real_persona_name_and_appearance(
     captured = {}
 
     # There is no model payload to inspect. The same values are computed in
-    # the same place and handed to the composer, so the capture moved there.
+    # the same place and handed to the composer, so the capture moved there
+    # -- in `agents.perception_opening`, which defines both the stage and the
+    # composer it calls.
     def capture(ctx_, sc, perceivers, known, p_name, p_appearance, *a, **kw):
         captured.update(
             {"p_name": p_name, "p_appearance": p_appearance,
              "perceivers": perceivers})
         return {"views": {}, "observations": {}, "composer_ledger": {}}
 
-    monkeypatch.setattr("agents.perception._composer_establish", capture)
+    monkeypatch.setattr("agents.perception_opening._composer_establish",
+                        capture)
 
     ctx = PipelineContext(
         chat=ChatData(

@@ -269,10 +269,16 @@ def _pronoun_ctx(temp_db):
 def _perceivers_handed_to(monkeypatch, composer):
     """Capture the perceiver roster a perception stage hands its composer.
 
-    Patched on `agents.perception`, which both DEFINES the composer and reads
-    it -- the stage resolves the name in its own module globals.
+    Patched where the stage READS its composer: since the 2026-11-01 split each
+    stage lives in its own sibling (`perception_opening`, `perception_onset`,
+    `perception_outcome_stage`) and resolves the name in that module's globals,
+    so a patch on the `agents.perception` facade would be inert. `patch_seam`
+    rebinds every holder of the original object, the facade included.
     """
-    import agents.perception as perception
+    from tests.helpers import patch_seam
+    owner = {"_composer_establish": "agents.perception_opening",
+             "_composer_act": "agents.perception_onset",
+             "_composer_outcome": "agents.perception_outcome_stage"}[composer]
     seen = []
 
     def fake(*a, **k):
@@ -283,7 +289,7 @@ def _perceivers_handed_to(monkeypatch, composer):
                 break
         return {"views": {}, "warnings": []}
 
-    monkeypatch.setattr(perception, composer, fake)
+    patch_seam(monkeypatch, owner, composer, fake)
     return seen
 
 

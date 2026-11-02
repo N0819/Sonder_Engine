@@ -63,7 +63,19 @@
 | `agents/mapping.py` | 713 | Lore routing, cached recall, and retrieval staging. | `agents.common`, `core.db`, `mind.memory`, `story.scene`, `world.spatial` |
 | `agents/narration.py` | 3196 | Player-facing narration agent. | `agents`, `agents.common`, `core.db`, `llm.prompts`, `llm.schemas`, `story`, `story.character_schema`, `story.scene`, `world.spatial`, `world.weather` |
 | `agents/offscreen_beat.py` | 490 |  | — |
-| `agents/perception.py` | 9323 | Opening, action-onset, and outcome observer views. | `agents`, `agents.common`, `core.db`, `core.pipeline_context`, `mind`, `story`, `story.character_schema`, `story.scene`, `world.beat_ledger`, `world.scene_memo`, `world.spatial` |
+| `agents/perception.py` | 407 | Facade over the agents/perception_* siblings (split 2026-11-01): the deterministic observer views at opening, onset and outcome. | `agents`, `agents.common`, `agents.perception_bodies`, `agents.perception_common`, `agents.perception_conduct`, `agents.perception_identity`, `agents.perception_onset`, `agents.perception_opening`, `agents.perception_outcome_stage`, `agents.perception_outcome_views`, `agents.perception_scrub`, `agents.perception_senses`, `agents.perception_standing`, `agents.perception_stream`, `core.db`, `core.pipeline_context`, `mind`, `story`, `story.character_schema`, `story.scene`, `world.beat_ledger`, `world.scene_memo`, `world.spatial` |
+| `agents/perception_bodies.py` | 678 | A body's outward form: the turn's disguise and transformation reads (and their caches), what a disguise conceals and its tripwire terms, authored extra parts, card scents and body descriptions, attire. | `agents.common`, `story`, `story.character_schema`, `story.scene`, `world.spatial` |
+| `agents/perception_common.py` | 357 | Leaf helpers every other sibling reads: the active pack's recognizer tables and the one sentence splitter, the observer-identity test, the human-seat test, the step's player-room stamp, and the per-ob. | `agents`, `core.db`, `world.spatial` |
+| `agents/perception_conduct.py` | 591 | Readers of this beat's declared conduct: rapid movement and the open-group continuity rescue, where a line was said relative to a declared walk, a crossing's legs and the channel to every leg, the bea. | `agents.perception_common`, `agents.perception_senses`, `core.db`, `story.character_schema`, `world.spatial` |
+| `agents/perception_identity.py` | 889 | Who and what an observer may name: the identity roster and the chat's identity space, worn roles and charter titles, recognition and attributed labels, stranger labels and self-forms, presence bodies . | `agents`, `agents.common`, `agents.perception_bodies`, `agents.perception_common`, `core.db`, `story.character_schema`, `story.scene`, `world.spatial` |
+| `agents/perception_onset.py` | 966 | The action-onset pass (pass 1): `perception_act`, its composer region (`_composer_act`, `_composer_act_views`), and `beat_player_rooms`, runtime's early reading of the same declaration. | `agents`, `agents.common`, `agents.perception_bodies`, `agents.perception_common`, `agents.perception_conduct`, `agents.perception_identity`, `agents.perception_scrub`, `agents.perception_senses`, `agents.perception_standing`, `core.db`, `core.pipeline_context`, `story.character_schema`, `story.scene`, `world.scene_memo`, `world.spatial` |
+| `agents/perception_opening.py` | 458 | The opening pass: `perception_establish` and its composer region (`_composer_establish`, `_composer_establish_views`, the opening's quoted lines). | `agents`, `agents.common`, `agents.perception_bodies`, `agents.perception_common`, `agents.perception_identity`, `agents.perception_scrub`, `agents.perception_senses`, `agents.perception_standing`, `core.db`, `story.character_schema`, `story.scene`, `world.scene_memo`, `world.spatial` |
+| `agents/perception_outcome_stage.py` | 398 | The outcome stage entry point `perception_outcome`: composes the beat scene once, enriches the dialogue log, builds every perceiver and hands off to `_composer_outcome`. | `agents.common`, `agents.perception_bodies`, `agents.perception_common`, `agents.perception_identity`, `agents.perception_outcome_views`, `agents.perception_senses`, `agents.perception_stream`, `core.db`, `story.character_schema`, `story.scene`, `world.spatial` |
+| `agents/perception_outcome_views.py` | 1470 | The outcome pass's composer region: `_composer_outcome` (sweep stamp, read pass) and `_composer_outcome_views`, the 1,309-line per-observer assembler moved whole. | `agents`, `agents.common`, `agents.perception_bodies`, `agents.perception_common`, `agents.perception_conduct`, `agents.perception_identity`, `agents.perception_scrub`, `agents.perception_senses`, `agents.perception_standing`, `agents.perception_stream`, `core.pipeline_context`, `story.character_schema`, `story.scene`, `world.scene_memo`, `world.spatial` |
+| `agents/perception_scrub.py` | 867 | What a composed view may say and how it is finished: the self-narration strip and its quote-safe wrapper, the identity scrubs over act surfaces, authored prose and episodes, the composer tripwires and. | `agents`, `agents.common`, `agents.perception_common`, `agents.perception_identity`, `story.character_schema`, `world.spatial` |
+| `agents/perception_senses.py` | 1076 | What reaches one observer's eyes and ears: the per-source sight and channel maps, sight detail and plain view, rooms behind and in view, the per-stage sound field, sleepers' hearing, ear cover and bla. | `agents`, `agents.common`, `agents.perception_common`, `core.db`, `story.character_schema`, `story.scene`, `world.spatial` |
+| `agents/perception_standing.py` | 1258 | One observer's standing state and its assembler: things read by hand, station or look, visible features, things and openings (with beam-lit rooms), scents, gated ambient events, the bare-region rows, . | `agents`, `agents.common`, `agents.perception_bodies`, `story.scene`, `world.spatial` |
+| `agents/perception_stream.py` | 927 | The outcome beat as one ordered stream and the signs placed in it: settled declarations, causal spans and restored lines, the world-ordered stream, unanswered addresses, background beats, and the tell. | `agents`, `agents.common`, `agents.perception_scrub`, `agents.perception_senses`, `core.db`, `mind`, `story.character_schema`, `story.scene`, `world.beat_ledger`, `world.spatial` |
 | `agents/runtime.py` | 2180 | Pipeline plans, dispatch, streaming, cancellation, resume, and reruns. | `agents`, `agents.background`, `agents.character`, `agents.common`, `agents.director`, `agents.loops`, `agents.mapping`, `agents.narration`, `agents.perception`, `agents.skip_stage`, `agents.storage`, `core.db`, `core.pipeline_context`, `llm.providers`, `persist.checkpoints`, `persist.commit`, `story.character_schema`, `story.scene` |
 | `agents/skip_stage.py` | 1224 |  | `core.db`, `world` |
 | `agents/skip_work.py` | 793 |  | `world` |
@@ -975,18 +987,140 @@
 | `stalling_bodies()` | 386 | 25 lines |
 | `is_offscreen_beat()` | 115 | 21 lines |
 
-### `agents/perception.py`
+### `agents/perception_bodies.py`
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_composer_outcome_views()` | 7782 | 1309 lines |
-| `_composer_act_views()` | 6953 | 556 lines |
-| `_composer_standing_percepts()` | 6125 | 409 lines |
-| `perception_outcome()` | 4113 | 322 lines |
-| `perception_act()` | 3581 | 223 lines |
-| `_outcome_event_stream()` | 981 | 199 lines |
-| `_visible_openings()` | 5916 | 159 lines |
-| `_composer_establish_views()` | 6788 | 156 lines |
+| `_subject_disguise_context()` | 268 | 71 lines |
+| `_composer_extra_parts()` | 369 | 45 lines |
+| `_deliver_foreground_body_details()` | 163 | 43 lines |
+| `_outward_form_transitions()` | 563 | 41 lines |
+| `_body_descriptions()` | 440 | 40 lines |
+| `_own_body_state()` | 482 | 38 lines |
+| `_bare_body_details()` | 102 | 28 lines |
+| `_attire_delta_text()` | 629 | 27 lines |
+
+### `agents/perception_common.py`
+
+| Function | Start | Size |
+|---|---:|---:|
+| `_standing_meta()` | 203 | 74 lines |
+| `_composer_prev_ledger()` | 128 | 38 lines |
+| `_stage_player_room()` | 102 | 24 lines |
+| `_is_the_observer()` | 279 | 21 lines |
+| `_learned_labels()` | 337 | 21 lines |
+| `described_by()` | 302 | 17 lines |
+| `_prior_ledger_entry()` | 321 | 14 lines |
+| `_ling()` | 27 | 13 lines |
+
+### `agents/perception_conduct.py`
+
+| Function | Start | Size |
+|---|---:|---:|
+| `_previous_open_group_continuity()` | 117 | 117 lines |
+| `_beat_movers()` | 369 | 41 lines |
+| `_channel_to_every_leg()` | 468 | 36 lines |
+| `_open_route_within()` | 56 | 32 lines |
+| `_explicit_look_intent()` | 532 | 32 lines |
+| `_speech_room_for()` | 259 | 31 lines |
+| `_own_looks()` | 300 | 28 lines |
+| `swept_this_beat()` | 566 | 26 lines |
+
+### `agents/perception_identity.py`
+
+| Function | Start | Size |
+|---|---:|---:|
+| `present_label_fn()` | 752 | 138 lines |
+| `_presence_bodies()` | 239 | 99 lines |
+| `_composer_identity_space()` | 636 | 89 lines |
+| `_co_present_company()` | 362 | 80 lines |
+| `_identity_roster()` | 73 | 50 lines |
+| `_composer_self_forms()` | 598 | 36 lines |
+| `_composer_unknown_sources()` | 500 | 33 lines |
+| `_attributed_label()` | 547 | 32 lines |
+
+### `agents/perception_onset.py`
+
+| Function | Start | Size |
+|---|---:|---:|
+| `_composer_act_views()` | 376 | 556 lines |
+| `perception_act()` | 144 | 223 lines |
+| `beat_player_rooms()` | 934 | 33 lines |
+| `_composer_act()` | 369 | 5 lines |
+
+### `agents/perception_opening.py`
+
+| Function | Start | Size |
+|---|---:|---:|
+| `_composer_establish_views()` | 303 | 156 lines |
+| `perception_establish()` | 114 | 120 lines |
+| `_opening_line_percept()` | 262 | 39 lines |
+| `_composer_establish()` | 256 | 4 lines |
+
+### `agents/perception_outcome_stage.py`
+
+| Function | Start | Size |
+|---|---:|---:|
+| `perception_outcome()` | 77 | 322 lines |
+
+### `agents/perception_outcome_views.py`
+
+| Function | Start | Size |
+|---|---:|---:|
+| `_composer_outcome_views()` | 162 | 1309 lines |
+| `_composer_outcome()` | 138 | 22 lines |
+
+### `agents/perception_scrub.py`
+
+| Function | Start | Size |
+|---|---:|---:|
+| `_strip_self_narration()` | 67 | 107 lines |
+| `_touch_only_sources()` | 242 | 82 lines |
+| `_composer_tripwires()` | 565 | 76 lines |
+| `_redact_concealed_from_event()` | 358 | 72 lines |
+| `_repaired_observations()` | 725 | 63 lines |
+| `_strip_self_narration_quote_safe()` | 445 | 52 lines |
+| `_composer_finish_observer()` | 822 | 46 lines |
+| `_composer_authored_prose()` | 520 | 43 lines |
+
+### `agents/perception_senses.py`
+
+| Function | Start | Size |
+|---|---:|---:|
+| `_source_channels()` | 539 | 142 lines |
+| `_sleep_hears_where()` | 273 | 120 lines |
+| `_sight_detail()` | 756 | 74 lines |
+| `_behind_rooms()` | 841 | 46 lines |
+| `_dialogue_hear_level()` | 62 | 41 lines |
+| `_own_name_forms()` | 203 | 34 lines |
+| `_voice_sound_for()` | 1046 | 31 lines |
+| `_sound_filing_spans()` | 507 | 30 lines |
+
+### `agents/perception_standing.py`
+
+| Function | Start | Size |
+|---|---:|---:|
+| `_composer_standing_percepts()` | 850 | 409 lines |
+| `_visible_openings()` | 641 | 159 lines |
+| `_visible_things()` | 452 | 154 lines |
+| `_scent_sources_for()` | 273 | 130 lines |
+| `_things_read_by()` | 81 | 102 lines |
+| `_gated_ambient_percepts()` | 229 | 33 lines |
+| `_beam_lit_view()` | 802 | 30 lines |
+| `_visible_features()` | 422 | 28 lines |
+
+### `agents/perception_stream.py`
+
+| Function | Start | Size |
+|---|---:|---:|
+| `_outcome_event_stream()` | 204 | 199 lines |
+| `_unanswered_addresses()` | 469 | 110 lines |
+| `_delivered_manifest()` | 647 | 82 lines |
+| `_world_ordered_stream()` | 405 | 62 lines |
+| `_background_beats()` | 731 | 60 lines |
+| `_restore_declared_lines()` | 131 | 57 lines |
+| `_cue_slots()` | 874 | 54 lines |
+| `_causal_outcome_sequences()` | 80 | 49 lines |
 
 ### `agents/runtime.py`
 

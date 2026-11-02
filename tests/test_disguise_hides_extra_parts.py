@@ -135,7 +135,7 @@ def test_the_gate_sits_where_names_are_still_true_names(monkeypatch):
     and a reordering that kept both call sites in the same relative textual
     positions would have passed.
     """
-    from agents import perception
+    from agents import perception, perception_bodies
 
     calls = []
 
@@ -143,11 +143,14 @@ def test_the_gate_sits_where_names_are_still_true_names(monkeypatch):
         calls.append(name)
         return result
 
-    monkeypatch.setattr(perception, "scene_extra_parts",
+    # Instrumented where `_composer_extra_parts` reads them: in
+    # `agents.perception_bodies`, which defines it and imported all four into
+    # its own globals. The `agents.perception` facade only re-exports it.
+    monkeypatch.setattr(perception_bodies, "scene_extra_parts",
                         lambda *a, **kw: note("gather", {"Hinami": [TAILS]}))
-    monkeypatch.setattr(perception, "active_transformations",
+    monkeypatch.setattr(perception_bodies, "active_transformations",
                         lambda *a, **kw: {})
-    monkeypatch.setattr(perception, "active_disguises",
+    monkeypatch.setattr(perception_bodies, "active_disguises",
                         lambda *a, **kw: {"hinami": GLAMOUR})
 
     def conceal(parts, disguises):
@@ -155,7 +158,7 @@ def test_the_gate_sits_where_names_are_still_true_names(monkeypatch):
         assert parts == {"Hinami": [TAILS]}, "concealment ran on true names"
         return {}
 
-    monkeypatch.setattr(perception, "conceal_disguised_parts", conceal)
+    monkeypatch.setattr(perception_bodies, "conceal_disguised_parts", conceal)
 
     ctx = _FakeCtx()
     assert perception._composer_extra_parts(ctx, "Corin") == {}

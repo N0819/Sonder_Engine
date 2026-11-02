@@ -152,11 +152,17 @@ def _stub(monkeypatch, views):
     point of every assertion below it.
     """
     import agents.perception as perception
+    from tests.helpers import patch_seam
 
     class _Recorder:
         asked = []
 
-    for stage in ("_composer_establish", "_composer_act", "_composer_outcome"):
+    # Each stage reads its composer from its OWN sibling's globals since the
+    # 2026-11-01 split (opening, onset, outcome_stage); a patch on the facade
+    # would be inert. patch_seam rebinds every holder of the original object.
+    for stage, owner in (("_composer_establish", "agents.perception_opening"),
+                         ("_composer_act", "agents.perception_onset"),
+                         ("_composer_outcome", "agents.perception_outcome_stage")):
         real = getattr(perception, stage)
 
         def wrapper(*a, _real=real, **kw):
@@ -164,7 +170,7 @@ def _stub(monkeypatch, views):
             _Recorder.asked.extend((out or {}).get("views") or {})
             return out
 
-        monkeypatch.setattr(perception, stage, wrapper)
+        patch_seam(monkeypatch, owner, stage, wrapper)
     return _Recorder
 
 

@@ -746,7 +746,7 @@ def test_every_roster_reads_what_a_body_wears():
     from agents import perception
     assert "_worn_identity" in inspect.getsource(perception._identity_roster)
     assert "_worn_identity(nm, bodies, sc, titles_of)" in inspect.getsource(
-        perception)
+        perception._composer_outcome_views)
 
 
 def test_a_bubble_has_no_player_to_look_for(temp_db, monkeypatch):

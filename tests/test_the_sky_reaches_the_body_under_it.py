@@ -200,7 +200,7 @@ class TestItIsWiredAndSpeaksBothLanguages:
         """A producer nothing calls is the defect this replaces, one layer
         along."""
         import inspect
-        source = inspect.getsource(perception)
+        source = inspect.getsource(perception._composer_standing_percepts)
         assert "weather_percepts" in source
         assert "weather_for_room(sc, room, name)" in source
 

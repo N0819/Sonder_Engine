@@ -74,8 +74,15 @@ def test_a_japanese_sentence_end_needs_no_space():
 def test_the_module_binds_the_splitter_once():
     """Two bindings of one name is the defect itself: whichever comment a
     reader trusts, the other definition is the one that runs."""
-    import inspect
-    src = inspect.getsource(perception)
+    from pathlib import Path
+    # Counted across the facade and every `agents/perception_*` sibling. The
+    # facade's own text is re-export lines, and the splitter is defined in
+    # one sibling and read in another -- a second binding in the reader's
+    # own module would shadow the import, which is this defect again.
+    facade = Path(perception.__file__)
+    src = "\n".join(
+        path.read_text(encoding="utf-8") for path in
+        [facade, *sorted(facade.parent.glob("perception_*.py"))])
     assert src.count("\n_SENTENCE_SPLIT = ") == 1, (
         "_SENTENCE_SPLIT is bound more than once; the later binding wins "
         "silently and the earlier comment block describes nothing")

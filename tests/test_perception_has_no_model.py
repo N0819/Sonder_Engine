@@ -38,6 +38,7 @@ provider door, and the stages run under it.
 from __future__ import annotations
 
 import ast
+from pathlib import Path
 
 import pytest
 
@@ -46,8 +47,26 @@ import agents.perception as perception
 STAGES = ("perception_establish", "perception_act", "perception_outcome")
 
 
+def _family():
+    """The facade and every `agents/perception_*` sibling, by path.
+
+    `agents/perception.py` became a facade on 2026-11-01: its own file holds
+    re-export lines and no code, so reading it alone would pass every
+    assertion here by having nothing to look at. Globbed rather than listed,
+    so a new sibling is covered without anyone remembering this file.
+    """
+    facade = Path(perception.__file__)
+    siblings = sorted(facade.parent.glob("perception_*.py"))
+    assert siblings, "no agents/perception_* sibling found beside the facade"
+    return [facade, *siblings]
+
+
 def _tree():
-    return ast.parse(open(perception.__file__).read())
+    """One module holding every statement of every file in the family."""
+    family = ast.Module(body=[], type_ignores=[])
+    for path in _family():
+        family.body.extend(ast.parse(path.read_text(encoding="utf-8")).body)
+    return family
 
 
 def _fn(name):
@@ -179,4 +198,5 @@ def test_no_perception_prompt_survives_anywhere():
     # "perception"` branches it justified could never fire.
     assert "perception" not in schemas.SCHEMA_MAP
     assert not any(key.startswith("perception") for key in schemas.SCHEMA_MAP)
-    assert "_agent_json" not in open(perception.__file__).read()
+    for path in _family():
+        assert "_agent_json" not in path.read_text(encoding="utf-8"), path

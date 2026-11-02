@@ -6,7 +6,9 @@ import agents
 def test_agent_roles_live_in_focused_modules():
     assert agents.director_interpret.__module__ == "agents.director"
     assert agents.compile_world_context.__module__ == "agents.mapping"
-    assert agents.perception_act.__module__ == "agents.perception"
+    # Since the 2026-11-01 split `agents/perception.py` is a facade; the onset
+    # stage is DEFINED in its focused sibling and re-exported unchanged.
+    assert agents.perception_act.__module__ == "agents.perception_onset"
     assert agents.character_step.__module__ == "agents.character"
     assert agents.interaction_loop.__module__ == "agents.loops"
     assert agents.narrator.__module__ == "agents.narration"

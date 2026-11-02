@@ -15,8 +15,12 @@ genuinely there.
 
 from __future__ import annotations
 
-import agents.perception as perception
 from agents.perception import _disguise_leak_check, _subject_concealed_terms
+from tests.helpers import patch_seam
+
+# Both maps are read by `agents.perception_bodies`, which imported them into
+# its own globals: a patch on the `agents.perception` facade intercepts
+# nothing, and the two tests expecting NO terms passed against an empty table.
 
 
 class _Ctx(dict):
@@ -43,27 +47,30 @@ DISGUISE = {
 
 
 def test_a_transformed_body_has_no_concealed_terms(monkeypatch):
-    monkeypatch.setattr(perception, "active_disguises",
-                        lambda _cid: {"hinami": DISGUISE})
-    monkeypatch.setattr(perception, "active_transformations",
-                        lambda _cid: {"hinami": {"true_appearance": "Fox ears."}})
+    patch_seam(monkeypatch, "agents.perception_bodies", "active_disguises",
+               lambda _cid: {"hinami": DISGUISE})
+    patch_seam(monkeypatch, "agents.perception_bodies",
+               "active_transformations",
+               lambda _cid: {"hinami": {"true_appearance": "Fox ears."}})
     assert _subject_concealed_terms(_Ctx(), "Hinami") == []
 
 
 def test_an_undisturbed_disguise_still_yields_its_terms(monkeypatch):
-    monkeypatch.setattr(perception, "active_disguises",
-                        lambda _cid: {"hinami": DISGUISE})
-    monkeypatch.setattr(perception, "active_transformations", lambda _cid: {})
+    patch_seam(monkeypatch, "agents.perception_bodies", "active_disguises",
+               lambda _cid: {"hinami": DISGUISE})
+    patch_seam(monkeypatch, "agents.perception_bodies",
+               "active_transformations", lambda _cid: {})
     assert _subject_concealed_terms(_Ctx(), "Hinami") == ["fox ears", "six tails"]
 
 
 def test_the_tripwire_stays_silent_once_the_glamour_is_dropped(monkeypatch):
     """The whole bug, end to end: terms empty => no warning for anyone, even
     though the view now names the feature (which is correct -- it is real)."""
-    monkeypatch.setattr(perception, "active_disguises",
-                        lambda _cid: {"hinami": DISGUISE})
-    monkeypatch.setattr(perception, "active_transformations",
-                        lambda _cid: {"hinami": {"true_appearance": "Fox ears."}})
+    patch_seam(monkeypatch, "agents.perception_bodies", "active_disguises",
+               lambda _cid: {"hinami": DISGUISE})
+    patch_seam(monkeypatch, "agents.perception_bodies",
+               "active_transformations",
+               lambda _cid: {"hinami": {"true_appearance": "Fox ears."}})
     ctx = _Ctx()
     _disguise_leak_check(
         ctx, "perception_outcome",
@@ -76,9 +83,10 @@ def test_the_tripwire_stays_silent_once_the_glamour_is_dropped(monkeypatch):
 def test_a_genuinely_unaware_observer_is_still_caught(monkeypatch):
     """The tripwire must not be defanged in general -- with a live disguise and
     an observer outside known_to, the warning still fires."""
-    monkeypatch.setattr(perception, "active_disguises",
-                        lambda _cid: {"hinami": DISGUISE})
-    monkeypatch.setattr(perception, "active_transformations", lambda _cid: {})
+    patch_seam(monkeypatch, "agents.perception_bodies", "active_disguises",
+               lambda _cid: {"hinami": DISGUISE})
+    patch_seam(monkeypatch, "agents.perception_bodies",
+               "active_transformations", lambda _cid: {})
     ctx = _Ctx()
     _disguise_leak_check(
         ctx, "perception_outcome",

@@ -293,7 +293,9 @@ def _captured_onset(ctx, monkeypatch):
     step of the ladder that can cost a model call. Patched (`patch_seam`)
     from `agents.common_figures`, which DEFINES it and, since review finding
     B36, also holds the ladder (`player_room_in`) that every stage reads; the
-    sweep rebinds the `agents.common` facade's re-export with it.
+    sweep rebinds the `agents.common` facade's re-export with it. The composer
+    is patched the same way from `agents.perception_onset`, which defines it
+    and holds the stage that calls it.
     """
     import agents.common as common
     import agents.perception as perception
@@ -311,7 +313,7 @@ def _captured_onset(ctx, monkeypatch):
         seen["resolver_calls"] += 1
         return real_resolver(*args, **kwargs)
 
-    monkeypatch.setattr(perception, "_composer_act", _fake)
+    patch_seam(monkeypatch, "agents.perception_onset", "_composer_act", _fake)
     patch_seam(monkeypatch, "agents.common_figures", "_resolve_player_room",
                _counting_resolver)
     perception.perception_act(ctx, nonce="n")

@@ -978,6 +978,13 @@ files are local state or private diagnostics and are ignored deliberately.
   `composer_things`, `composer_standing`, `composer_render`, `composer_episode`;
   plan in `docs/design/SPLIT_COMPOSER.md`); the same re-export and patch rules as
   `agents/common.py` apply, and it stays the shared LEAF every role may call.
+- `agents/perception.py`: since 2026-11-01 a facade over twelve `perception_*` siblings
+  (`perception_common`, `perception_bodies`, `perception_senses`, `perception_conduct`,
+  `perception_identity`, `perception_scrub`, `perception_stream`,
+  `perception_standing`, `perception_opening`, `perception_onset`,
+  `perception_outcome_views`, `perception_outcome_stage`; plan in
+  `docs/design/SPLIT_PERCEPTION.md`). Same re-export and patch rules; the
+  no-model invariant is asserted over the whole family.
 - `world/spatial.py`: a pure re-export facade over the `spatial_*` modules (its import list is the roster; the count has drifted in every document that stated one)
   (nineteen as of 2026-09-07: identity, barriers, transit, containment,
   contacts, contact_migration, substance, geometry, light, routing, senses,

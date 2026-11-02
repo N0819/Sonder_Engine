@@ -33,6 +33,7 @@ from agents.perception import (
     drop_body_condition_caches,
 )
 from core.pipeline_context import ChatData, PipelineContext, TurnData
+from tests.helpers import patch_seam
 
 CHAT_ID = 4321
 
@@ -84,14 +85,18 @@ def test_the_two_maps_are_read_once_for_the_whole_turn(chat, monkeypatch):
     calls = {"disguises": 0, "transformations": 0}
     real_d = perception.active_disguises
     real_t = perception.active_transformations
-    monkeypatch.setattr(perception, "active_disguises",
-                        lambda cid: (calls.__setitem__(
-                            "disguises", calls["disguises"] + 1),
-                            real_d(cid))[1])
-    monkeypatch.setattr(perception, "active_transformations",
-                        lambda cid: (calls.__setitem__(
-                            "transformations", calls["transformations"] + 1),
-                            real_t(cid))[1])
+    # Counted wherever the original is bound: the reader is
+    # `agents.perception_bodies`, which imported both into its own globals,
+    # so a patch on the facade alone counted nothing.
+    patch_seam(monkeypatch, "agents.perception_bodies", "active_disguises",
+               lambda cid: (calls.__setitem__(
+                   "disguises", calls["disguises"] + 1),
+                   real_d(cid))[1])
+    patch_seam(monkeypatch, "agents.perception_bodies",
+               "active_transformations",
+               lambda cid: (calls.__setitem__(
+                   "transformations", calls["transformations"] + 1),
+                   real_t(cid))[1])
 
     cast = [{"id": i, "sheet": json.dumps({"name": f"Body{i:02d}"}),
              "cstate": "{}"} for i in range(1, 13)]
