@@ -54,6 +54,19 @@ def _drop_momentary_contact_adds(raw, report=None):
         kept.append(item)
     return kept
 
+def _one_body(scene, a, b):
+    """Do two spellings name the same body? Equal spellings always do; with a
+    scene, so does any name the body answers to (`same_subject`). The merges
+    below compared casefold strings while the validator above resolved
+    bodies, so an alias-spelled op slipped past the floor that was written
+    for it (review 2026-11-01, director floors F4)."""
+    left = str(a or "").strip().casefold()
+    right = str(b or "").strip().casefold()
+    if left == right:
+        return True
+    return isinstance(scene, dict) and same_subject(scene, str(a or ""), str(b or ""))
+
+
 def _canonical_scene_subject(sc, value):
     """The positioned scene spelling for one body/entity reference."""
     for subject in (sc.get("positions") or {}):
@@ -352,10 +365,8 @@ def _merge_player_contact_assertions(assertions, resolved_ops, report=None, *,
         unheld = set()
 
     def same_pair(left, right):
-        return (str(left.get("actor") or "").casefold()
-                == str(right.get("actor") or "").casefold()
-                and str(left.get("target") or "").casefold()
-                == str(right.get("target") or "").casefold())
+        return (_one_body(scene, left.get("actor"), right.get("actor"))
+                and _one_body(scene, left.get("target"), right.get("target")))
 
     for raw in (resolved_ops if isinstance(resolved_ops, list) else []):
         if not isinstance(raw, dict):
@@ -364,9 +375,9 @@ def _merge_player_contact_assertions(assertions, resolved_ops, report=None, *,
         if op in ("remove", "clear"):
             for index, assertion in enumerate(assertions):
                 if op == "clear":
-                    who = str(raw.get("actor") or "").casefold()
-                    if not who or who in (str(assertion.get("actor") or "").casefold(),
-                                          str(assertion.get("target") or "").casefold()):
+                    who = str(raw.get("actor") or "")
+                    if not who.strip() or _one_body(scene, who, assertion.get("actor")) \
+                            or _one_body(scene, who, assertion.get("target")):
                         released.add(index)
                 elif same_pair(assertion, raw):
                     ap = str(raw.get("actor_part") or "").casefold()
@@ -442,13 +453,20 @@ def _validated_character_contact_endings(ctx, sc, report=None):
             sheet = normalized_character_from_text(row["sheet"])
         except (TypeError, ValueError, KeyError, json.JSONDecodeError):
             continue
-        result = (ctx.character_results.get(cid)
-                  or ctx.character_results.get(str(cid)) or {})
-        if not isinstance(result, dict):
-            continue
+        # BOTH RESULT SETS, as `_character_material_effects` reads them: a
+        # contested reactor's step is stored in `reaction_results` and the
+        # reactor is then left out of the interaction loop, so its ending --
+        # wrenching free of a grip -- was never read, and the Director's stale
+        # re-add of the grip stood (review 2026-11-01, director floors F6).
+        raws = []
+        for results in (getattr(ctx, "reaction_results", None) or {},
+                        getattr(ctx, "character_results", None) or {}):
+            result = results.get(cid) or results.get(str(cid)) or {}
+            if isinstance(result, dict):
+                raws.extend(result.get("contact_ops") or [])
         cname = character_name(sheet)
         options = contacts_of(sc, cname)
-        for raw in (result.get("contact_ops") or []):
+        for raw in raws:
             if not isinstance(raw, dict) or str(
                     raw.get("op") or "").strip().casefold() != "remove":
                 if report:
@@ -577,7 +595,8 @@ def _merge_character_material_effects(scene, resolved_ops, actor_effects,
     return merged
 
 
-def _merge_character_contact_endings(endings, resolved_ops, report=None):
+def _merge_character_contact_endings(endings, resolved_ops, report=None, *,
+                                     scene=None):
     """Project completed endings and reject a stale same-contact re-add.
 
     ``contact_ops`` describes the state at the end of the character's own
@@ -588,21 +607,31 @@ def _merge_character_contact_endings(endings, resolved_ops, report=None):
     """
     endings = [dict(op) for op in (endings or []) if isinstance(op, dict)]
 
-    def key(op):
-        return tuple(str(op.get(field) or "").strip().casefold()
-                     for field in ("actor", "actor_part", "target", "target_part"))
+    def part(op, field):
+        return str(op.get(field) or "").strip().casefold()
 
-    ended = set()
-    for ending in endings:
-        actor, actor_part, target, target_part = key(ending)
-        ended.add((actor, actor_part, target, target_part))
-        ended.add((target, target_part, actor, actor_part))
+    def ended(raw):
+        # Either direction is the same physical relation; each body by every
+        # name it answers to (`_one_body`), the parts as written -- a re-add
+        # under her full name re-added a contact she had ended (review
+        # 2026-11-01, director floors F4).
+        for end in endings:
+            for actor, actor_part, target, target_part in (
+                    ("actor", "actor_part", "target", "target_part"),
+                    ("target", "target_part", "actor", "actor_part")):
+                if (_one_body(scene, raw.get("actor"), end.get(actor))
+                        and part(raw, "actor_part") == part(end, actor_part)
+                        and _one_body(scene, raw.get("target"), end.get(target))
+                        and part(raw, "target_part") == part(end, target_part)):
+                    return True
+        return False
+
     result = list(endings)
     for raw in (resolved_ops if isinstance(resolved_ops, list) else []):
         if not isinstance(raw, dict):
             continue
         op = str(raw.get("op") or "add").strip().casefold()
-        if op in ("add", "cross") and key(raw) in ended:
+        if op in ("add", "cross") and ended(raw):
             if report:
                 report("discarded Director re-add of character-ended contact")
             continue

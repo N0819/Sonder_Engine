@@ -46,6 +46,15 @@ def _normalized_ledger_notes(out):
     }
 
 
+#: How many of a beat's public sources -- the lines and acts the charter's
+#: witnesses file evidence from -- the view keeps, in the order built
+#: (player speech, each declarer's speech, then actions). THE OWNER'S NUMBER
+#: TO SET, kept at the bare literal it was; a beat that exceeds it now
+#: records the cut (`public_sources_cut`) and the grounding says so (review
+#: 2026-11-01, director floors F14).
+PUBLIC_SOURCES_SHOWN = 20
+
+
 def _resolve_beat_view(out, decls, char_actions, dice, p_name, interp,
                        cast=None, scene=None):
     """The finished beat as every resolve-side specialist reads it.
@@ -56,20 +65,10 @@ def _resolve_beat_view(out, decls, char_actions, dice, p_name, interp,
     number the same beat's events differently.
     """
     ledger_notes = _normalized_ledger_notes(out)
-    declared = {}
-    for name, acts in (char_actions or {}).items():
-        attempts = [str(a.get("attempt") or "") for a in acts
-                    if isinstance(a, dict) and a.get("attempt")]
-        if attempts:
-            declared[name] = attempts
-    player_attempts = [
-        str(e.get("attempt") or "")
-        for e in (interp.get("sequence") or [])
-        if isinstance(e, dict) and e.get("type") == "action"
-        and e.get("attempt")
-    ]
-    if player_attempts:
-        declared[p_name] = player_attempts
+    # NO `source`, `prose`, `declared_actions` OR `dice` KEYS: no reader in
+    # the repo took them once the hands went (review 2026-11-01, director
+    # floors F18); `dice` stays a parameter for its callers. `dialogue` stays
+    # for `_specialist_payload`'s dialogue arm, which a test pins.
     public_sources = []
 
     def speech_body(value):
@@ -165,8 +164,6 @@ def _resolve_beat_view(out, decls, char_actions, dice, p_name, interp,
             ordinal += 1
 
     return {
-        "source": "causal_ledger",
-        "prose": out.get("resolved_event") or "",
         "ledger_notes": ledger_notes,
         "dialogue": [
             {"speaker": d.get("speaker"), "exact_quote": d.get("exact_quote")}
@@ -181,12 +178,11 @@ def _resolve_beat_view(out, decls, char_actions, dice, p_name, interp,
             "sequence": out.get("_all_causal_sequence")
                         or out.get("sequence") or [],
         }),
-        "declared_actions": declared,
-        "dice": dice if isinstance(dice, list) else [],
         "player": p_name,
         "cast": [str(d.get("name") or "") for d in decls if d.get("name")],
         "addressed_figures": addressed_figures(interp),
-        "public_sources": public_sources[:20],
+        "public_sources": public_sources[:PUBLIC_SOURCES_SHOWN],
+        "public_sources_cut": max(0, len(public_sources) - PUBLIC_SOURCES_SHOWN),
     }
 
 
@@ -229,13 +225,7 @@ def _interpret_beat_view(ctx, out, p_name):
                       "volume", "look")
             if element.get(k) is not None
         })
-    declared = {}
-    attempts = [str(e.get("attempt") or "") for e in sequence
-                if e.get("type") == "action" and e.get("attempt")]
-    if attempts:
-        declared[p_name] = attempts
     return {
-        "source": "causal_ledger",
         # Same key the resolve view uses.
         "ledger_notes": _normalized_ledger_notes(out),
         "declaration": {
@@ -255,8 +245,6 @@ def _interpret_beat_view(ctx, out, p_name):
             "sequence": out.get("_all_causal_sequence")
                         or out.get("sequence") or [],
         }),
-        "declared_actions": declared,
-        "dice": [],
         "player": p_name,
         "cast": [character_name_from_text(c["sheet"]) for c in ctx.cast],
         # The unregistered figures this beat's line is aimed at, by name:
@@ -357,11 +345,6 @@ def span_owners(item):
             hand = target if kind == "hand" else _CHANNEL_SPECIALISTS.get(target)
             if hand and hand not in owners:
                 owners.append(hand)
-    # A span handed on by a hand that declined it with an address (the
-    # forwarding round in `_run_specialists`) is the addressed hand's too.
-    for hand in (item.get("_forwarded_to") or []) if isinstance(item, dict) else []:
-        if hand in SPECIALISTS and hand not in owners:
-            owners.append(hand)
     return [name for name in SPECIALISTS if name in owners]
 
 
@@ -981,15 +964,6 @@ _EVENT_VERDICTS = frozenset({"encoded", "already_true", "not_mine",
 #: else in a specialist response is one of its channels.
 _SPECIALIST_BOOKKEEPING = frozenset({"resolved_events", "phase_sources",
                                      "results", "transforms", "notes"})
-
-#: Verdicts that are compatible with writing nothing. `already_true` MEANS the
-#: ledgers already carry it and `not_mine` means it belongs elsewhere, so an
-#: empty response is the correct behaviour for both. `encoded` is not here: the
-#: sheet defines it as "you put it in your channels this beat".
-#: `no_referent` is here by definition -- it is the answer for a span there
-#: was nothing to write, so writing something would contradict it.
-_VERDICTS_WITHOUT_CONTENT = frozenset({"already_true", "not_mine",
-                                       "no_referent"})
 
 
 def _wrote_any_channel(result):

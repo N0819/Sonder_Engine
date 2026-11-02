@@ -167,11 +167,4 @@ class TestTheFloorIsWiredIn:
         src = inspect.getsource(director.director_resolve)
         assert "_check_presence_knowledge_channel" in src
 
-    def test_the_resolve_payload_carries_the_presence_envelope(self):
-        """The prompt-side half: the model can only respect a presence's
-        epistemic envelope if the payload states it. Deterministic floor and
-        payload envelope land together or the prompt rule keys off nothing."""
-        import agents.director as director
-
-        src = inspect.getsource(director.director_resolve)
-        assert "background_presence_knowledge" in src
+    # CHANGED 2026-11-01 (L7a, director core E2): `test_the_resolve_payload_carries_the_presence_envelope` retired -- it pinned `background_presence_knowledge` in the resolve's staging payload, which no model call received; no live payload carries the envelope, and the floor above is the guard.

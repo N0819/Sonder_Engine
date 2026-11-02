@@ -18,6 +18,7 @@ import copy
 import json
 import re
 
+from language_runtime import UNSPACED_SCRIPT, fold_text, fold_words, script_of
 from llm import schemas
 from story.character_schema import (fold_identity_key,
                                     normalized_character_of_row)
@@ -75,14 +76,35 @@ from .director_lingua import _ling
 _RECONCILE_INTERPRET_MAX_UNITS = 4
 _INTERPRET_COVERAGE_MIN = 0.5
 
+#: A word of any script, an inner apostrophe kept ("i'm", "don't": the
+#: stopword table spells them so).
+_DECL_TOKEN = re.compile(r"[^\W_]+(?:'[^\W_]+)*")
+
+
 def _decl_tokens(text):
-    """Significant tokens of one declaration unit: casefolded alphanumeric
-    words, length >= 3, stopwords removed. No domain keyword lists -- pure
-    lexical coverage is the anti-treadmill property this seam is built on."""
+    """Significant tokens of one declaration unit: casefolded words, length
+    >= 3, stopwords removed. No domain keyword lists -- pure lexical coverage
+    is the anti-treadmill property this seam is built on.
+
+    A WORD OF AN UNSPACED SCRIPT is one of its runs of kanji, katakana,
+    Hangul or Thai (`fold_words` splits where the script changes), of any
+    length -- 扉 is a word -- and a hiragana run, a particle or an
+    inflection, is none. The ASCII class this replaced read no token from a
+    Japanese declaration, so no unit reached the two the detector needs and
+    it never ran for a Japanese story (review 2026-11-01, director floors
+    F15). A spaced script keeps exactly the rule it had."""
     tokens = set()
-    for tok in re.findall(r"[a-z0-9']+", str(text or "").casefold()):
-        tok = tok.strip("'")
-        if len(tok) >= 3 and tok not in _ling("_DECL_STOPWORDS"):
+    stop = _ling("_DECL_STOPWORDS")
+    for tok in _DECL_TOKEN.findall(fold_text(text)):
+        if UNSPACED_SCRIPT.search(tok):
+            for run in fold_words(tok):
+                script = script_of(run[:1])
+                if script == "hiragana" or run in stop:
+                    continue
+                if script or len(run) >= 3:
+                    tokens.add(run)
+            continue
+        if len(tok) >= 3 and tok not in stop:
             tokens.add(tok)
     return tokens
 
@@ -1136,7 +1158,6 @@ def _drop_record_at(sd, path):
 #                       lets a pure FOV layer answer about the world an
 #                       observer was standing in rather than the one the beat
 #                       left behind
-#   beat_ledger         all of it as one flat, queryable table
 #
 # What it deliberately does not do is DECIDE an identity. It bounds the
 # question -- one event, one place, one number -- and the folds that decide
@@ -1774,7 +1795,7 @@ def span_colocations(sd, sc=None):
     return grouped
 
 
-def span_result_findings(sd, spans, dispatch, owners_of):
+def span_result_findings(sd, spans, dispatch, owners_of, exclude=None):
     """What does not add up about each span's assembled result.
 
     `spans` is this stage's work items, `dispatch` the per-hand record carrying
@@ -1783,10 +1804,24 @@ def span_result_findings(sd, spans, dispatch, owners_of):
     `director_scopes` owns that table and this module must not grow a second
     opinion about it).
 
+    `exclude` is a diff whose records are ANOTHER STAGE'S: the resolve's
+    merged diff carries the interpret's assertions, whose `from_event` are
+    the interpret's own chrono ids, and both stages number from 1 -- so the
+    interpret's record k read as the resolve's span k. Chat 177 turn 22: the
+    resolve's spans 1-3 were speech, attention, speech, and the report filed
+    the interpret's `inventory_ops`/`poses` rows against them (review
+    2026-11-01, director core F7). A record equal to one of `exclude`'s is
+    not this stage's to judge.
+
     Returns a list of `{event_id, kind, hand, detail}`, most specific first.
     Empty is the ordinary beat.
     """
     by_span = span_records(sd)
+    if exclude:
+        theirs = [record for rows in span_records(exclude).values()
+                  for _path, _channel, record in rows]
+        by_span = {span_id: kept for span_id, rows in by_span.items()
+                   if (kept := [row for row in rows if row[2] not in theirs])}
     channel_owner = {}
     for hand, state in (dispatch or {}).items():
         for channel in (state or {}).get("channels") or ():
@@ -1811,10 +1846,15 @@ def span_result_findings(sd, spans, dispatch, owners_of):
 
         for hand, paths in wrote.items():
             if hand is None:
-                findings.append({
-                    "event_id": span_id, "kind": "unowned_channel",
-                    "hand": None, "detail": sorted(paths)[:4]})
-            elif hand not in owners:
+                # A CHANNEL NO OWNER HOLDS IS THE ENGINE'S OWN COMPILE: the
+                # prose contract's author writes no channel, and the fold
+                # assembles only owned ones, so what sits in an unowned
+                # channel -- the speech the engine compiles from every
+                # source, by design -- was written by no hand at all. Every
+                # line was reported `unowned_channel` (chat 176, 175, 156:
+                # "span N: unowned_channel" in `engine_notices`).
+                continue
+            if hand not in owners:
                 findings.append({
                     "event_id": span_id, "kind": "written_by_non_owner",
                     "hand": hand, "detail": sorted(paths)[:4]})
@@ -1868,57 +1908,6 @@ def beat_worlds(sc, sd, apply_diff):
         worlds.append((span_id, world))
         world = apply_diff(world, slices[span_id])
     return worlds
-
-
-def beat_ledger(sd, spans=None, sc=None):
-    """The beat as a flat, queryable table -- one row per record.
-
-    `[{when, whom, where, channel, path, item, record}]`, sorted by `when`
-    then `path` so the order is the beat's own and never a hand's return
-    order.
-
-      * `when`  -- the span number, or 0 for a record citing none.
-      * `whom`  -- the subject the record is keyed under (`poses.Corin` ->
-                   "Corin"), which is what a channel's key MEANS in every
-                   delegated channel.
-      * `where` -- the place token, or None where the engine cannot say.
-      * `item`  -- the Director's number for the thing, when the span that
-                   produced this record named exactly one; several numbered
-                   things in one span leave it None rather than guessing
-                   which record is which.
-
-    Nothing here is read out of prose. Every field is something the engine or
-    the Director issued as an identifier, which is what makes the question
-    answerable without a model.
-    """
-    by_span_items = {}
-    for span in (spans or []):
-        if not isinstance(span, dict):
-            continue
-        try:
-            span_id = int(span.get("event_id") or 0)
-        except (TypeError, ValueError):
-            continue
-        refs = [ref for ref in (span.get("_items") or [])
-                if isinstance(ref, dict) and isinstance(ref.get("id"), int)]
-        if span_id and len(refs) == 1:
-            by_span_items[span_id] = refs[0]["id"]
-
-    rows = []
-    for span_id, records in span_records(sd).items():
-        for path, channel, record in records:
-            parts = str(path).split(".")
-            subject = parts[1].split("[")[0] if len(parts) > 1 else ""
-            rows.append({
-                "when": span_id,
-                "whom": subject,
-                "where": _record_place(path, channel, record, sd, sc),
-                "channel": channel,
-                "path": path,
-                "item": by_span_items.get(span_id),
-                "record": record,
-            })
-    return sorted(rows, key=lambda row: (row["when"], row["path"]))
 
 
 def span_slices(sd):
@@ -2433,13 +2422,6 @@ def _evidence_present(sd, omission, forms=None, *, scene=None):
         return any(hits(k) for k in (sd.get("positions") or {}))
     return _omission_subject_encoded(sd, subject, forms)
 
-# Kept for its importers. It clamped `_manifest_items` to the first eight
-# entries, which bounded what was DISPATCHED and CHECKED rather than what was
-# repaired; the clamp is gone (see `_manifest_items`). The one deep audit and
-# one self-repair per director_resolve execution are bounded by the seam's
-# own control flow, not by this number.
-_RECONCILE_MAX_MANIFEST_ITEMS = 8
-
 
 def _beat_item_refs(listed):
     """`items` as `[{"id": int|str, "name": str}]`, or [].
@@ -2627,6 +2609,46 @@ def _carried_share(span, spoken):
     return sum(1 for word in words if spoken[word] > 0) / len(words)
 
 
+#: What closes a quoted line in a row and goes with it when the line is
+#: lifted out: the stop or comma after the closing mark, in either script.
+_QUOTE_TAIL = ".!?,\u3002\uff01\uff1f\u3001"
+
+
+def _quoted_lines_in(text, lines):
+    """`[(line, start, end)]`: each of `lines` that `text` QUOTES -- a quoted
+    span (`_QUOTED_SPAN`: "", “”, 「」) whose words are the line's words --
+    first occurrence each, with the span's boundaries (the stop after it
+    included). Never a bare substring: "Hi" is not in "hits"."""
+    hits, taken = [], set()
+    for match in _QUOTED_SPAN.finditer(str(text or "")):
+        inner = match.group(1) or match.group(2) or match.group(3) or ""
+        words = _line_words(inner)
+        if not words:
+            continue
+        for line in lines:
+            if line in taken or _line_words(line) != words:
+                continue
+            end = match.end()
+            if end < len(text) and text[end] in _QUOTE_TAIL:
+                end += 1
+            hits.append((line, match.start(), end))
+            taken.add(line)
+            break
+    return hits
+
+
+def _without_spans(text, spans):
+    """`text` with each `(start, end)` span cut out, spacing tidied: the two
+    sides close up with a space, or with none where either side is written
+    in a script without spaces (`Hinamiは「行こう」と` -> `Hinamiはと`)."""
+    out = str(text or "")
+    for start, end in sorted(spans, reverse=True):
+        left, right = out[:start].rstrip(), out[end:].lstrip()
+        joint = "" if (script_of(left[-1:]) or script_of(right[:1])) else " "
+        out = left + joint + right
+    return re.sub(r"\s+", " ", out).strip(" ,;:")
+
+
 def restore_declared_quotes(out, raw_input, warn=None):
     """A quoted span in the player's own input is the player's LINE.
 
@@ -2660,6 +2682,18 @@ def restore_declared_quotes(out, raw_input, warn=None):
 
     said = {body(r.get("event")).casefold() for r in ledgers
             if isinstance(r, dict) and carries_speech(r)}
+    # SAID IS SAID BY WORD, as the stage below judges it: a line carried with
+    # its punctuation normalised ("Wait here." for "Wait here,") is carried.
+    # Judged by exact body, it was lifted again and every hearer heard her
+    # line twice (review 2026-11-01, director floors F5).
+    spoken_words = collections.Counter(
+        word for r in ledgers if isinstance(r, dict) and carries_speech(r)
+        for word in _line_words(r.get("event")))
+
+    def already_said(sp):
+        return (sp.casefold() in said
+                or _carried_share(sp, spoken_words) >= QUOTED_LINE_CARRIED)
+
     next_item = max([int(r.get("item_id") or 0) for r in ledgers
                      if isinstance(r, dict)] + [0]) + 1
     rebuilt, restored = [], []
@@ -2668,13 +2702,16 @@ def restore_declared_quotes(out, raw_input, warn=None):
             rebuilt.append(row)
             continue
         event = str(row.get("event") or "")
-        lifted = [sp for sp in spans
-                  if sp.casefold() not in said and sp.casefold() in event.casefold()]
+        # ONLY WHERE THE ROW QUOTES IT. A bare substring found "Hi" in "hits"
+        # and cut the act to "ts the brass chime twice"; a line is in a row as
+        # a quoted span, matched to her span word for word, and is taken out
+        # by that span's own boundaries -- quote marks, 「」 included, and the
+        # stop that closes it (review 2026-11-01, director floors F5).
+        lifted = _quoted_lines_in(event, [sp for sp in spans if not already_said(sp)])
         if not lifted:
             rebuilt.append(row)
             continue
-        residual = event
-        for sp in lifted:
+        for sp, _start, _end in sorted(lifted, key=lambda hit: hit[1]):
             line = {k: v for k, v in row.items()}
             line.update({
                 "item_id": next_item, "event": sp, "act": "",
@@ -2684,20 +2721,17 @@ def restore_declared_quotes(out, raw_input, warn=None):
             next_item += 1
             rebuilt.append(line)
             said.add(sp.casefold())
+            spoken_words.update(_line_words(sp))
             restored.append(sp)
-            residual = re.sub(
-                r'["\u201c]?\s*' + re.escape(sp) + r'\s*["\u201d]?[.!?,]?',
-                " ", residual, count=1, flags=re.IGNORECASE)
-        residual = re.sub(r"\s+", " ", residual).strip(" ,;:")
-        if len(re.findall(r"[^\W\d_]+", residual)) >= 2:
+        residual = _without_spans(event, [(start, end) for _sp, start, end in lifted])
+        if len([w for w in fold_words(residual) if not w.isdigit()]) >= 2:
             kept = dict(row)
             kept["event"] = residual
             if str(kept.get("observable") or "").strip():
-                obs = kept["observable"]
-                for sp in lifted:
-                    obs = re.sub(r'["\u201c]?\s*' + re.escape(sp) + r'\s*["\u201d]?[.!?,]?',
-                                 " ", obs, count=1, flags=re.IGNORECASE)
-                kept["observable"] = re.sub(r"\s+", " ", obs).strip(" ,;:") or residual
+                obs = str(kept["observable"])
+                obs_hits = _quoted_lines_in(obs, [sp for sp, _s, _e in lifted])
+                kept["observable"] = _without_spans(
+                    obs, [(start, end) for _sp, start, end in obs_hits]) or residual
             rebuilt.append(kept)
     # AND A LINE NO ROW CARRIES AT ALL IS STILL HER LINE. The lift above
     # mends a line filed under the wrong row; a line the interpretation
@@ -2797,6 +2831,37 @@ def _span_seconds(value):
             or seconds < 0:
         return None
     return seconds
+
+
+#: The spellings of a CONCEALED act or line, folded once at ingest
+#: (`canonical_visibility`): the words the dialogue log already folds
+#: (`llm.schemas`, X14). Measured on the owner's database (3000 recent
+#: interpret/resolve variants, 2026-11-01): besides `overt` (4877 rows) the
+#: ledger carried `public` 97, `normal` 87, `visible` 15, `private` 8,
+#: `unobscured` 7, `open` 7, `concealed` 4, `low` 4, `plain_sight` 4 -- a
+#: value off the two canonical words is ordinary and almost always means
+#: overt, so everything outside this set reads overt, as the firewall reader
+#: always read it.
+CONCEALED_SPELLINGS = frozenset({"concealed", "hidden", "secret"})
+
+
+def canonical_visibility(value):
+    """`concealed` or `overt`, whatever the row spelled. ONE reading at
+    ingest, so the floors (which compared `.strip().lower()`) and the
+    firewall reader (`composer.concealed_from_observer`, which compares the
+    exact word) can no longer read one row two ways: "Concealed " was
+    concealed to the floors and OVERT to the reader, which delivered the line
+    to the body it was hidden from (review 2026-11-01, director floors F1)."""
+    return ("concealed" if str(value or "").strip().casefold()
+            in CONCEALED_SPELLINGS else "overt")
+
+
+def canonical_commitment(value):
+    """`contestable` or `asserted`, whatever the row spelled -- the same one
+    reading for the same reason: "Contestable" was contestable to the resolve's
+    event inputs (casefold) and asserted to `already_happened` (exact)."""
+    return ("contestable" if str(value or "").strip().casefold() == "contestable"
+            else "asserted")
 
 
 def normalize_causal_ledger(out, authority=None, identity_index=None, *,
@@ -2920,8 +2985,6 @@ def normalize_causal_ledger(out, authority=None, identity_index=None, *,
         # actor; otherwise it is an act. A fourth thing to keep consistent
         # with the first three is a fourth thing to get wrong.
         spoken = row_is_spoken({**entry, "categories": categories})
-        worldly = str(entry.get("authority_mode") or "").strip().casefold() \
-            in ("world", "mechanical")
         note = str(entry.get("resolution_notes") or "").strip()
         targets = [str(value) for value in entry.get("targets") or []]
         if entry.get("item_ids") and entry.get("item_names"):
@@ -2942,11 +3005,12 @@ def normalize_causal_ledger(out, authority=None, identity_index=None, *,
             "item_names": list(item_names),
             "object_name": object_name,
             "source_entity_id": source_entity_id,
-            # Filled by the engine from what it handed this source, never
-            # read back off the row. It stays on the INTERNAL ledger because
-            # the deterministic floors want it. (The hands' row slice
-            # stripped it; the encoder is handed authority per source, on
-            # purpose, through `event_inputs`.)
+            # Filled by the engine from what it handed this source; the row's
+            # own value only where the engine handed the source none (a prose
+            # row carries none). It stays on the INTERNAL ledger because the
+            # deterministic floors want it. (The hands' row slice stripped
+            # it; the encoder is handed authority per source, on purpose,
+            # through `event_inputs`.)
             "authority_mode": (
                 (authority or {}).get(source_entity_id)
                 or str(entry.get("authority_mode") or "").strip()
@@ -2960,9 +3024,9 @@ def normalize_causal_ledger(out, authority=None, identity_index=None, *,
             # line itself has no use for a verb and carries none.
             "act": act,
             "observable": str(entry.get("observable") or "").strip(),
-            "commitment": str(entry.get("commitment") or "asserted"),
+            "commitment": canonical_commitment(entry.get("commitment")),
             "targets": targets,
-            "visibility": str(entry.get("visibility") or "overt"),
+            "visibility": canonical_visibility(entry.get("visibility")),
             "conceal_from": [str(value)
                              for value in entry.get("conceal_from") or []],
             "volume": str(entry.get("volume") or "normal"),
@@ -2996,6 +3060,13 @@ def normalize_causal_ledger(out, authority=None, identity_index=None, *,
         # leave its conduct out (`director.director_interpret`).
         if entry.get("standing") is True:
             normalized["standing"] = True
+        # AN EVENT, because the world or the dice caused it: read off the
+        # authority the ENGINE filled above, never the raw row -- prose rows
+        # carry none, so a world pressure's or an authored event's row
+        # projected as an act by `world_pressure:storm` (review 2026-11-01,
+        # director floors F10).
+        worldly = str(normalized["authority_mode"]).strip().casefold() \
+            in ("world", "mechanical")
         ledger.append(normalized)
         projected = {
             "event_id": chrono_id,

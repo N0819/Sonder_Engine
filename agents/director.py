@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import contextvars
 import copy
+import threading
 import json
 import random
 import re
@@ -216,6 +217,8 @@ from .director_movement import (
     route_scene_for,
 )
 from .director_floors import (
+    _figure_head_noun,
+    _role_noun_matches,
     _refuse_minted_cast_doubles,
     resolve_concealment_refs,
     strip_addressee_concealment,
@@ -261,7 +264,6 @@ from .director_evidence import (
     _category_names,
     beat_event_ledger,
     beat_item_records,
-    beat_ledger,
     beat_worlds,
     span_slices,
     apply_item_transforms,
@@ -313,7 +315,6 @@ from .director_evidence import (
     _normalize_omission_category,
     _entity_state_has_transit,
     _evidence_present,
-    _RECONCILE_MAX_MANIFEST_ITEMS,
     _manifest_items,
     _span_items,
     _span_id_ceiling,
@@ -344,6 +345,7 @@ from .director_scopes import (
 from . import director_prose
 from .director_fanout import (
     addressed_figures, addressed_house,
+    PUBLIC_SOURCES_SHOWN,
     _resolve_beat_view,
     _interpret_beat_view,
     _granted_event_ids,
@@ -856,26 +858,27 @@ def _last_lines(ctx, sc, identities, players):
     held.discard("")
     playing = {str(name).casefold() for name in players}
     out = []
-    for entry in log:
-        if not isinstance(entry, dict):
-            continue
-        speaker = str(entry.get("speaker") or "").strip()
-        line = str(entry.get("exact_quote") or "").strip()
-        if not speaker or not line:
-            continue
-        raw = entry.get("intended_target")
-        to = []
-        for target in (raw if isinstance(raw, list) else [raw]):
-            target = str(target or "").strip()
-            target = str(identities.get(target) or target)
-            if not target:
+    with _labels_batch():
+        for entry in log:
+            if not isinstance(entry, dict):
                 continue
-            bodies = ([target] if target.casefold() in held
-                      else _bodies_addressed_as(ctx, sc, speaker, [target]) or [target])
-            to += [body for body in bodies if body not in to]
-        if speaker.casefold() in playing or any(t.casefold() in playing for t in to):
-            out.append({"speaker": speaker, "to": to, "line": line})
-    return out
+            speaker = str(entry.get("speaker") or "").strip()
+            line = str(entry.get("exact_quote") or "").strip()
+            if not speaker or not line:
+                continue
+            raw = entry.get("intended_target")
+            to = []
+            for target in (raw if isinstance(raw, list) else [raw]):
+                target = str(target or "").strip()
+                target = str(identities.get(target) or target)
+                if not target:
+                    continue
+                bodies = ([target] if target.casefold() in held
+                          else _bodies_addressed_as(ctx, sc, speaker, [target]) or [target])
+                to += [body for body in bodies if body not in to]
+            if speaker.casefold() in playing or any(t.casefold() in playing for t in to):
+                out.append({"speaker": speaker, "to": to, "line": line})
+        return out
 
 
 def index_people(causal_index, sc, identities):
@@ -1321,6 +1324,11 @@ def _addressed_characters(rows, cast):
 def _route_doorway_rows(sc, out, room_ids):
     """A row about a doorway of a room in view is a `rooms` row.
 
+    CALLED BY NOTHING ON THE PROSE PATH since 2026-11-01 (director core F13):
+    a row's categories there are the channels the encoder already wrote and
+    an owner runs only for those, so the added category re-asked nobody.
+    Kept for `tests/test_causal_director.py`, which pins this function alone.
+
     A door between two rooms is the edge's barrier (`rooms`), never a
     thing, and the Director keeps writing an act on one as a contact or a
     contact action -- "slid the bolt back", "cracked it the width of her
@@ -1367,6 +1375,125 @@ def _route_doorway_rows(sc, out, room_ids):
         categories.append("rooms")
         routed.append(str(row.get("object_name") or ""))
     return routed
+
+
+#: How many of the engine's notes on the last beat ride a Director author's
+#: payload (`_engine_notices_shown`). THE OWNER'S NUMBER TO SET. Measured on
+#: the owner's database (2026-11-01, read-only): 64 of 124 chats held
+#: notices, per beat a median of 2, p90 5, max 8 (at most 2,513 characters),
+#: so 8 cuts no beat measured.
+ENGINE_NOTICES_SHOWN = 8
+
+
+def _engine_notices_shown(ctx, chat_id):
+    """The engine's notes on the last beat, for the prose author: the list
+    the commit wrote under `engine_notices` (`ctx.tell_director`,
+    `commit_common.add_engine_notice` -- an attire coverage nobody stated, a
+    contact moved, a lamp gone out, a silent beat's warning), the first
+    `ENGINE_NOTICES_SHOWN` of them, in the order the commit composed them
+    (the world's own sweep first).
+
+    `Design.md` and `core/pipeline_context.py` promise these reach the
+    Director; since the prose contract their only readers were the staging
+    payloads no model call receives, and 71 of 132 chats held notices nobody
+    read (review 2026-11-01, director core F4). A cut is said, never silent.
+    Empty when there are none, and then the payload carries no key."""
+    notices = [str(n).strip() for n in (wget(chat_id, "engine_notices", []) or [])
+               if str(n or "").strip()]
+    if len(notices) > ENGINE_NOTICES_SHOWN:
+        ctx.add_warning(
+            f"engine notices: {len(notices)} on record from the last beat; "
+            f"the first {ENGINE_NOTICES_SHOWN} reach the author "
+            f"(ENGINE_NOTICES_SHOWN) and {len(notices) - ENGINE_NOTICES_SHOWN} "
+            "do not")
+        notices = notices[:ENGINE_NOTICES_SHOWN]
+    return notices
+
+
+def _declared_elsewhere(ctx):
+    """The entity ids of the OTHER players who declared something this beat:
+    on a beat the primary player passed in silence, theirs are the only
+    declarations there are (`_silence_every_copy`)."""
+    return {f"persona:{extra.get('persona_id')}"
+            for extra in (getattr(ctx, "extra_players", None) or ())
+            if isinstance(extra, dict) and not extra.get("idle")
+            and str(extra.get("input") or "").strip()}
+
+
+def _silence_every_copy(ctx, out, keep_sources=()):
+    """A silent beat keeps no copy of what its prose invented, in ONE place.
+
+    `director_interpret`'s empty-input guard clears the declaration's own
+    fields (`sequence`, `speech`, `action(s)`, the assertions); this clears
+    every OTHER representation of the same rows, which the resolve, the clock,
+    the speech channel and the charter voices each read on their own (review
+    2026-11-01, director core F1):
+
+      * `ledgers` / `causal_ledger` -- the resolve compiles their spoken rows
+        into the committed `state_diff.speech` (`speech_transforms`), charges
+        their `seconds` to the clock and hands them to the charter voices
+        (`background._provisional_beat`);
+      * `_all_causal_sequence`, from which the interpret's fold would take
+        its spans when another player declared (the schema dump drops the
+        key before the fold reads it today -- see the lane log -- and it is
+        emptied here all the same, so a restored key cannot carry the
+        invention back);
+      * `movement`, taken from the invented rows before the guard ran, and
+        `flow.dice`, built from them;
+      * the prose contract's record still on the context: its `prose`, which
+        `director_prose.already_happened` hands the resolve as what the
+        player's side already put into the world, its `events`, whose walks
+        `declared_moves` counts as declared crossings, and the encoder's
+        transforms and extension values the fold and `attach_record` read.
+
+    A row an OTHER player declared (`keep_sources`, their `persona:<id>`) is
+    a declaration and stays, with its transforms. What was discarded stays on
+    the record under `silent_beat_discarded`, so the step says what the guard
+    took. Mutates `out` and the context's record in place."""
+    keep = {str(source) for source in keep_sources or ()}
+
+    def kept(row):
+        return isinstance(row, dict) and str(
+            row.get("source_entity_id") or row.get("actor") or "") in keep
+
+    rows = [row for row in (out.get("causal_ledger") or out.get("ledgers") or [])
+            if isinstance(row, dict)]
+    kept_chronos = {str(row.get("chrono_id")) for row in rows if kept(row)}
+    for key in ("ledgers", "causal_ledger", "_all_causal_sequence"):
+        if isinstance(out.get(key), list):
+            out[key] = [row for row in out[key] if kept(row)]
+    out["movement"] = None
+    flow = out.get("flow")
+    if isinstance(flow, dict) and isinstance(flow.get("dice"), list):
+        flow["dice"] = [roll for roll in flow["dice"] if isinstance(roll, dict)
+                        and str(roll.get("actor") or "") in keep]
+    held = ctx.get(director_prose.CTX_KEY) if hasattr(ctx, "get") else None
+    record = (held or {}).get("record") if isinstance(held, dict) else None
+    if not isinstance(record, dict):
+        return
+    # Rows are the encoder's dict events in order (`ledger_from_events`:
+    # chrono_id = position + 1), so a row's chrono names its event.
+    events = [event for event in (record.get("events") or [])
+              if isinstance(event, dict)]
+    stays = [event for index, event in enumerate(events)
+             if str(index + 1) in kept_chronos]
+    gone = [event for index, event in enumerate(events)
+            if str(index + 1) not in kept_chronos]
+    if gone or str(record.get("prose") or "").strip():
+        record["silent_beat_discarded"] = {"prose": record.get("prose") or "",
+                                           "events": gone}
+    record["prose"] = ""
+    record["events"] = stays
+    transforms = held.get("transforms")
+    if isinstance(transforms, dict):
+        held["transforms"] = {chrono: rows_ for chrono, rows_ in transforms.items()
+                              if str(chrono) in kept_chronos}
+        if held.get("extension_channels"):
+            held["extension_channels"] = director_prose.extension_channel_values(
+                held["transforms"],
+                {spec["channel"]: spec
+                 for spec in director_prose._extension_channels()},
+                "interpret", warn=ctx.add_warning)
 
 
 def _restamped_target(tags, line):
@@ -1699,7 +1826,6 @@ def _validated_causal_contact_program(sc, state, contacts, player_name, *,
 
 
 def director_interpret(ctx, nonce):
-    from persist.commit import presence_name_items
     from agents.offscreen_beat import (is_offscreen_beat,
                                        offscreen_interpretation)
     chat = ctx.chat
@@ -1753,50 +1879,14 @@ def director_interpret(ctx, nonce):
     # answer outranked the committed scene it was interpreting against.
     p_room = player_room_in(sc, ctx, pers=pers)
 
+    # Who each cast member is, by id and name: the identity index and the
+    # addressee reading (`_address_from_spans`) read nothing else of it.
     cast_info = []
     for c in ctx.cast:
         sh, _, _ = sheet_state(c)
-        cname = character_name(sh)
-        cast_info.append({
-            "id": c["id"],
-            "name": cname,
-            "room": room_of(sc, cname),
-            # Their heading, on the same terms as the player's above. This
-            # stage does not usually relocate a character -- director_resolve
-            # does -- but it interprets declarations ABOUT them, and a room
-            # with no orientation is the same undirected graph that made
-            # "forward" a coin flip for the player.
-            "exits": _egocentric_exits(sc, cname),
-            "appearance": appearance_of(cname, character_appearance(sh), sc),
-            # Authored structured extra body parts (tail, wings...): shown so
-            # the Director stops re-inventing them from prose each beat. Key
-            # absent for an ordinary body -- defaults stay inert and the
-            # payload prefix stays cacheable.
-            **({"body_parts": extra_parts_lines(character_extra_parts(sh))}
-               if character_extra_parts(sh) else {}),
-            "abilities": character_abilities(sh),
-        })
+        cast_info.append({"id": c["id"], "name": character_name(sh)})
 
-    raw_shadow = wget(chat["id"], "shadow_profile", "") or ""
-    # The live view: the durable ledger PLUS every charter body derived as
-    # present. `with_charter_presences` returns a copy and writes nothing, so
-    # noticing somebody standing there still mints no identity for them.
-    _addressable_ledger = wget(chat["id"], "background_presences", {}) or {}
-    try:
-        from persist.commit import with_charter_presences
-        _addressable_ledger = with_charter_presences(
-            chat["id"], _addressable_ledger, sc,
-            places=[p_room] if p_room else None,
-            frame_id=ctx.turn.frame_id)
-    except Exception as exc:  # a story with no charter keeps its own ledger
-        ctx.add_warning(f"charter presences not addressable: {exc}")
-    raw_intents = wget(chat["id"], "standing_intentions", []) or []
-    fm = fiction_model(chat["id"])
     clock = simulation_clock(chat["id"])
-    # Bound once: the room window decides what the entity table is scoped to,
-    # and two calls could not be made to disagree about which rooms this beat
-    # is about without a body's holder falling into the gap between them.
-    _interpret_rooms = _contextual_rooms(sc, ctx.cast, p_room)
 
     # Authored future events the player scheduled on a prior beat and that are
     # due NOW (P4). Delivered with a resolve-now contract; commit_authored_events
@@ -1804,150 +1894,22 @@ def director_interpret(ctx, nonce):
     from story.authored_events import due_authored_events
     _due_authored = due_authored_events(chat["id"], ctx.turn.idx)
 
-
-    payload = {
-        "scene": {
-            "location": sc.get("location"),
-            # THE STANDING TIME OF DAY, named as what it is. Under the bare
-            # key `time` this block used to hand back last beat's DURATION
-            # PHRASE -- the same string the `simulation_clock` below carried
-            # as `display` -- to the one hand that owns the `time` channel,
-            # which is a payload teaching the model to write the defect back.
-            "time_of_day": sc.get("time_of_day"),
-            "rooms": _interpret_rooms,
-            # Scoped to those same rooms. Full records for the furniture of a
-            # room the payload declined to describe are bytes nothing in this
-            # beat can be about -- see `_interpret_scene_entities` for the two
-            # classes that survive the window anyway.
-            "entities": _interpret_scene_entities(sc, _interpret_rooms),
-            "positions": sc.get("positions"),
-            # Where in the room each body stands. Shown so the Director can
-            # MAINTAIN the ledger -- it was being asked to write stations it
-            # was never allowed to read.
-            "stations": sc.get("stations") or {},
-            "following": sc.get("following") or {},
-            # Needed to distinguish a genuinely new NPC act (not the player's
-            # authority) from a first-person refinement of contact already felt.
-            "contacts": sc.get("contacts") or [],
-        },
-        "simulation_clock": clock,
-        "paradox": paradox_visible_to(chat["id"], ctx.turn.frame_id),
-        "fiction_model": fm,
-        "director_recent_messages": director_context(chat["id"], 5),
-        "player": {
-            "name": pers.get("name") or persona_name(pers),
-            "room": p_room,
-            "appearance": appearance_of(
-                pers.get("name") or persona_name(pers),
-                pers.get("appearance") or persona_appearance(pers), sc),
-            **({"body_parts": extra_parts_lines(persona_extra_parts(pers))}
-               if persona_extra_parts(pers) else {}),
-            "abilities": persona_abilities(pers),
-            "following": (sc.get("following") or {}).get(
-                pers.get("name") or persona_name(pers)),
-            "public_shadow_profile": raw_shadow[:1200],
-            # Heading, so "forward" and "back" name different doorways.
-            "exits": _egocentric_exits(
-                sc, pers.get("name") or persona_name(pers)),
-        },
-        # Who can see whom, and what stands between: the geometry's own
-        # answer, for the hand that places bodies (see `_sightlines_view`).
-        "sightlines": _sightlines_view(
-            sc, ctx, pers.get("name") or persona_name(pers)),
-        # The plan's seed for the stubs this opening stands in or looks
-        # into -- purpose and exits given, contents the Director's. Absent
-        # when no planned room is in reach (see `_planned_rooms_view`).
-        **({"planned_rooms": _planned} if (
-            _planned := _planned_rooms_view(sc, ctx, p_room)) else {}),
-        # ...and the NAME of every other room the plan holds, so a place the
-        # story has already planned can be named from anywhere rather than
-        # invented beside itself (`_planned_elsewhere_view`).
-        **({"planned_elsewhere": _elsewhere} if (
-            _elsewhere := _planned_elsewhere_view(
-                sc, ctx, _planned or ())) else {}),
-        # The room's notes on what its plan MEANS, in scope where the cast
-        # stands or beside it (`_author_notes_view`); absent when none.
-        **({"author_notes": _notes} if (
-            _notes := _author_notes_view(
-                ctx, _rooms_beside(ctx, sc, p_room))) else {}),
-        "present_characters": cast_info,
-        # Named figures with no character id. `flow.addressed_to` accepts a
-        # NAME STRING for exactly these (schemas.py: "the only way the director
-        # can address an UNREGISTERED background presence"), and the prompt
-        # asks for one -- but this stage was never shown WHICH figures exist,
-        # so the instruction named something the model could not see. The
-        # channel was documented and unusable.
-        #
-        # Live, chat 75 turn 60. The player told the intruders in her room to
-        # close the door and leave. The only addressable ids in front of the
-        # Director were registered cast, so it routed the line to The Doctor,
-        # who was standing in the corridor being talked past, and he left.
-        #
-        # Only figures with a resolvable room are listed -- addressing someone
-        # who is nowhere is meaningless -- but co-presence is FLAGGED rather
-        # than filtered, because calling through an open doorway is ordinary.
-        # DERIVED, NOT READ FROM THE DURABLE LEDGER. Addressability is a live
-        # question -- who is standing here that a line could be aimed at --
-        # and the persisted ledger answers a different one: who has EARNED a
-        # record by participating. Reading the store for this was survivable
-        # only while the overlay was persisted wholesale; once it stopped
-        # being (284 permanent records for a 300-body town), the Director's
-        # view of the room went with it.
-        #
-        # Measured: a player took a vendor by the arm and asked him a
-        # question, in a square holding 239 named charter bodies, and the
-        # Director's addressable list was two people in OTHER rooms. With
-        # nobody to aim at, it recorded no `intended_target`; with no
-        # intended_target, `_character_address_of` matched nobody; with no
-        # addressee, no reactor was picked and `character_bg` was never
-        # called at all. The turn ended `no eligible respondent` and the
-        # narrator wrote around the silence.
-        "addressable_presences": [
-            _bp for _bp in (
-                {"name": _pn,
-                 "room": (room_of(sc, _pn)
-                          or ((_pr.get("sketch") or {}).get("station_room") or "")),
-                 "same_room_as_player": (
-                     (room_of(sc, _pn)
-                      or ((_pr.get("sketch") or {}).get("station_room") or ""))
-                     == p_room),
-                 # Descriptions the player has already addressed this body
-                 # by, each one a binding the engine made canon on the beat
-                 # it was used (persist/commit_background.descriptor_bindings
-                 # -- the fix for a player who, in a crowd of strangers, can
-                 # only address by what they see). Shown so a repeated "the
-                 # man with the braided cords" resolves to the SAME name
-                 # instead of a fresh guess; absent for the common
-                 # never-described body, keeping the row shape unchanged.
-                 **({"described_as":
-                     (_pr.get("sketch") or {}).get("descriptors")}
-                    if (_pr.get("sketch") or {}).get("descriptors") else {})}
-                for _pn, _pr in presence_name_items(_addressable_ledger))
-            if _bp["room"]
-        ],
-        "standing_intentions": raw_intents[:12],
-        "pending": wget(chat["id"], "pending", []),
-        # Future beats the PLAYER scheduled earlier ("the elevator crashes next
-        # turn") that are due NOW: resolve them as occurring this beat, folded
-        # in with whatever the player declares this turn.
-        "due_authored_events": [e["summary"] for e in _due_authored],
-        # Mechanical notices from the previous commit's transit sweep (e.g.
-        # a timed arrival that completed) -- facts the engine already made
-        # true, for the director to acknowledge rather than re-invent.
-        "engine_notices": wget(chat["id"], "engine_notices", []),
-        "player_raw_input": ctx.input,
-        # Idle attached players (connected, but declared nothing this beat)
-        # are deliberately excluded here -- there's nothing to interpret
-        # for them. They still get their own perceiver/narrated view of
-        # the beat via perception_outcome/narrator_extra; they just don't
-        # need the director's attention.
-        "other_players": [
-            {"persona_id": p["persona_id"], "name": p["name"], "raw_input": p["input"],
-             "following": (sc.get("following") or {}).get(p["name"])}
-            for p in ctx.extra_players if not p.get("idle")
-        ],
-        "variant_seed": nonce,
-    }
+    # The room's notes on what its plan MEANS, in scope where the cast stands
+    # or beside it (`_author_notes_view`), for the encoder's slices; None when
+    # none.
+    #
+    # NO STAGING PAYLOAD. This stage built one every beat -- the scene and
+    # its entities, the cast's exits, appearances and abilities, the
+    # player's shadow profile, the addressable presences (with a charter
+    # derivation), the plan's rooms, sightlines, the recent messages, the
+    # standing intentions, the pending list and the engine notices -- and
+    # read ONE key of it (`author_notes`): no model call received it once the
+    # prose contract replaced the causal Director (review 2026-11-01,
+    # director core F17/E1). What a model is handed is
+    # `_interpret_model_payload` below; the engine's notes on the last beat
+    # ride it now (`_engine_notices_shown`).
+    _interpret_author_notes = _author_notes_view(
+        ctx, _rooms_beside(ctx, sc, p_room)) or None
 
     # The SAME causal contract resolve uses. Raw declarations are simply event
     # inputs that still need slicing; later calls receive already structured
@@ -2053,6 +2015,10 @@ def director_interpret(ctx, nonce):
         _interpret_model_payload["player_knows_as"] = _players_seen["knows_as"]
     if _players_seen.get("last_lines"):
         _interpret_model_payload["last_lines"] = _players_seen["last_lines"]
+    # WHAT THE ENGINE DID WITH THE LAST BEAT (`_engine_notices_shown`).
+    _notices = _engine_notices_shown(ctx, chat["id"])
+    if _notices:
+        _interpret_model_payload["engine_notices"] = _notices
     _interpret_model_payload = _extension_director_payload(
         ctx, _interpret_model_payload, phase="interpret")
 
@@ -2092,7 +2058,7 @@ def director_interpret(ctx, nonce):
             "identity_index": _interpret_identities,
             "entity_interiors": _causal_index.get("entities") or {},
             "planning_needs": [],
-            "author_notes": payload.get("author_notes"),
+            "author_notes": _interpret_author_notes,
             "sightlines": _sightlines_view(sc, ctx, p_name),
             "crowds": _icrowds(),
             "couriers": _icouriers(),
@@ -2126,9 +2092,11 @@ def director_interpret(ctx, nonce):
         out, authority_by_entity(_event_inputs), _interpret_identities,
         known_targets={key for table in _interpret_model_payload["object_index"].values()
                        for key in table})
-    for _door_row in _route_doorway_rows(sc, out, _causal_rooms):
-        ctx.add_warning(f"interpret: {_door_row!r} names a doorway of a room "
-                        "in view; the engine routed rooms")
+    # NO DOORWAY ROUTING ON A PROSE BEAT (`_route_doorway_rows`): a row's
+    # categories are the channels the encoder already wrote, so adding
+    # `rooms` re-asked nobody and the warning said the opposite of what
+    # happened (review 2026-11-01, director core F13). A door between rooms
+    # is its edge by the encoder's own rule (`encoder/rooms.txt`).
     _all_causal_sequence = list(out.get("sequence") or [])
     if ctx.extra_players:
         _extra_ids = {
@@ -2243,6 +2211,16 @@ def director_interpret(ctx, nonce):
         out["actions"] = []
         out["contact_assertions"] = []
         out["state_assertions"] = {}
+        # ...AND EVERY OTHER COPY OF THE SAME INVENTION, here and nowhere
+        # else (`_silence_every_copy`). Clearing the five fields above left
+        # the rows standing in `ledgers`/`causal_ledger`, the stale prose on
+        # the record and the walk in `movement` -- so the resolve was told
+        # she had said it (`already_happened`), compiled the line into the
+        # committed `state_diff.speech` and charged the clock for the walk,
+        # and with another player declaring the fold wrote the invented
+        # transforms back from `_all_causal_sequence` (review 2026-11-01,
+        # director core F1; chat 59 t154's line, again).
+        _silence_every_copy(ctx, out, _declared_elsewhere(ctx))
         _silent_rooms = _installed
     # A speech element that swallowed the raw input's narration is repaired
     # BEFORE anything reads it: perception injects these texts verbatim as
@@ -2292,17 +2270,24 @@ def director_interpret(ctx, nonce):
     # binding and perception's targeted-observer check all read `targets`.
     cast_by_id, target_forms = _cast_match_forms(ctx.cast)
     bind_sequence_targets(out.get("sequence"), target_forms)
+    # THE CONCEALMENT FLOORS READ THE SCENE'S BODIES, PLAYERS INCLUDED
+    # (`_scene_match_forms`), exactly as the resolve's do. Resolved against
+    # the cast alone, an exclusion naming a player by an alias was kept raw
+    # and published to her, and the fail-closed branch for an engine form
+    # nobody answers to hid the line from every cast body and no player
+    # (review 2026-11-01, director floors F2 -- a leak).
+    _conceal_by_id, _conceal_forms = _scene_match_forms(ctx)
     # A line cannot be concealed from the person it is addressed to, and the
     # addressee is named in two places -- the flow's list, which the schema
     # floor reads, and the element's own targets, which it does not (PC2).
     for _note in strip_addressee_concealment(
-            out.get("sequence"), cast_by_id, target_forms):
+            out.get("sequence"), _conceal_by_id, _conceal_forms):
         ctx.add_warning("player state: director_interpret: %s" % _note)
     # ...and every surviving exclusion is resolved to a body, because the
     # firewall reader downstream holds no scene and can only match the
     # observer's own spellings (`resolve_concealment_refs`, PX4).
     for _note in resolve_concealment_refs(
-            out.get("sequence"), cast_by_id, target_forms):
+            out.get("sequence"), _conceal_by_id, _conceal_forms):
         ctx.add_warning("player state: director_interpret: %s" % _note)
     out["sequence"] = assign_event_ids(
         out.get("sequence"), f"turn:{ctx.turn.id}:player")
@@ -2321,10 +2306,10 @@ def director_interpret(ctx, nonce):
         repair_narrated_speech_elements(entry)
         bind_sequence_targets(entry.get("sequence"), target_forms)
         for _note in strip_addressee_concealment(
-                entry.get("sequence"), cast_by_id, target_forms):
+                entry.get("sequence"), _conceal_by_id, _conceal_forms):
             ctx.add_warning("player state: director_interpret: %s" % _note)
         for _note in resolve_concealment_refs(
-                entry.get("sequence"), cast_by_id, target_forms):
+                entry.get("sequence"), _conceal_by_id, _conceal_forms):
             ctx.add_warning("player state: director_interpret: %s" % _note)
         entry["sequence"] = assign_event_ids(
             entry.get("sequence"), f"turn:{ctx.turn.id}:extra:{pid}")
@@ -2373,19 +2358,21 @@ def director_interpret(ctx, nonce):
     # The encoder's answer, split by channel owner, is what each hand's
     # binding, validation and fold judge (`director_prose.dispatch`).
     _idispatch, _ianswers = director_prose.dispatch(ctx, "interpret")
-    # The remaining extras -- three DB-backed condition views, sightlines,
-    # exits, the cast's authored body parts -- exist only for a hand's
-    # payload; on a beat that dispatches no hand (most declarations) they
-    # were built and read by nobody.
+    # The fold reads two keys of the extras, `identity_index` and
+    # `entity_interiors`, and both are the ones the encoder was handed
+    # (`_first_extras`). Rebuilding them from `out` rebuilt the three
+    # DB-backed condition views, the sightlines and the exits again on every
+    # beat the encoder wrote anything, for nobody (review 2026-11-01,
+    # director core E4).
     _any_hand = any(bool((d or {}).get("scope"))
                     for d in (_idispatch or {}).values())
     if _any_hand:
-        _iextras = _interpret_extras(out)
+        _iextras = _first_extras
     else:
         _iextras = {"nonce": nonce, "clock": clock}
     _run_specialists(ctx, out, sc, _idispatch, _iview, _iextras, "interpret",
                      answer_for=_ianswers)
-    _refuse_cast_doubles(ctx, out, sc)
+    _refuse_cast_doubles(ctx, out, sc, stage="interpret")
     director_prose.attach_record(ctx, out)
     _settle_minted_interior_movements(sc, out, p_name)
 
@@ -2418,6 +2405,18 @@ def director_interpret(ctx, nonce):
         sc, out.get("state_assertions"), p_name,
         report=lambda note: ctx.add_warning(f"player state: {note}"),
     )
+    # A RESTRAINED BODY DOES NOT RELOCATE ITSELF AT EITHER STAGE. The floor is
+    # state only and ran at resolve alone, so the interpret's positions were
+    # previewed unchecked to the cast's onset views and the resolve's author
+    # -- a bound player walked out of the room in the world they reacted to,
+    # and the resolve then kept her where she was (review 2026-11-01,
+    # director core F11). Before the onset copy below, so the preview never
+    # holds the move. The reachability floor is NOT run here: the declared
+    # mover's crossing is the resolve's movement backstop's ruling (contested
+    # crossings it may honour), which this stage cannot make for it.
+    _block_restrained_moves(
+        ctx, out["state_assertions"], sc,
+        _restraint_holder_pool(sc, [p_name] + [row["name"] for row in cast_info]))
     if out["state_assertions"].get("causal_steps"):
         out["contact_assertions"] = _validated_causal_contact_program(
             sc, out["state_assertions"], out.get("contact_assertions"), p_name,
@@ -2644,11 +2643,6 @@ def director_interpret(ctx, nonce):
     seq = out.get("sequence")
     if not isinstance(seq, list):
         seq = []
-    action_texts = " ".join(
-        str(e.get("attempt") or "").casefold()
-        for e in seq
-        if isinstance(e, dict) and e.get("type") == "action"
-    )
     valid_actor_ids = {
         int(row["id"])
         for row in ctx.cast
@@ -2707,39 +2701,16 @@ def director_interpret(ctx, nonce):
                      f"not in scene — generate room description.")
             fl["mapping_request"] = (mr + " " + extra).strip()
 
-    if not (isinstance(mv, dict) and mv.get("to_room")):
-        movement_cues = (
-            "enter", "step inside", "peer inside", "look inside",
-            "go inside", "walk into", "cross threshold",
-            "through the door", "step through", "go through",
-            "boards", "climbs inside",
-        )
-        if any(cue in action_texts for cue in movement_cues):
-            fl["needs_mapping"] = True
-            mr = fl.get("mapping_request") or ""
-            extra = (" Player action implies entering/approaching a contained "
-                     "space — infer the destination room and generate its description.")
-            fl["mapping_request"] = (mr + " " + extra).strip()
-
-    # Broadened world-state mutation detection
-    if not fl.get("needs_mapping"):
-        input_text = str(ctx.input or "").casefold()
-        mutation_text = f"{input_text} {action_texts}"
-        mutation_cues = (
-            "appears", "materializes", "arrives", "summons", "creates",
-            "builds", "opens a portal", "reveals a door", "discovers a room",
-            "puts down", "picks up", "hands ", "places ",
-            "destroys", "breaks", "collapses", "vanishes", "disappears",
-        )
-        if any(cue in mutation_text for cue in mutation_cues):
-            fl["needs_mapping"] = True
-            existing_request = fl.get("mapping_request") or ""
-            fl["mapping_request"] = (
-                existing_request
-                + " Inspect the declaration for new, moved, transferred, "
-                  "transformed, opened, destroyed, or contained scene entities "
-                  "and propose the minimum scene graph patch."
-            ).strip()
+    # NO WORD LISTS OVER THE DECLARATION. Two English cue lists ("picks up",
+    # "hands ", "breaks", "step inside", "through the door"...) appended fixed
+    # English sentences here -- "Inspect the declaration for new, moved,
+    # transferred ... and propose the minimum scene graph patch." -- and that
+    # text is part of the query the beat's lore is retrieved with
+    # (`mapping._query`) and of the planning need's surface: a lorebook key
+    # like "scene" or "room" matched every such beat, and a Japanese story
+    # never triggered a word of it (13 of 149 recent prose interprets;
+    # review 2026-11-01, director core F12). What the compiler files needs
+    # from is typed -- `movement`, `location_query`, `generation_requests`.
 
     if wget(chat["id"], "pending", []):
         fl["needs_mapping"] = True
@@ -3682,7 +3653,7 @@ def _reconcile_resolution(ctx, out, sc, interp, char_actions, dice,
         ctx.add_warning(restraint_warning)
 
 
-def _span_coherency_report(ctx, out, stage, dispatch, view):
+def _span_coherency_report(ctx, out, stage, dispatch, view, exclude=None):
     """Say what does not add up about each span's assembled result.
 
     A span routed to several hands is settled in several channels, and until
@@ -3699,7 +3670,7 @@ def _span_coherency_report(ctx, out, stage, dispatch, view):
     diff = out.get("state_diff") if stage == "resolve" \
         else out.get("state_assertions")
     findings = span_result_findings(
-        diff, (view or {}).get("spans"), dispatch, span_owners)
+        diff, (view or {}).get("spans"), dispatch, span_owners, exclude=exclude)
     if not findings:
         return
     record = out.setdefault("orchestration", {})
@@ -3712,12 +3683,20 @@ def _span_coherency_report(ctx, out, stage, dispatch, view):
 
 
 
-def _refuse_cast_doubles(ctx, out, sc):
+def _refuse_cast_doubles(ctx, out, sc, stage="resolve"):
     """Run the cast-double floor (`director_floors._refuse_minted_cast_doubles`)
     on a stage's merged diff, in place, against EVERY cast member of the
     story -- a member another frame holds (a causality bubble) is in no
-    `ctx.cast` here, and is exactly the one a mint can double -- and say so."""
-    sd = out.get("state_diff") if isinstance(out.get("state_diff"), dict) else None
+    `ctx.cast` here, and is exactly the one a mint can double -- and say so.
+
+    THE STAGE'S OWN CONTAINER (`_stage_state`): `state_assertions` at
+    interpret, `state_diff` at resolve. It read `state_diff` alone, which the
+    interpret does not have, so the interpret's mints were never looked at
+    (review 2026-11-01, director core F2). `sc` is the scene the beat opened
+    on -- what is HELD -- and never the onset preview, which already holds
+    the interpret's mints and would exempt every one of them."""
+    sd = out.get("state_diff" if stage == "resolve" else "state_assertions")
+    sd = sd if isinstance(sd, dict) else None
     if not sd or not sd.get("entities"):
         return []
     try:
@@ -4301,7 +4280,15 @@ def _speech_act_kinds(raw):
     return kinds
 
 
-def _ground_public_evidence(out, view):
+#: How many grounded public-evidence records a resolve keeps
+#: (`_ground_public_evidence`). THE OWNER'S NUMBER TO SET, kept at the bare
+#: literal it was; a beat past it now says so (review 2026-11-01, director
+#: core F16 / floors F14). Below `director_fanout.PUBLIC_SOURCES_SHOWN`, so
+#: this is the cut that bites first.
+PUBLIC_EVIDENCE_KEPT = 12
+
+
+def _ground_public_evidence(out, view, warn=None):
     """Make the social specialist's semantic labels evidence, not authority.
 
     Returns the social specialist's frame kinds outside the vocabulary that
@@ -4415,7 +4402,15 @@ def _ground_public_evidence(out, view):
         grounded.append({**source, "source_id": source_id,
                          "speech_acts": frames, "salience": salience})
 
-    out["public_evidence"] = grounded[:12]
+    if callable(warn) and view.get("public_sources_cut"):
+        warn("public evidence: %d public line(s) or act(s) past the first %d "
+             "(PUBLIC_SOURCES_SHOWN) reach no witness's evidence this beat"
+             % (view["public_sources_cut"], len(view.get("public_sources") or [])))
+    if callable(warn) and len(grounded) > PUBLIC_EVIDENCE_KEPT:
+        warn("public evidence: %d grounded record(s) past the first %d "
+             "(PUBLIC_EVIDENCE_KEPT) are dropped this beat"
+             % (len(grounded) - PUBLIC_EVIDENCE_KEPT, PUBLIC_EVIDENCE_KEPT))
+    out["public_evidence"] = grounded[:PUBLIC_EVIDENCE_KEPT]
     return [k for k in dict.fromkeys(unread) if k]
 
 
@@ -4514,6 +4509,16 @@ def _causal_event_inputs(ctx, interp, declarations, dice, pressures):
         if not isinstance(ctx.chat, dict) else ctx.chat.get("persona_id")
     primary_id = f"persona:{primary_id}" if primary_id is not None \
         else "persona:primary"
+    # THE CHAT'S DIAL, which the interpret read (`player_authority`) and
+    # stamps on its output only on a beat that had a downgrade. Defaulting a
+    # missing stamp to `world_author` told the author a restricted chat's
+    # player events were the world author's on every other beat, and an
+    # extra player's on every beat (review 2026-11-01, director core F10).
+    try:
+        chat_id = ctx.chat["id"] if isinstance(ctx.chat, dict) else ctx.chat.id
+        dial = player_authority(chat_id)["mode"]
+    except Exception:
+        dial = "world_author"
     # And a walk that waits on the one she follows: it has not entered the
     # preview world (`director_movement.follow_walk_waits`), so this is the
     # stage it happens in, and the author is the one who knows when the one
@@ -4524,8 +4529,7 @@ def _causal_event_inputs(ctx, interp, declarations, dice, pressures):
         and (str(event.get("commitment") or "").casefold() == "contestable"
              or event.get("walks_with"))
     ]
-    add_group(primary_id, interp.get("authority_mode") or "world_author",
-              unresolved)
+    add_group(primary_id, interp.get("authority_mode") or dial, unresolved)
 
     other = interp.get("other_players") or {}
     for extra in ctx.extra_players:
@@ -4536,7 +4540,7 @@ def _causal_event_inputs(ctx, interp, declarations, dice, pressures):
             and str(event.get("commitment") or "").casefold() == "contestable"
         ]
         add_group(f"persona:{extra.get('persona_id')}",
-                  entry.get("authority_mode") or "world_author", unresolved)
+                  entry.get("authority_mode") or dial, unresolved)
 
     for declaration in declarations or []:
         if not isinstance(declaration, dict):
@@ -4605,17 +4609,18 @@ def _name_voice_targets(ctx, scene, declaration):
         bodies = _bodies_addressed_as(ctx, scene, speaker, [target])
         return bodies[0] if len(bodies) == 1 else target
 
-    entry = declaration.get("dialogue_log_entry")
-    if isinstance(entry, dict) and entry.get("intended_target"):
-        entry["intended_target"] = _named(entry["intended_target"])
-    for element in declaration.get("sequence") or ():
-        if isinstance(element, dict) and element.get("targets"):
-            element["targets"] = [_named(t) for t in element["targets"]]
-    # ...and the act it offers the charter, which names its other party the
-    # same way ("greet toward the short", three greets on one run, 2026-09-23).
-    act = declaration.get("charter_act")
-    if isinstance(act, dict) and act.get("other"):
-        act["other"] = _named(act["other"])
+    with _labels_batch():
+        entry = declaration.get("dialogue_log_entry")
+        if isinstance(entry, dict) and entry.get("intended_target"):
+            entry["intended_target"] = _named(entry["intended_target"])
+        for element in declaration.get("sequence") or ():
+            if isinstance(element, dict) and element.get("targets"):
+                element["targets"] = [_named(t) for t in element["targets"]]
+        # ...and the act it offers the charter, which names its other party the
+        # same way ("greet toward the short", three greets on one run, 2026-09-23).
+        act = declaration.get("charter_act")
+        if isinstance(act, dict) and act.get("other"):
+            act["other"] = _named(act["other"])
 
 
 def _name_declared_targets(ctx, scene, groups, identity_index):
@@ -4630,19 +4635,20 @@ def _name_declared_targets(ctx, scene, groups, identity_index):
     The declarer's own label is resolved the way an address is
     (`_bodies_addressed_as`), and the event gains `target_bodies`; its own
     `targets` stay the declarer's words. Mutates `groups`."""
-    for group in groups or []:
-        speaker = str((identity_index or {}).get(str(group.get("entity_id")))
-                      or "")
-        if not speaker:
-            continue
-        for event in group.get("events") or []:
-            named = []
-            for target in event.get("targets") or []:
-                bodies = _bodies_addressed_as(ctx, scene, speaker, [target])
-                if len(bodies) == 1 and bodies[0] not in named:
-                    named.append(bodies[0])
-            if named:
-                event["target_bodies"] = named
+    with _labels_batch():
+        for group in groups or []:
+            speaker = str((identity_index or {}).get(str(group.get("entity_id")))
+                          or "")
+            if not speaker:
+                continue
+            for event in group.get("events") or []:
+                named = []
+                for target in event.get("targets") or []:
+                    bodies = _bodies_addressed_as(ctx, scene, speaker, [target])
+                    if len(bodies) == 1 and bodies[0] not in named:
+                        named.append(bodies[0])
+                if named:
+                    event["target_bodies"] = named
 
 
 def _beat_event_sentences(out, identity_index=None):
@@ -5286,12 +5292,23 @@ def _bodies_addressed_as(ctx, scene, speaker, addresses):
     up, `addresses: ["the unfamiliar person"]`, `targets: []`, heard by
     no one). The label is `observer_label_fn`'s, the one floor perception
     and every payload share, so nothing here names anyone the view did
-    not."""
+    not.
+
+    Inside a `_labels_batch` the speaker's label function is built once for
+    the whole batch: it reads `known`, the persona and every cast sheet, and
+    the callers ask per target per event, so the same speaker's labels were
+    rebuilt for every word aimed at anyone (review 2026-11-01, director core
+    E3). Outside one, built per call, as it always was."""
     forms = [str(a or "").strip().casefold() for a in (addresses or []) if str(a or "").strip()]
     if not forms:
         return []
     try:
-        label_of = observer_label_fn(ctx.chat, speaker, ctx.cast)
+        batch = getattr(_SPEAKER_LABELS, "batch", None)
+        label_of = batch.get(speaker) if batch is not None else None
+        if label_of is None:
+            label_of = observer_label_fn(ctx.chat, speaker, ctx.cast)
+            if batch is not None:
+                batch[speaker] = label_of
         if scene is None:
             scene = get_scene(ctx.chat["id"], ctx.chat)
     except Exception:
@@ -5326,6 +5343,29 @@ def _bodies_addressed_as(ctx, scene, speaker, addresses):
     if not found and len(by_voice) == 1:
         found = by_voice
     return found
+
+
+#: Each speaker's label function for one batch of address readings
+#: (`_labels_batch`), on THIS thread; no `batch` outside one. A thread-local,
+#: never a contextvar: a batch lives inside one synchronous call on one
+#: thread and is put back as it was on the way out, and a thread-local cannot
+#: ride into a background job's copied context (`core/jobs.py`) the way a
+#: module contextvar would -- so nothing outlives the call that made it.
+_SPEAKER_LABELS = threading.local()
+
+
+class _labels_batch:
+    """Read every address in the block with one label function per speaker
+    (`_bodies_addressed_as`)."""
+
+    def __enter__(self):
+        self._outer = getattr(_SPEAKER_LABELS, "batch", None)
+        _SPEAKER_LABELS.batch = {}
+        return self
+
+    def __exit__(self, *exc):
+        _SPEAKER_LABELS.batch = self._outer
+        return False
 
 
 def _take_declaration(decls, char_speech, char_actions, declaration,
@@ -5375,7 +5415,6 @@ def _take_declaration(decls, char_speech, char_actions, declaration,
 
 
 def director_resolve(ctx, nonce, _corrections=None):
-    from persist.commit import presence_name_items
     chat = ctx.chat
     interp = _dict(ctx.director_interpret)
     flow = _dict(interp.get("flow"))
@@ -5383,7 +5422,6 @@ def director_resolve(ctx, nonce, _corrections=None):
     pers = persona_of(chat)
     p_name = pers.get("name") or persona_name(pers)
     world = ctx.world_context()
-    fm = fiction_model(chat["id"])
     clock = simulation_clock(chat["id"])
     # THE CLOCK AS THIS ACCOUNT BEGINS, for the encoder's payload (its owner
     # blocks print `simulation_clock`, `director_fanout`): after a stretch
@@ -5409,6 +5447,12 @@ def director_resolve(ctx, nonce, _corrections=None):
             "dc": dc, "outcome": "success" if roll + mod >= dc else "failure",
             "margin": roll + mod - dc,
         })
+
+    # The scene the beat opened on, read once: the declarations below resolve
+    # their untargeted lines against it (`_bodies_addressed_as`), which read
+    # it from the database again per declaration when handed None (review
+    # 2026-11-01, director core E3).
+    sc = get_scene(chat["id"], chat)
 
     decls = []
     char_speech = {}
@@ -5476,7 +5520,7 @@ def director_resolve(ctx, nonce, _corrections=None):
         _take_declaration(
             decls, char_speech, char_actions, declaration,
             address_bodies=lambda addresses, _who=declaration.get("name"):
-                _bodies_addressed_as(ctx, None, _who, addresses))
+                _bodies_addressed_as(ctx, sc, _who, addresses))
 
     for c in ctx.cast:
         if int(c["id"]) in covered_ids:
@@ -5508,7 +5552,7 @@ def director_resolve(ctx, nonce, _corrections=None):
             if speeches and any(not sp.get("targets") for sp in speeches):
                 _interaction = dk.get("interaction")
                 _addressed = _bodies_addressed_as(
-                    ctx, None, dk.get("name") or cname,
+                    ctx, sc, dk.get("name") or cname,
                     (_interaction or {}).get("addresses")
                     if isinstance(_interaction, dict) else None)
                 for sp in speeches:
@@ -5535,7 +5579,6 @@ def director_resolve(ctx, nonce, _corrections=None):
             if acts:
                 char_actions.setdefault(cname, []).extend(acts)
 
-    sc = get_scene(chat["id"], chat)
     # Two readings of the player's declared contacts: what the ONSET may
     # apply (deferred phases pruned -- interpret's phase floor) previews the
     # world the hands read, and the full declaration merges at the end of
@@ -5575,16 +5618,31 @@ def director_resolve(ctx, nonce, _corrections=None):
     # body had ran AFTER resolve (`background_react`), so a creature's act
     # was narrated and never resolved, and the scene the hands wrote to
     # did not hold the body at all (`lay_charter_figures`).
-    _figure_rows, _figure_declarations = [], []
+    #
+    # THE DESTINATION AS THE WORLD SPELLS IT, AND THE APERTURE, ONCE. Every
+    # resolve reader of the destination takes the compiler's resolved id
+    # (`movement_for_resolve`), the voices below included: laid from the
+    # interpret's raw spelling, a destination the compiler re-spelled added
+    # a room id nothing holds, its charter bodies were never laid or voiced,
+    # and the figures in view, the causal index and the identity floor were
+    # handed the bodies of a second aperture (review 2026-11-01, director
+    # core F9). `_fig_rooms` below reads this same set.
+    _mv_for_context = movement_for_resolve(ctx, interp)
+    _mv_target = _mv_for_context.get("to_room") if isinstance(_mv_for_context, dict) else None
+    _aperture = None
     try:
-        from .common import lay_charter_figures, rooms_in_view
-        _mv_resolve = interp.get("movement")
+        from .common import rooms_in_view
         _aperture = rooms_in_view(
             ctx, resolve_sc,
             ctx.get("_player_room") or room_of(resolve_sc, p_name),
-            _mv_resolve.get("to_room") if isinstance(_mv_resolve, dict)
-            else None)
-        _figure_rows = lay_charter_figures(ctx, resolve_sc, _aperture)
+            _mv_target)
+    except Exception as exc:
+        ctx.add_warning(f"rooms in view not derived at resolve: {exc}")
+    _figure_rows, _figure_declarations = [], []
+    try:
+        from .common import lay_charter_figures
+        if _aperture is not None:
+            _figure_rows = lay_charter_figures(ctx, resolve_sc, _aperture)
     except Exception as exc:
         ctx.add_warning(
             f"charter figures not laid into the resolve scene: {exc}")
@@ -5653,30 +5711,24 @@ def director_resolve(ctx, nonce, _corrections=None):
         here = room_of(sc, declaration["name"])
         if here:
             declaration["sprint_reach"] = sprint_reach(sc, here)
-    raw_intents = wget(chat["id"], "standing_intentions", []) or []
     # Lazy import: commit.py owns the ledger's deterministic semantics
     # (OBLIGATION_OVERDUE_AGE, the commit-side re-deferral reminder); the
     # payload view is built there so the flag the prompt's hard rule keys
     # on and the flag commit warns on can never disagree. world_pressure_view
     # rides the same convention (F5).
     from persist.commit import world_pressure_view
-    _mv_for_context = movement_for_resolve(ctx, interp)
-    _mv_target = _mv_for_context.get("to_room") if isinstance(_mv_for_context, dict) else None
 
     # Living world, approach A: when this beat moves the party into a room
     # they have been away from, hand the resolve the capped present-tense
     # diff (routines.residue_for) so the room is staged as it now stands
     # rather than as last seen. Movement-gated -- a quiet beat gets no
     # residue to be tempted by -- and deterministic, so a reroll stages the
-    # same room the same way. Delivered to THIS payload only: no character
-    # receives it; what a mind knows about a room rides its own gap record.
+    # same room the same way. Delivered to the resolve AUTHOR's payload only
+    # (`_model_payload`, below): no character receives it; what a mind knows
+    # about a room rides its own gap record. It was handed to the staging
+    # payload alone, which no model call receives, and reported `delivered`
+    # all the same (review 2026-11-01, director core F5).
     _destination_residue = None
-    try:
-        from world.living_world import living_world_allows, living_world_config
-        _living_cfg = living_world_config(chat["id"])
-    except Exception as exc:
-        _living_cfg = None
-        ctx.add_warning(f"living world config skipped: {exc}")
     if _mv_target:
         try:
             # UNCONDITIONAL since 2026-09-20. A room that does not drift while
@@ -5684,25 +5736,12 @@ def director_resolve(ctx, nonce, _corrections=None):
             # this was retired with the rest of the living-world ladder for the
             # reason that retired rumour transport before it: a world where
             # fires do not burn down is not coherent at any setting.
-            if True:
-                from world.routines import residue_for
-                _destination_residue = residue_for(
-                    chat["id"], sc, _mv_target,
-                    frame_id=ctx.turn.frame_id,
-                    now_seconds=float(
-                        (clock or {}).get("elapsed_seconds") or 0.0))
-                # Instrumentation, stashed for the commit blob: residue is
-                # payload-side, so `tools/fire_rates.py` (which reads commit
-                # results) could never see it -- the one living-world floor
-                # with no measurable denominator, in the codebase whose
-                # costliest recurring discovery is mechanisms nobody could
-                # tell were dead. Opportunity = a movement-declaring beat
-                # with the floor on; fires = facts actually delivered.
-                ctx["_destination_residue_report"] = {
-                    "to_room": str(_mv_target),
-                    "delivered": len((_destination_residue or {})
-                                     .get("facts") or []),
-                }
+            from world.routines import residue_for
+            _destination_residue = residue_for(
+                chat["id"], sc, _mv_target,
+                frame_id=ctx.turn.frame_id,
+                now_seconds=float(
+                    (clock or {}).get("elapsed_seconds") or 0.0))
         except Exception as exc:
             ctx.add_warning(f"destination residue skipped: {exc}")
         try:
@@ -5720,6 +5759,17 @@ def director_resolve(ctx, nonce, _corrections=None):
                 }
         except Exception as exc:
             ctx.add_warning(f"charter destination state skipped: {exc}")
+        # Instrumentation, stashed for the commit blob: residue is
+        # payload-side, so `tools/fire_rates.py` (which reads commit results)
+        # could never see it -- the one living-world floor with no measurable
+        # denominator, in the codebase whose costliest recurring discovery is
+        # mechanisms nobody could tell were dead. Opportunity = a
+        # movement-declaring beat; fires = facts the author is handed (the
+        # payload below carries exactly these).
+        ctx["_destination_residue_report"] = {
+            "to_room": str(_mv_target),
+            "delivered": len((_destination_residue or {}).get("facts") or []),
+        }
 
     # W5's light authority appraisal hint: each present person's evident
     # public role/standing (never private history), for the prompt's
@@ -5747,22 +5797,18 @@ def director_resolve(ctx, nonce, _corrections=None):
     # was shown binds to exactly the body it was shown.
     _present_figures = []
     _reserved_figures = []
-    _figure_answers = {}
-    _dwellings = []
     _fig_rooms = set()
     try:
         from .common import figures_in_view, rooms_in_view
-        # ONE APERTURE PER BEAT (review 2026-09-07 finding C18). The
-        # world-context compiler derived this same set and recorded it on its
-        # step (`compile_world_context` -> `rooms_in_view`); this reads that
-        # answer instead of walking the scene a second time. The player's room
-        # is still `ctx["_player_room"]` -- the room the beat arrived with,
-        # which is what this stage is entitled to (see the B36 note at
-        # `_reconcile_resolution`) -- so a beat where nothing moved her
-        # derives the set once for both stages, and one where an assertion did
-        # gets the room this stage decided on rather than a stale set.
-        _fig_rooms = rooms_in_view(
-            ctx, sc, ctx.get("_player_room"), _mv_target)
+        # ONE APERTURE PER BEAT (review 2026-09-07 finding C18), and one per
+        # STAGE: the set the voices above were laid and heard in
+        # (`_aperture`), derived once with the destination the compiler
+        # resolved. A second derivation here, from a second spelling of the
+        # destination, gave the payload and the floors other bodies than the
+        # ones voiced (review 2026-11-01, director core F9).
+        _fig_rooms = (set(_aperture) if _aperture is not None
+                      else rooms_in_view(ctx, sc, ctx.get("_player_room"),
+                                         _mv_target))
         # And ONE WALK of the charter for that aperture: the compiler already
         # made it for the rulebook (`common.figures_in_view`, C18), and it is
         # invalidated by the charter row's own read token, so a beat that
@@ -5781,130 +5827,48 @@ def director_resolve(ctx, nonce, _corrections=None):
         from .common import reserved_charter_bodies
         _reserved_figures = list(_reserved_figures) + reserved_charter_bodies(
             chat["id"], frame_id=ctx.turn.frame_id, exclude_rooms=_fig_rooms)
-        # What each of them would answer the player's order, request or
-        # bargain, by the judgment the commit applies -- so the ruling
-        # cannot grant what the ledger declines (Harrowmere replay t26).
-        if _present_figures:
-            from world.charter_runtime import figure_answers
-            _figure_answers = figure_answers(
-                chat["id"], _present_figures, p_name,
-                frame_id=ctx.turn.frame_id)
-        # The rooms in the same reach that are somebody's HOME, and whose:
-        # the player's room, its scope and the declared target. The causal
-        # sheet's threshold clause read them; no prose-path sheet states
-        # that rule yet (UNBUILT_PIPELINE §1.1, the lost prompt rules).
-        from .common import dwellings_in_reach
-        _dwellings = dwellings_in_reach(
-            chat["id"], _fig_rooms, frame_id=ctx.turn.frame_id)
+        # NOT DERIVED HERE ANY MORE: each present figure's answer to the
+        # player's order (`charter_runtime.figure_answers`) and the homes in
+        # reach (`dwellings_in_reach`). Both fed only the staging payload no
+        # model call receives (review 2026-11-01, director core F18/E2); the
+        # lean payload's lack of them is UNBUILT_PIPELINE §1.1 item 4.
     except Exception as exc:  # a story with no charter has nobody to list
         ctx.add_warning(f"present figures not derived: {exc}")
 
+    # THE WORLD SLICES THE ENCODER'S OWNERS, THE DECISION MODEL'S GATE AND THE
+    # EVENT INPUTS READ (`_orch_extras`, `_gate_facts`, `_causal_event_inputs`
+    # below), built once. This was a forty-key staging payload; under the
+    # prose contract no model call receives it, and some twenty of its keys
+    # were read by nothing -- the house style (two reads), the scene and its
+    # attire, the clock, the paradox, the fiction model and frame, every
+    # declaration, every sheet's abilities, the dice, the beat's lore, the
+    # standing intentions, the due events, the engine notices, the residue,
+    # the presences' knowledge, the present figures' rows and their answers,
+    # the homes in reach and the round conduct (review 2026-11-01, director
+    # core F18/E2). What the AUTHOR is handed is `_model_payload` below.
+    _planned = _planned_rooms_view(
+        resolve_sc, ctx, ctx.get("_player_room"), _mv_target)
+    _elsewhere = _planned_elsewhere_view(resolve_sc, ctx, _planned or ())
+    _notes = _author_notes_view(
+        ctx, _rooms_beside(ctx, sc, ctx.get("_player_room"), _mv_target))
     payload = {
-        # Authored house style, for the prose and any world detail this stage
-        # mints. director_interpret deliberately does NOT get it: that stage
-        # reads what the player declared, and a style note there would bias
-        # interpretation of the player's own words rather than shape new content.
-        **({"style_guide": style_guide(chat["id"])}
-           if style_guide(chat["id"]) else {}),
-        "scene": {
-            # THE WORLD AS THE REACTORS SAW IT, not as it was stored. Until
-            # 2026-09-07 only `contacts` below came from `resolve_sc`; rooms,
-            # positions and stations came from the pre-beat `sc`, so the
-            # resolving Director -- and every hand it fans out to -- was shown
-            # a body still standing where the beat began and a map without
-            # the room interpret's spatial hand had just authored for it.
-            # Measured (chat 117 turn 82): interpret authored the plenum the
-            # player climbed into, with `vertical: "down"` and a see-through
-            # sleeve; resolve never saw it, re-authored the room blind under
-            # another name with neither field, and the merge let the blind
-            # version win. `docs/guides/PIPELINE.md` had said all along that
-            # resolve "receives the same previewed world"; the code now does
-            # what the guide says.
-            "location": resolve_sc.get("location"),
-            # Filtered to nearby rooms for the payload only -- the
-            # deterministic passable-route check below keeps using the
-            # full, unfiltered `sc`.
-            "rooms": _contextual_rooms(
-                resolve_sc, ctx.cast, ctx.get("_player_room"), _mv_target,
-            ),
-            "entities": resolve_sc.get("entities"),
-            "positions": resolve_sc.get("positions"),
-            "stations": resolve_sc.get("stations") or {},
-            "following": resolve_sc.get("following") or {},
-            # The contact ledger it is asked to MAINTAIN. Withheld until now,
-            # which is the cause of the drift the displacement rule repairs
-            # downstream: a Director that cannot see it wrote `hand -> waist`
-            # one beat and `hand -> side` the next, not renaming anything but
-            # writing fresh each time, blind. Showing the exact part nouns
-            # already on record is what lets a re-assertion BE one.
-            "contacts": resolve_sc.get("contacts") or [],
-            # The overlay ledger, for the same reason and one step further.
-            # Contacts were withheld and the Director wrote them blind; these
-            # were withheld AND it is now asked to end them, which it cannot
-            # do for a mark it has never been shown. Live (chat 111 turn 54)
-            # it ended one anyway -- `{"text": "tears escape eyes", "active":
-            # false}` -- having inferred the mark existed from the transcript
-            # prose, which is the right judgement made without the record.
-            # Short: a handful of lines per body against a scene view already
-            # over 10,000 characters.
-            "overlays": resolve_sc.get("overlays") or {},
-            # One line per body instead of the structured view: 3,789 chars
-            # to 1,314 on chat 67, ~618 tokens off every resolve call. The
-            # names the Director writes back are all still here, and
-            # `attire.resolve_garment` was already built to bind the loose
-            # handles it writes against what the body actually wears.
-            "attire": scene_compact_attire(sc),
-            # Authored structured extra body parts, one line list per body
-            # that declared any (see character_schema.EXTRA_PART_ASPECTS).
-            # Their part nouns are valid contact endpoints; clothing over the
-            # attachment region does not remove a through-clothing part. Key
-            # absent when nobody declared one, so the shape -- and therefore
-            # the provider prefix cache -- is unchanged for ordinary casts.
-            **({"body_parts": {
-                    name: extra_parts_lines(parts)
-                    for name, parts in _resolve_parts.items()}}
-               if _resolve_parts else {}),
-            # The standing time of day -- see the interpret payload's own note
-            # on this key. The prose author owns the `time` channel, so this
-            # is the one place where showing it a passage phrase under the
-            # name `time` taught it to write one back.
-            "time_of_day": sc.get("time_of_day"),
-            # THE STANDING SKY. `weather` is the spatial owner's channel; its
-            # sheet (the encoder's `weather` chunk) asks for an edit ONLY when
-            # the prose changes the sky, and the engine drifts the weather in
-            # between (`weather.advance_weather`, written back to
-            # `sc["weather"]` at commit_scene_state.py:1032). Both halves need
-            # the current value: "did THIS beat change it" is unanswerable
-            # against a sky nobody showed you, and so is "may the flash I am
-            # about to write reach this room" -- which since A88 (review
-            # 2026-09-07) is the `electrical` axis and nothing else.
-            #
-            # Same class as `stations`, `contacts` and `overlays` above: a
-            # ledger the Director is asked to maintain and was never allowed
-            # to read. Cost, unlike those three, is BOUNDED rather than
-            # proportional -- the axis shape is fixed (ten keys,
-            # world/weather.py) and the only free text in it is the two
-            # authored names, each bounded by `NAME_LIMIT` (60). So it is 2
-            # chars (`{}`) before any sky has been declared, 185-206 across
-            # the 5x6x4x4x5 cross product of the sky and fall words this
-            # engine itself minted crossed with intensity, wind and
-            # temperature (measured 2026-09-08 over `normalize_weather`), and
-            # 316 at the ceiling with both names authored at full length,
-            # 342 once `drift_step` is stamped -- which every live record
-            # carries after the first declaration -- against 4,187-8,463 for
-            # `attire` on the same scenes.
-            "weather": sc.get("weather") or {},
-        },
-        "simulation_clock": clock,
+        # Authored structured extra body parts, one line list per body that
+        # declared any (see character_schema.EXTRA_PART_ASPECTS). Their part
+        # nouns are valid contact endpoints; clothing over the attachment
+        # region does not remove a through-clothing part. None when nobody
+        # declared one.
+        "body_parts": ({name: extra_parts_lines(parts)
+                        for name, parts in _resolve_parts.items()}
+                       if _resolve_parts else None),
         # Who is currently under, and the condition_id each one must be
-        # re-emitted with to END it (see the WAKING block). Without this the
-        # Director could not close a condition even when it wanted to: it was
-        # never shown the id, and across 1483 live resolves it never once did.
+        # re-emitted with to END it. Without this the Director could not
+        # close a condition even when it wanted to: it was never shown the
+        # id, and across 1483 live resolves it never once did.
         "active_awareness": _awareness_view(
             chat["id"], clock, interp, char_actions),
-        # Who is currently restrained, under the same contract (see the
-        # RELEASE block): the condition_id an ending must re-emit, who holds
-        # them, and whether that hold is still physically live.
+        # Who is currently restrained, under the same contract: the
+        # condition_id an ending must re-emit, who holds them, and whether
+        # that hold is still physically live.
         "active_restraints": _restraint_view(
             restraint_conditions(chat["id"]), sc, awareness_map(chat["id"]),
             clock, None, _restraint_holder_pool(sc, [p_name])),
@@ -5913,200 +5877,39 @@ def director_resolve(ctx, nonce, _corrections=None):
         # active rows can be ended by nothing at all. See `_conditions_view`.
         "active_conditions": _conditions_view(
             chat["id"], clock, ctx.turn.idx),
-        "paradox": paradox_visible_to(chat["id"], ctx.turn.frame_id),
-        "fiction_model": fm,
-        "fiction_frame": _dict(flow.get("fiction_frame")),
         # The doors this beat reached for that no plan holds, as the
-        # world-context compiler recorded them. Render the surface a body
-        # perceives and no more; the plan behind it is the room's to write.
-        **({"planning_needs": world.get("planning_needs")}
-           if world.get("planning_needs") else {}),
-        # Walks already under way that this beat did not mention. Handed to
-        # the author BEFORE the prose is written so the scenery changes on
-        # the page, in the same breath as everything else the beat does --
-        # computing the leg afterwards would move bodies the resolve had
-        # just described standing still.
+        # world-context compiler recorded them.
+        "planning_needs": world.get("planning_needs") or [],
+        # Walks already under way that this beat did not mention, handed to
+        # the author BEFORE the prose is written (`_model_payload`).
         "travel_in_flight": _travel_in_flight_view(sc, interp, p_name),
-        # The geometry's sight digest (`_sightlines_view`): read before the
-        # prose is written, so "she ducks behind the bar" is resolved
-        # against whether the bar is between them.
+        # The geometry's sight digest (`_sightlines_view`).
         "sightlines": _sightlines_view(sc, ctx, p_name),
         # The plan's seed for every stub this beat stands in, moves into or
-        # looks into. See `_planned_rooms_view`; absent when none. Read off
-        # the world the reactors saw (`resolve_sc`), not the stored one: a
-        # room the beat's interpret already built -- one put into the world
-        # when the beat opened (`director_rooms.install_prepared_rooms`) --
-        # is no stub, and a designer handed its brief would build it twice.
-        **({"planned_rooms": _planned} if (
-            _planned := _planned_rooms_view(
-                resolve_sc, ctx, ctx.get("_player_room"), _mv_target)) else {}),
-        # ...and the NAME of every other room the plan holds
-        # (`_planned_elsewhere_view`).
-        **({"planned_elsewhere": _elsewhere} if (
-            _elsewhere := _planned_elsewhere_view(
-                resolve_sc, ctx, _planned or ())) else {}),
-        # The room's notes on what its plan MEANS, in scope where the cast
-        # stands, moves into or beside (`_author_notes_view`); absent when
-        # none.
-        **({"author_notes": _notes} if (
-            _notes := _author_notes_view(
-                ctx, _rooms_beside(
-                    ctx, sc, ctx.get("_player_room"), _mv_target))) else {}),
-        "player_declaration": {
-            "ABSOLUTE": True,
-            "sequence": interp.get("sequence") or [],
-            "speech": interp.get("speech"),
-            "speech_volume": interp.get("speech_volume", "normal"),
-            "action": interp.get("action"),
-            "movement": _mv_for_context,
-            "follow_op": interp.get("follow_op"),
-            "contact_assertions": onset_contacts,
-            "abilities": persona_abilities(pers),
-            "authority_claims": (interp.get("flow") or {}).get("authority_claims") or [],
-            # PLAYER AUTHORITY MODE. `ABSOLUTE` above is unchanged by it and
-            # always will be: what the player SAID and ATTEMPTED is fixed in
-            # every mode, and no mode has ever let this stage rewrite it. What
-            # a restricted mode moves is the part of a declaration that
-            # asserted an OUTCOME -- those arrive here already downgraded to
-            # contestable intents, so the ordinary machinery adjudicates them
-            # with no special case.
-            #
-            # The list is here so the downgrade can be ANSWERED in the same
-            # beat. `tell_director` reaches the next one, which is a beat too
-            # late for the player who is reading this one.
-            **({"authority_mode": interp.get("authority_mode"),
-                "downgraded_assertions": interp.get("authority_downgrades")}
-               if interp.get("authority_downgrades") else {}),
-        },
-        "other_players_declarations": [
-            {
-                "persona_id": extra["persona_id"],
-                "name": extra["name"],
-                "ABSOLUTE": True,
-                "sequence": (interp.get("other_players") or {}).get(str(extra["persona_id"]), {}).get("sequence") or [],
-                "speech": (interp.get("other_players") or {}).get(str(extra["persona_id"]), {}).get("speech"),
-                "action": (interp.get("other_players") or {}).get(str(extra["persona_id"]), {}).get("action"),
-            }
-            for extra in ctx.extra_players
-        ],
-        "character_declarations": decls,
-        # Completed, self-owned contact endings declared structurally by the
-        # character stage.  These exact onset-ledger removals are projected at
-        # the commit seam below; resolve should narrate their consequences and
-        # must not echo the ended contact as current state.
-        "character_contact_endings": character_contact_endings,
-        # Completed actor-owned physical outputs. The Director renders these;
-        # the projection below also commits valid ones if prose/diff omits
-        # them, just as character-owned contact endings survive omission.
-        "character_material_effects": character_material_effects,
-        "character_abilities": {
-            character_name_from_text(c["sheet"]):
-                character_abilities(normalized_character_from_text(c["sheet"]))
-            for c in ctx.cast
-        },
-        "dice_results_final": dice,
-        "dialogue_mode": bool(flow.get("dialogue_mode", False)),
-        "relevant_lore": lore_for(ctx),
-        "standing_intentions": raw_intents[:12],
-        # NO OBLIGATION LEDGER (the owner, 2026-10-02): what a mind owes is
-        # that mind's to keep -- its own notebook, its own strike -- and
-        # never the Director's to press. The ledger opened debts for the
-        # player's own character and flagged them must-discharge every beat
-        # after two, so the prose held scenes open on answers only the
-        # player could give (chat 161: eight debts on Hinami, four of them
-        # "when the doors open" from a lift that had since fallen).
+        # looks into, read off the world the reactors saw (`resolve_sc`): a
+        # room the beat's interpret already built is no stub, and a designer
+        # handed its brief would build it twice. ...and the NAME of every
+        # other room the plan holds; and the room's notes on what its plan
+        # MEANS. Each None when there is none.
+        "planned_rooms": _planned or None,
+        "planned_elsewhere": _elsewhere or None,
+        "author_notes": _notes or None,
         # F5: the world-pressure ledger -- every open ongoing off-character
         # process, each of which the prompt's WORLD PRESSURE rule requires
-        # this resolve to tick, hold, or resolve. Deterministic floor: the
-        # must-tick retry below plus commit_world_pressure's implicit-hold
-        # warnings make silence a recorded choice, never a default.
+        # this resolve to tick, hold, or resolve.
         "world_pressure": world_pressure_view(chat["id"], turn["idx"]),
-        # The crowds standing in rooms the party can reach, WITH their uids.
-        # Without this the resolve prompt asks the Director to "use the
-        # crowd_id perception showed you" and then shows it nothing: `move`,
-        # `split`, `emerge`, `absorb` and `disperse` all require an id the
-        # Director had no way to learn, so only minting a new crowd was
-        # reachable and every other op refused. Found by reading the captured
-        # payload as the model, which is the only way to find it -- the schema
-        # check cannot see a field that exists and is never delivered.
+        # The crowds, couriers, notices and carried reports in reach, WITH
+        # their uids: the ops that act on one name it (crowd_id, courier_id,
+        # artifact_id, world_event_id), and a Director never shown the id
+        # could only mint.
         "crowds": _rcrowds,
-        # The couriers on the road, WITH their uids -- same defect class as
-        # the crowd uid: `question` and `silence` require a courier_id the
-        # Director could otherwise never have seen, and `send` needs to know
-        # the road is not already full.
         "couriers": _couriers_view(chat["id"], sc),
-        # The notices standing in scene rooms, WITH their uids and their
-        # claims: `read` and `remove` require an artifact_id, and resolving
-        # "she reads the bill" requires the Director -- who owns objective
-        # causality and is entitled to omniscience -- to know what the bill
-        # says. Perception deliberately shows every other mind only that
-        # paper hangs there.
         "notices": _artifacts_view(chat["id"], sc),
-        # The reports this beat's characters are carrying, as ids the Director
-        # can name in `telling_ops`. Same defect, same cause: the prompt asks
-        # for a `world_event_id` and the Director never saw one, so a
-        # character could invent a claim and could never pass on a true one.
         "carried_reports": _carried_reports_view(ctx),
         "social_standing": social_standing,
-        # Player-authored future beats scheduled earlier and due NOW: enact them
-        # as occurring this beat (see director_interpret). commit re-queues any
-        # left unresolved rather than dropping them.
-        "due_authored_events": (ctx.director_interpret or {}).get("due_authored_events") or [],
-        # See director_interpret: already-completed mechanical transitions
-        # (timed arrivals) the prose should acknowledge, not re-resolve.
-        "engine_notices": wget(chat["id"], "engine_notices", []),
-        # Living world, approach A: the entered room's capped present-tense
-        # diff, staged as current state (see the DESTINATION RESIDUE prompt
-        # rule). Absent on beats without an eligible re-entry, so the
-        # default path is byte-identical to a world without the feature.
-        **({"destination_residue": _destination_residue}
-           if _destination_residue else {}),
         # Hearsay a background presence asserted on an earlier beat, still
-        # unratified. You are the only ratifier -- adopt, contradict, or ignore
-        # (background_claims.py).
+        # unratified (background_claims.py).
         "unratified_claims": _unratified_background_claims(chat["id"], turn["idx"]),
-        # The epistemic envelope of every voiceable presence: where it stands
-        # and when it appeared. YOU are entitled to the omniscient record; a
-        # presence you voice is not -- it knows its role, its own room as
-        # anyone standing there sees it now, and what was said in its earshot
-        # since it appeared. The deterministic floor on dialogue_log enforces
-        # the entity-reference slice of this; the rest rides on the prompt's
-        # presence-knowledge rule keying off this block.
-        "background_presence_knowledge": [
-            {"name": _pn,
-             "room": room_of(sc, _pn)
-                     or ((_pr.get("sketch") or {}).get("station_room") or ""),
-             "appeared_turn": _pr.get("first_turn")}
-            for _pn, _pr in presence_name_items(
-                wget(chat["id"], "background_presences", {}) or {})
-        ],
-        # WHO IS ALREADY STANDING HERE, derived from the charter this beat
-        # rather than read from the durable ledger above -- the ledger holds
-        # who has EARNED a record by participating, and this stage mints
-        # people against who is HERE. Measured, Harrowmere: with this block
-        # absent, eight of ten people minted over forty turns were second
-        # copies of a charter post-holder standing in the room. The floor
-        # below (`_bind_minted_entities_to_present_figures`) binds such a
-        # mint to its body regardless; this is the payload half, so the
-        # model has no reason to mint. Absent when nobody is here.
-        # Each row: name, role, room, the full-sight look (the render this
-        # hand writes for a body it mints against them must add to it,
-        # never contradict it), the plan uid the render settles through,
-        # an authored plan's kind and brief, and WHAT THIS PERSON'S OWN
-        # LEDGERS ANSWER the player's order, request or bargain -- the
-        # same judgment the commit will record
-        # (`charter_runtime.figure_answers`), present only where the
-        # registry answered.
-        **({"present_figures": _present_figure_rows(
-                _present_figures, _figure_answers)}
-           if _present_figures else {}),
-        # A ROOM SOMEONE SLEEPS IN IS THEIRS: the homes within reach, who
-        # lives in each and who is in now (`charter_dwellings`). Absent
-        # when none is, so an ordinary payload is byte-identical.
-        **({"dwellings": _dwellings[:12]} if _dwellings else {}),
-        "interaction_rounds": _round_conduct(loop.get("rounds")),
-        "reaction_rounds": _round_conduct((ctx.reaction_loop or {}).get("rounds")),
-        "variant_seed": nonce,
     }
 
     # The scene facts the decision model's channel choice reads, computed
@@ -6203,7 +6006,32 @@ def director_resolve(ctx, nonce, _corrections=None):
         # walks_in_flight`). Absent on a beat with none.
         **({"travel_in_flight": payload["travel_in_flight"]}
            if payload.get("travel_in_flight") else {}),
+        # Living world, approach A: the entered room's capped present-tense
+        # diff, staged as current state. Absent on a beat with no eligible
+        # re-entry, so the ordinary payload is byte-identical (director core
+        # F5: computed and reported `delivered`, handed to no model).
+        **({"destination_residue": _destination_residue}
+           if (_destination_residue or {}).get("facts") else {}),
+        # PLAYER AUTHORITY MODE. What the player SAID and ATTEMPTED is fixed
+        # in every mode (`ABSOLUTE`), and no mode has ever let this stage
+        # rewrite it; what a restricted mode moves is the part of a
+        # declaration that asserted an OUTCOME, which arrives in
+        # `event_inputs` already downgraded to a contestable intent. The
+        # refused assertions ride here so the downgrade can be ANSWERED in
+        # this beat -- `tell_director` reaches the next one, a beat too late
+        # for the player reading this one. They rode only the staging
+        # payload, which no model call receives (review 2026-11-01, director
+        # core F10/E2). Absent on a beat with no downgrade.
+        **({"player_declaration": {
+                "ABSOLUTE": True,
+                "authority_mode": interp.get("authority_mode"),
+                "downgraded_assertions": interp.get("authority_downgrades")}}
+           if interp.get("authority_downgrades") else {}),
     }
+    # WHAT THE ENGINE DID WITH THE LAST BEAT (`_engine_notices_shown`).
+    _notices = _engine_notices_shown(ctx, chat["id"])
+    if _notices:
+        _model_payload["engine_notices"] = _notices
     _model_payload = _extension_director_payload(
         ctx, _model_payload, phase="resolve")
     if _corrections:
@@ -6219,7 +6047,7 @@ def director_resolve(ctx, nonce, _corrections=None):
         "active_awareness": payload.get("active_awareness"),
         "active_restraints": payload.get("active_restraints"),
         "active_conditions": payload.get("active_conditions"),
-        "body_parts": (payload.get("scene") or {}).get("body_parts"),
+        "body_parts": payload.get("body_parts"),
         "contacts": resolve_sc.get("contacts") or [],
         "contact_endings": character_contact_endings,
         "material_effects": character_material_effects,
@@ -6273,9 +6101,7 @@ def director_resolve(ctx, nonce, _corrections=None):
         _identity_index,
         known_targets={key for table in _model_payload["object_index"].values()
                        for key in table})
-    for _door_row in _route_doorway_rows(resolve_sc, out, _resolve_causal_rooms):
-        ctx.add_warning(f"resolve: {_door_row!r} names a doorway of a room "
-                        "in view; the engine routed rooms")
+    # No doorway routing here either (`_route_doorway_rows`, F13 above).
     _canonicalize_interior_movements(resolve_sc, out, _identity_index)
 
     # WORLD PRESSURE must-tick floor (F5), enforced. The ledger + prompt rule
@@ -6458,14 +6284,11 @@ def director_resolve(ctx, nonce, _corrections=None):
     out["charter_declarations"] = [dict(_fd) for _fd in _figure_declarations]
     # A creature's declared act is heard at its own voice rung: the row the
     # voice derived (`background._creature_noise`) joins the beat's sensory
-    # events, which perception and the commit both read from the diff.
+    # events, which perception and the commit both read from the diff --
+    # folded below, once the diff exists (`_figure_noise`).
     _figure_noise = [row for _fd in _figure_declarations
                      for row in (_fd.get("sensory_events") or [])
                      if isinstance(row, dict)]
-    if _figure_noise:
-        _sd = out.get("state_diff")
-        if isinstance(_sd, dict):
-            _sd["sensory_events"] = list(_sd.get("sensory_events") or []) + _figure_noise
     # `player_act_warnings` is not a DirectorResolve field, so the schema
     # dump below discarded it on every beat -- the "surfaced on the step
     # itself" above never reached the step. Carried across validation like
@@ -6496,12 +6319,20 @@ def director_resolve(ctx, nonce, _corrections=None):
     # interpret stage's spatial hand authored a moment ago.
     _run_specialists(ctx, out, resolve_sc, _orch_dispatch, _orch_view,
                      _orch_extras, "resolve", answer_for=_orch_answers)
-    _refuse_cast_doubles(ctx, out, resolve_sc)
     director_prose.attach_record(ctx, out)
     _settle_minted_interior_movements(resolve_sc, out, p_name)
 
     # Safety net: LLM sometimes returns a string/list where an object belongs.
     sd = _normalize_diff_shape(out.get("state_diff"))
+    # THE CREATURES' NOISE JOINS THE DIFF HERE, where there is one. Folded
+    # above the fan-out it looked for a `state_diff` the prose path does not
+    # have until this line, found none, and every charter creature on every
+    # prose beat was silent (review 2026-11-01, director core F3: the Well
+    # Thing's "a wet dragging" reached no observer).
+    if _figure_noise:
+        sd["sensory_events"] = list(sd.get("sensory_events") or []) + [
+            row for row in _figure_noise
+            if row not in (sd.get("sensory_events") or [])]
     # Same canonicalization as director_establish: fold any uid/normalized-name
     # position key for a cast member onto the registered name before it reaches
     # perception's mid-turn merge or the commit boundary.
@@ -6644,6 +6475,7 @@ def director_resolve(ctx, nonce, _corrections=None):
     resolved_contact_ops = _merge_character_contact_endings(
         character_contact_endings, resolved_contact_ops,
         report=lambda note: ctx.add_warning(f"character contact: {note}"),
+        scene=sc,
     )
     # THE PLAYER'S BODY ACTS ONLY ON THE PLAYER'S DECLARATION, in the channel
     # that stores an actor (`_player_contacts_held`): a resolve op giving her
@@ -6686,6 +6518,12 @@ def director_resolve(ctx, nonce, _corrections=None):
             sd["following_ops"] = _onset_follows + [
                 op for op in sd["following_ops"] if op not in _onset_follows]
     out["state_diff"] = sd
+    # THE CAST-DOUBLE FLOOR JUDGES THE MERGED DIFF, against the scene the beat
+    # opened on. It ran before the interpret's assertions were merged, on a
+    # preview that already held the interpret's mints, so a double minted at
+    # interpret was refused at neither stage (review 2026-11-01, director
+    # core F2).
+    _refuse_cast_doubles(ctx, out, sc)
     out["dice"] = dice if isinstance(dice, list) else []
 
     # A walk the player declared once and this beat did not mention carries
@@ -7757,7 +7595,7 @@ def director_resolve(ctx, nonce, _corrections=None):
             str(d.get("speaker") or "").casefold(),
             _quote_body(d.get("exact_quote") or "")) not in represented]
     out["dialogue_log"] = deduped
-    for _kind in _ground_public_evidence(out, _orch_view):
+    for _kind in _ground_public_evidence(out, _orch_view, warn=ctx.add_warning):
         ctx.add_warning(
             "speech act kind %r is outside the vocabulary and was read as "
             "'other'; no ledger answers it" % _kind)
@@ -7893,8 +7731,10 @@ def director_resolve(ctx, nonce, _corrections=None):
             "history_entries": len(_history),
         }
 
+    # The resolve judges its OWN records: the interpret's assertions merged
+    # into this diff cite the interpret's chrono ids (`exclude`, F7).
     _span_coherency_report(ctx, out, "resolve", _orch_dispatch,
-                           _orch_view)
+                           _orch_view, exclude=onset_state)
 
     # THE BEAT'S EVENTS, HANDED TO THE WORLD (`world/beat_ledger.py`).
     #

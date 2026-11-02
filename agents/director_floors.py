@@ -26,7 +26,8 @@ from story.scene import (
 )
 from world.mechanics import (condition_cadence_is_inert,
                             read_time_diff)
-from world.spatial import _is_body_entity, room_of
+from language_runtime import UNSPACED_SCRIPT, fold_key, fold_text, fold_words
+from world.spatial import _is_body_entity, room_of, same_subject
 
 from .common import _mask_quoted_spans
 from .director_lingua import _ling
@@ -938,11 +939,15 @@ def _restraint_blocked_moves(sd, sc, records, amap, candidate_names):
     if not records or not isinstance(positions, dict):
         return out
     prior = (sc.get("positions") or {})
-    by_subject = {}
-    for record in records:
-        by_subject.setdefault(record["subject"].casefold(), []).append(record)
     for who in list(positions):
-        subject_records = by_subject.get(str(who).casefold())
+        # THE BODY, BY EVERY NAME IT ANSWERS TO (`same_subject`). A restraint
+        # row's subject is model-written and stored as written, so matched by
+        # casefold spelling a bound "Hinami Kurosawa" walked out of the cell
+        # under her positions key "Hinami" (review 2026-11-01, director floors
+        # F4) -- while the liveness check below already resolved her alias.
+        subject_records = [record for record in records
+                           if same_subject(sc, str(record.get("subject") or ""),
+                                           str(who))]
         if not subject_records:
             continue
         was = prior.get(who)
@@ -1572,11 +1577,18 @@ def _figure_head_noun(text):
     names the kind of person last and qualifies it first: a reeve's clerk
     is a clerk, not a reeve, and a post id carries its disambiguator in
     front (`reeve_clerk`) the way English puts it in front.
+
+    A PHRASE WRITTEN WITHOUT SPACES IS COMPARED WHOLE (`fold_key`): there is
+    no word boundary to find its head by, and the ASCII split this was read
+    every Japanese role as "" -- 門番 beside the posted 門番 never bound by
+    role, and the beat kept a second, unsimulated gatekeeper (review
+    2026-11-01, director floors F13). A spaced script's head is its last
+    significant word, in any alphabet (`fold_words`).
     """
-    words = [w for w in re.split(r"[^a-z0-9]+",
-                                 str(text or "").casefold().replace("'s", ""))
-             if w and w not in _FIGURE_STOPWORDS and not w.isdigit()
-             and len(w) > 1]
+    if UNSPACED_SCRIPT.search(fold_text(text)):
+        return fold_key(text)
+    words = [w for w in fold_words(str(text or "").replace("'s", "").replace("\u2019s", ""))
+             if w not in _FIGURE_STOPWORDS and not w.isdigit() and len(w) > 1]
     return words[-1] if words else ""
 
 
@@ -2131,29 +2143,6 @@ def _bind_minted_entities_to_present_figures(sc, sd, figures, *,
     return bindings
 
 
-def _concealment_forms(ref, by_id, by_name):
-    """Every spelling of one body, for matching a `conceal_from` entry.
-
-    The two views the cast is already kept in: `conceal_from` is written by
-    the same model that writes `targets`, in whichever spelling it reached
-    for -- a cast id, the `character:<id>` form, a display name, a scene key.
-    """
-    text = str(ref or "").strip()
-    if not text:
-        return set()
-    low = text.casefold()
-    if low.startswith("character:"):
-        low = low[len("character:"):].strip()
-    for cid, forms in (by_id or {}).items():
-        cid_low = str(cid).casefold()
-        if low == cid_low or low in forms:
-            return set(forms) | {cid_low, "character:" + cid_low}
-    for name, forms in (by_name or {}).items():
-        if low == str(name).casefold() or low in forms:
-            return set(forms) | {str(name).casefold()}
-    return {low}
-
-
 def _body_key(cid, forms, by_name):
     """One body's key across both maps: a cast row's id and display name
     share one forms list (`_cast_match_forms`), so the name keys both."""
@@ -2170,9 +2159,9 @@ def _bodies_of(ref, by_id, by_name):
     line kept from one, said to the other, was stripped as "concealed from
     its own addressee" and reached her (review round 4, 2026-10-05).
 
-    A spelling no map holds is its own key, as `_concealment_forms` answers
-    with the text: the player is in no cast map and is still matched by her
-    own name, and an addressee nobody can place still counts as one."""
+    A spelling no map holds is its own key, the text itself: a body in no
+    map is still matched by its own name, and an addressee nobody can place
+    still counts as one."""
     text = str(ref or "").strip()
     if not text:
         return set()
@@ -2192,9 +2181,9 @@ def _bodies_of(ref, by_id, by_name):
 def _resolves_to_a_body(ref, by_id, by_name) -> bool:
     """Does the scene hold a body under this spelling at all?
 
-    `_concealment_forms` answers with `{low}` -- the text itself -- when it
-    matched nothing, which is indistinguishable from a match for a caller
-    that only intersects sets. This asks the question directly, because one
+    `_bodies_of` answers with `{low}` -- the text itself -- when it matched
+    nothing, which is indistinguishable from a match for a caller that only
+    intersects sets. This asks the question directly, because one
     caller's answer to "I could not find them" must be different from its
     answer to "I found them".
     """
@@ -2489,6 +2478,7 @@ def _refuse_minted_cast_doubles(sc, sd, cast_rows, here_names=()):
 
     Mutates `sd` (entities, and the refused id's positions, stations and
     poses) and returns one record per refusal: {entity_id, name, cast}."""
+    from persist.commit import _INERT_ENTITY_KINDS
     from story.character_schema import normalize_character_data
     from world.spatial import normalize_room_id
     from .common import character_name, character_scene_keys
@@ -2523,7 +2513,13 @@ def _refuse_minted_cast_doubles(sc, sd, cast_rows, here_names=()):
     for eid, entity in list(entities.items()):
         if eid in held or not isinstance(entity, dict):
             continue
-        if str(entity.get("kind") or "person").strip().casefold() != "person":
+        # THE ONE CASE THE RULE EXCLUDES IS A THING, named in the engine's own
+        # closed vocabulary (`_INERT_ENTITY_KINDS`, the set the binder below
+        # reads). `kind` is free text in the fiction's own words, so a rule
+        # that admitted only "person" kept the same stranger minted as
+        # "woman", "human" or 人物 -- a second body of a cast member (review
+        # 2026-11-01, director floors F3).
+        if str(entity.get("kind") or "").strip().casefold() in _INERT_ENTITY_KINDS:
             continue
         cast = None
         for spelling in (eid, entity.get("name"), *(entity.get("aliases") or [])):
