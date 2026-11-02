@@ -286,6 +286,10 @@ as the argument for why:
 - [`SPLIT_COMMON.md`](design/SPLIT_COMMON.md) — the 2026-11-01 split of
   `agents/common.py` into sixteen `common_*` siblings behind the facade: the
   module table, the cycle-breaking moves, the repoint table.
+- [`SPLIT_COMPOSER.md`](design/SPLIT_COMPOSER.md) — the 2026-11-01 split of
+  `agents/composer.py` into twelve `composer_*` siblings (IR leaf, person,
+  figures, bodies, speech, acts, fields, landscape, things, standing, the two
+  English renderers).
 
 ## `experiments/` — records of runs that cannot be repeated
 

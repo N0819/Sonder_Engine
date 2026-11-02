@@ -29,7 +29,19 @@
 | `agents/common_scrubs.py` | 583 | Prose repair passes: the repeated-quote cap, dangling-speech healing, the player-echo strip, the invented-dialogue scrub, sentence dedupe. | `agents.common_base` |
 | `agents/common_sequence.py` | 1253 | A declared beat as the engine holds it: speech provenance, stage-direction excision, norm_sequence, duplicate collapse, event ids, the player token. | `agents.common_acts`, `agents.common_base`, `llm.schemas` |
 | `agents/common_views.py` | 779 | Deterministic sentences composed into a view: muffling, tone, self-reference and second-person rewriting, observable predicates, the residue view. | `agents.common_base`, `agents.common_names`, `story.character_schema`, `world.spatial` |
-| `agents/composer.py` | 7691 |  | `agents.common`, `core.pipeline_context`, `story.provenance_text`, `story.scene`, `world.spatial` |
+| `agents/composer.py` | 407 | Facade over the agents/composer_* siblings (split 2026-11-01): the view renderer every perception path calls into. | `agents.common`, `agents.composer_acts`, `agents.composer_bodies`, `agents.composer_common`, `agents.composer_episode`, `agents.composer_fields`, `agents.composer_figures`, `agents.composer_landscape`, `agents.composer_person`, `agents.composer_render`, `agents.composer_speech`, `agents.composer_standing`, `agents.composer_things`, `core.pipeline_context`, `story.provenance_text`, `story.scene`, `world.spatial` |
+| `agents/composer_acts.py` | 315 | An act, a substance transfer and a crossing as one observer receives them: concealment, heard movement, the sight grade, the first-person copy. | `agents.common`, `agents.composer_common`, `agents.composer_figures`, `agents.composer_person`, `agents.composer_speech`, `core.pipeline_context`, `world.spatial` |
+| `agents/composer_bodies.py` | 816 | Percepts about a body: poses and referents, extra parts, appearance, tells, the observer's own state, ears, contacts, bare regions, non-awake residue. | `agents.common`, `agents.composer_common`, `agents.composer_person`, `world.spatial` |
+| `agents/composer_common.py` | 346 | Leaf of the composer family: the typed IR (Percept, RenderedView), ledger keys, compositor-pack accessors, shared phrase splicers, _safe_renderer. | `world.spatial` |
+| `agents/composer_episode.py` | 391 | The English reference EPISODE renderer (memory mode): first-person sentences, what files as memory, render_episode, episode_signature. | `agents.common`, `agents.composer_bodies`, `agents.composer_common`, `agents.composer_landscape`, `agents.composer_person`, `agents.composer_render`, `agents.composer_speech`, `agents.composer_standing` |
+| `agents/composer_fields.py` | 976 | The place as standing sensory state: room, light and sound, authored and distant sounds, scent, a walk underway, weather, thunder, felt shakes. | `agents.composer_common`, `agents.composer_standing`, `story.provenance_text`, `world.spatial` |
+| `agents/composer_figures.py` | 666 | Who is here and what this observer calls them: referring expressions, the stranger-label ladder, the sight-gated display map, presence percepts. | `agents.common`, `agents.composer_common`, `story.scene`, `world.spatial` |
+| `agents/composer_landscape.py` | 605 | Far sight: vistas, far places and far looks as lines (landscape_lines), realised in any pack's words (compose_landscape_line). | `agents.composer_common` |
+| `agents/composer_person.py` | 743 | Grammatical person: a third-person line turned into the observer's second person for the view and first person for memory. | `agents.common` |
+| `agents/composer_render.py` | 1279 | The English reference VIEW renderer: standing and event sentences, the presence roll-call, _render_view_english slot ordering, render_view. | `agents.common`, `agents.composer_bodies`, `agents.composer_common`, `agents.composer_fields`, `agents.composer_figures`, `agents.composer_landscape`, `agents.composer_person`, `agents.composer_speech`, `agents.composer_standing` |
+| `agents/composer_speech.py` | 977 | A line as one observer receives it: concealment, addressee, the hearing gate and its rescues, voice/tone/register, silence, described communication. | `agents.common`, `agents.composer_common`, `core.pipeline_context`, `world.spatial` |
+| `agents/composer_standing.py` | 470 | Standing verdicts against the observer's ledger, what leads the beat, habituation, beat order, carried voices, observations_from_render. | `agents.composer_common` |
+| `agents/composer_things.py` | 386 | Things in the room: placed or in hand, readings, crowds/couriers/notices, chatter, the micro-round delivery. | `agents.composer_common` |
 | `agents/director.py` | 7999 | Scene establishment, player interpretation, and objective resolution. | `agents`, `agents.common`, `agents.director_contact`, `agents.director_evidence`, `agents.director_fanout`, `agents.director_floors`, `agents.director_lingua`, `agents.director_movement`, `agents.director_reconcile`, `agents.director_scopes`, `agents.director_views`, `core.db`, `llm`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `story`, `story.attire`, `story.character_schema`, `story.scene`, `world.causality`, `world.mechanics`, `world.paradox`, `world.spatial`, `world.survival` |
 | `agents/director_contact.py` | 611 |  | `agents.common`, `story.character_schema`, `world.spatial` |
 | `agents/director_evidence.py` | 4107 |  | `agents.common`, `agents.director_lingua`, `agents.director_scopes`, `llm`, `story.character_schema`, `world.spatial` |
@@ -548,18 +560,156 @@
 | `_inject_visible_actor()` | 612 | 39 lines |
 | `_muffled_fragment()` | 95 | 37 lines |
 
-### `agents/composer.py`
+### `agents/composer_acts.py`
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_render_view_english()` | 6738 | 290 lines |
-| `speech_percept()` | 4740 | 289 lines |
-| `compose_landscape_line()` | 3705 | 229 lines |
-| `presence_percepts()` | 1380 | 181 lines |
-| `pose_percepts()` | 2686 | 178 lines |
-| `_verbs_in_base()` | 2450 | 166 lines |
-| `act_percept()` | 5387 | 166 lines |
-| `_render_episode_english()` | 7305 | 139 lines |
+| `act_percept()` | 102 | 166 lines |
+| `_peel_own_name()` | 74 | 26 lines |
+| `_surface_suddenness()` | 35 | 21 lines |
+| `substance_percept()` | 270 | 16 lines |
+| `crossing_percept()` | 300 | 16 lines |
+| `_sound_bearing_phrase()` | 58 | 14 lines |
+
+### `agents/composer_bodies.py`
+
+| Function | Start | Size |
+|---|---:|---:|
+| `pose_percepts()` | 391 | 178 lines |
+| `_pose_referent()` | 249 | 119 lines |
+| `_part_qualified()` | 131 | 42 lines |
+| `_no_engine_ids()` | 205 | 42 lines |
+| `_names_a_body()` | 91 | 38 lines |
+| `appearance_percept()` | 594 | 38 lines |
+| `body_part_percepts()` | 54 | 35 lines |
+| `ear_percepts()` | 693 | 31 lines |
+
+### `agents/composer_common.py`
+
+| Function | Start | Size |
+|---|---:|---:|
+| `_noun_phrase()` | 260 | 53 lines |
+| `_sense_graded()` | 157 | 23 lines |
+| `_spliced_fragment()` | 227 | 21 lines |
+| `standing_key()` | 195 | 18 lines |
+| `_safe_renderer()` | 330 | 17 lines |
+| `_t()` | 66 | 15 lines |
+| `_lower_lead()` | 93 | 14 lines |
+| `_strip_sentence_ends()` | 109 | 12 lines |
+
+### `agents/composer_episode.py`
+
+| Function | Start | Size |
+|---|---:|---:|
+| `_render_episode_english()` | 218 | 139 lines |
+| `_episode_sentence()` | 63 | 125 lines |
+| `episode_signature()` | 359 | 16 lines |
+| `render_episode()` | 377 | 15 lines |
+| `_files_as_memory()` | 209 | 7 lines |
+
+### `agents/composer_fields.py`
+
+| Function | Start | Size |
+|---|---:|---:|
+| `environment_percept()` | 119 | 101 lines |
+| `weather_percepts()` | 672 | 95 lines |
+| `ambient_percepts()` | 440 | 83 lines |
+| `weather_sound_percepts()` | 852 | 81 lines |
+| `scent_percepts()` | 600 | 58 lines |
+| `_clean_shape()` | 45 | 42 lines |
+| `sound_ceased_percept()` | 242 | 40 lines |
+| `distant_sound_percepts()` | 535 | 38 lines |
+
+### `agents/composer_figures.py`
+
+| Function | Start | Size |
+|---|---:|---:|
+| `presence_percepts()` | 486 | 181 lines |
+| `observer_display_map()` | 275 | 82 lines |
+| `assign_stranger_labels()` | 193 | 64 lines |
+| `_ordinal_label()` | 156 | 35 lines |
+| `_label_core()` | 66 | 30 lines |
+| `_label_from_words()` | 98 | 25 lines |
+| `_size_label()` | 417 | 25 lines |
+| `_silhouette_labels()` | 359 | 17 lines |
+
+### `agents/composer_landscape.py`
+
+| Function | Start | Size |
+|---|---:|---:|
+| `compose_landscape_line()` | 369 | 229 lines |
+| `vista_percepts()` | 23 | 76 lines |
+| `landscape_percepts()` | 222 | 64 lines |
+| `landscape_lines()` | 304 | 63 lines |
+| `landscape_look_percepts()` | 172 | 48 lines |
+| `_plain_ground()` | 288 | 14 lines |
+| `_beside_on_one_bearing()` | 101 | 11 lines |
+| `_far_line_text()` | 161 | 9 lines |
+
+### `agents/composer_person.py`
+
+| Function | Start | Size |
+|---|---:|---:|
+| `_verbs_in_base()` | 461 | 166 lines |
+| `_pose_owner_second_person()` | 59 | 97 lines |
+| `_action_target_second_person()` | 158 | 73 lines |
+| `own_attempt()` | 629 | 66 lines |
+| `_self_first_person()` | 281 | 48 lines |
+| `_first_person()` | 709 | 35 lines |
+| `_fix_i_agreement()` | 254 | 25 lines |
+| `_opens_an_object()` | 415 | 23 lines |
+
+### `agents/composer_render.py`
+
+| Function | Start | Size |
+|---|---:|---:|
+| `_render_view_english()` | 933 | 290 lines |
+| `_render_presence_group()` | 292 | 106 lines |
+| `_render_standing()` | 662 | 99 lines |
+| `_render_openings()` | 555 | 96 lines |
+| `_render_event()` | 844 | 87 lines |
+| `_presence_clause()` | 218 | 72 lines |
+| `render_view()` | 1225 | 55 lines |
+| `_render_pose()` | 451 | 50 lines |
+
+### `agents/composer_speech.py`
+
+| Function | Start | Size |
+|---|---:|---:|
+| `speech_percept()` | 361 | 289 lines |
+| `line_hear_level()` | 108 | 130 lines |
+| `communication_percept()` | 937 | 41 lines |
+| `_carried_tone()` | 713 | 35 lines |
+| `own_name_forms()` | 804 | 33 lines |
+| `silence_percept()` | 905 | 30 lines |
+| `_names_kept()` | 860 | 29 lines |
+| `_one_voice_each()` | 331 | 28 lines |
+
+### `agents/composer_standing.py`
+
+| Function | Start | Size |
+|---|---:|---:|
+| `perception_packet()` | 406 | 65 lines |
+| `standing_verdicts()` | 28 | 53 lines |
+| `observations_from_render()` | 364 | 40 lines |
+| `player_view_order()` | 241 | 26 lines |
+| `compact_observation()` | 338 | 24 lines |
+| `leads_the_beat()` | 124 | 23 lines |
+| `asked_this_beat()` | 106 | 16 lines |
+| `appearance_delta()` | 90 | 14 lines |
+
+### `agents/composer_things.py`
+
+| Function | Start | Size |
+|---|---:|---:|
+| `room_content_percepts()` | 193 | 81 lines |
+| `chatter_percepts()` | 276 | 52 lines |
+| `thing_reading_percepts()` | 153 | 38 lines |
+| `thing_clause()` | 24 | 34 lines |
+| `thing_reading_text()` | 119 | 32 lines |
+| `micro_round_percepts()` | 359 | 28 lines |
+| `micro_round_percept()` | 330 | 27 lines |
+| `thing_in_hand_clause()` | 60 | 13 lines |
 
 ### `agents/director.py`
 

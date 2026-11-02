@@ -972,6 +972,12 @@ files are local state or private diagnostics and are ignored deliberately.
   `agents/common.py` still imports as written; a test that monkeypatches must
   patch the sibling that DEFINES the reader (`tools/project_check.py` covers the
   family's import direction and the half of the patch rule it can see).
+- `agents/composer.py`: since 2026-11-01 a facade over twelve `composer_*` siblings
+  (`composer_common`, `composer_person`, `composer_figures`, `composer_bodies`,
+  `composer_speech`, `composer_acts`, `composer_fields`, `composer_landscape`,
+  `composer_things`, `composer_standing`, `composer_render`, `composer_episode`;
+  plan in `docs/design/SPLIT_COMPOSER.md`); the same re-export and patch rules as
+  `agents/common.py` apply, and it stays the shared LEAF every role may call.
 - `world/spatial.py`: a pure re-export facade over the `spatial_*` modules (its import list is the roster; the count has drifted in every document that stated one)
   (nineteen as of 2026-09-07: identity, barriers, transit, containment,
   contacts, contact_migration, substance, geometry, light, routing, senses,

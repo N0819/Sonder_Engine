@@ -1734,6 +1734,7 @@ def facade_siblings(home: Path, stem: str) -> set:
 #: (prefix match, not behind the facade) is correctly outside `world.spatial`.
 FACADE_FAMILIES = {
     "agents.common": (ROOT / "agents", "common"),
+    "agents.composer": (ROOT / "agents", "composer"),
     "agents.director": (ROOT / "agents", "director"),
     "commit": (ROOT / "persist", "commit"),
     "mind.memory": (ROOT / "mind", "memory"),

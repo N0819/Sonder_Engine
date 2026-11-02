@@ -1022,9 +1022,13 @@ def test_a_line_the_noise_takes_is_still_seen_spoken_within_reach(monkeypatch):
     tall woman's voice -- the words do not carry"; this is the case where
     the noise took the voice as well (`voice_carries`), and only the eyes
     have it."""
-    monkeypatch.setattr(composer, "line_hear_level",
-                        lambda *a, **k: "none")
-    monkeypatch.setattr(composer, "voice_carries", lambda *a, **k: False)
+    # `speech_percept` reads both names from `agents.composer_speech`'s own
+    # globals since the 2026-11-01 split; a patch on the facade would be inert.
+    from tests.helpers import patch_seam
+    patch_seam(monkeypatch, "agents.composer_speech", "line_hear_level",
+               lambda *a, **k: "none")
+    patch_seam(monkeypatch, "agents.composer_speech", "voice_carries",
+               lambda *a, **k: False)
     entry = {"speaker": "Tamsin Reyle", "text": "Is someone waiting for it?",
              "volume": "normal", "intended_target": "Bram Toll"}
     rel = {"tier": "within_reach", "barrier": "open", "same_room": True}

@@ -166,7 +166,12 @@ def test_a_failing_adapter_costs_wording_not_the_beat(japanese, monkeypatch):
         def render_episode(self, *a, **k):
             raise RuntimeError("pack is broken")
 
-    monkeypatch.setattr(composer, "_safe_renderer", lambda language: Broken())
+    # `_safe_renderer` is defined in `agents.composer_common` and read from the
+    # globals of composer_fields, composer_render and composer_episode (split
+    # 2026-11-01); patch_seam rebinds every holder, the facade included.
+    from tests.helpers import patch_seam
+    patch_seam(monkeypatch, "agents.composer_common", "_safe_renderer",
+               lambda language: Broken())
     text = render_view([KINDS["act"]], language="ja").text
     assert "crosses to the shelf" in text
 

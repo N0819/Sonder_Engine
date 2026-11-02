@@ -9,7 +9,9 @@ Each file owns one clear part of the turn pipeline:
 - `perception.py` — opening, action-onset, and outcome observer views. Fully
   deterministic: there is no `perception` model role, and this module imports no
   model seam.
-- `composer.py` — the view renderer perception calls down into: percept builders
+- `composer.py` — since 2026-11-01 a FACADE over twelve `composer_*.py` siblings
+  (`docs/design/SPLIT_COMPOSER.md`); every former name is re-exported, and a test
+  patches the sibling that defines the reader. The view renderer perception calls down into: percept builders
   and `render_view` over a typed IR, plus `observations_from_render`, which is
   where the structured observations are re-derived from the final scrubbed view.
 - `character.py` — one character's private decision step, including appraisal
