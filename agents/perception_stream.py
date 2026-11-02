@@ -19,6 +19,7 @@ from story.character_schema import (
     persona_senses,
 )
 from core.db import wget
+from core.pipeline_context import note_step_decision
 from world.beat_ledger import beat_event_order
 from story.scene import is_player_speaker
 from mind import affect
@@ -27,6 +28,7 @@ from world.spatial import (
     hear_level,
     room_of,
     same_subject,
+    sense_acuity_offset,
     spatial_rel_between,
 )
 from . import composer
@@ -42,8 +44,8 @@ from .common import (
 
 from agents.perception_senses import (
     _behind_sources,
+    _channels_the_card_cuts,
     _focus_target,
-    _sense_card,
 )
 from agents.perception_scrub import _composer_scrub_surface
 
@@ -84,7 +86,7 @@ def _causal_outcome_sequences(ctx, interp, res, player_name, sequences, cast_nam
     Keep each span's own outward surface and private time coordinate, while
     carrying the declaration's concealment and causal-floor restrictions.
     """
-    from .director_evidence import beat_timeline, declared_elements
+    from .director import beat_timeline, declared_elements
     declarations = [{"sequence": sequence} for _, sequence, _ in sequences]
     declared = declared_elements(interp, declarations)
     identities = {f"character:{key}": name for key, name in cast_names.items()}
@@ -199,6 +201,13 @@ def _line_words(text):
     ended in. A line split around its tag and joined by the encoder differs
     in its middle punctuation the same way."""
     return " ".join(re.findall(r"\w+", _quote_body(str(text or "")).casefold()))
+
+
+#: The element kinds the engine writes into a sequence that the outcome
+#: stream refuses by design (see `_outcome_event_stream`): private cognition
+#: and a world row. A closed set the engine owns -- any other kind is an
+#: element nothing writes, and is warned.
+_STREAM_REFUSED_KINDS = ("ponder", "event")
 
 
 def _outcome_event_stream(ctx, scene, interp, res, player_name,
@@ -342,6 +351,13 @@ def _outcome_event_stream(ctx, scene, interp, res, player_name,
                     and _same_speaker(entry.get("speaker"), actor, is_player)
                     and _line_words(entry.get("exact_quote")) == wanted
                 ), None)
+                if match is None:
+                    # A declared line the dialogue log does not carry was
+                    # not delivered by the beat; recorded where it went.
+                    note_step_decision(
+                        "outcome_stream", str(actor or "?"), "refused",
+                        "a declared line matches no delivered dialogue row: "
+                        "%s" % str(event.get("text") or "")[:120])
                 if match is not None:
                     used_dialogue.add(match)
                     line = dialogue[match]
@@ -361,8 +377,13 @@ def _outcome_event_stream(ctx, scene, interp, res, player_name,
                     "causal_span": event.get("_causal_span"),
                     "entry": {**event, "speaker": actor},
                 })
-            elif (event.get("type") == "action"
-                  and event.get("visibility") != "concealed"):
+            elif event.get("type") == "action":
+                # A CONCEALED ACT STAYS IN THE STREAM, with its `visibility`
+                # and `conceal_from`: whom it is hidden from is a question
+                # per observer, and `composer.act_percept` asks it
+                # (`concealed_from_observer`). Dropped here, a hand-off hidden
+                # from the guard was hidden from the accomplice it was made
+                # to (audit agents_perception F3, 2026-11-01).
                 surface = (adjudicated_player_action_text(event, res)
                            if is_player and not event.get("_causal_resolved")
                            else observable_action_text(event))
@@ -372,6 +393,29 @@ def _outcome_event_stream(ctx, scene, interp, res, player_name,
                         "declared": declared_id, "deferred": _deferred,
                         "causal_span": event.get("_causal_span"),
                         "attempt": surface, "event": event})
+            elif event.get("type") not in ("speech", "communication"):
+                # A KIND THIS STREAM HAS NO BRANCH FOR IS SAID, NOT DROPPED
+                # SILENTLY (audit agents_perception F8, 2026-11-01). Two kinds
+                # the engine mints are refused here by design and recorded:
+                # a `ponder` is private cognition, never perceived, and an
+                # `event` is a world row -- a player's world assertion
+                # (`common_sequence`), or the causal projection of a world
+                # row on a rerun of an archived beat (`director_evidence`) --
+                # whose consequences reach a mind through what the resolve
+                # made of them, never as somebody's act. Any other kind is no
+                # element the engine writes, and is a warning on the turn.
+                kind = str(event.get("type") or "")
+                text = str(event.get("description") or event.get("observable")
+                           or event.get("attempt") or event.get("text") or "")
+                note_step_decision(
+                    "outcome_stream", str(actor or "?"), "refused",
+                    "an element of type %r is no kind the outcome stream "
+                    "carries: %s" % (kind or "?", text[:120]))
+                _warn = getattr(ctx, "add_warning", None)
+                if kind not in _STREAM_REFUSED_KINDS and callable(_warn):
+                    _warn("perception_outcome: an element of unknown type %r "
+                          "reached the outcome stream and was dropped (%r)"
+                          % (kind or "?", text[:120]))
 
     # A dependent player phase occurs only after present minds had the chance
     # to answer its prerequisite.  Character declarations were appended while
@@ -578,13 +622,22 @@ def _unanswered_addresses(scene, sequences, stream, res):
     return out
 
 
-def _tell_acuity(sheet):
-    """Numeric visual/auditory acuity for physical-tell delivery, ranked on
-    the scale a tell's subtlety is graded on: an ordinary eye reaches
-    "noticeable" (0.4), a keen one "subtle" (0.65), an exceptional one
-    "hidden" (0.9) -- see `affect.TELL_ADVANTAGE`."""
+#: A card's acuity on the scale a tell's subtlety is graded on, by the
+#: WORLD'S ladder offset for the card (`spatial.sense_acuity_offset`: -1
+#: dulled, 0 ordinary, +1 keen, +2 extraordinary; None absent): an ordinary
+#: eye reaches "noticeable" (0.4), a keen one "subtle" (0.65), an
+#: extraordinary one "hidden" (0.9) -- the owner's three rungs
+#: (`affect.TELL_ADVANTAGE`); a dulled one 0.2, the old table's "impaired".
+_TELL_ACUITY_BY_OFFSET = {-1: 0.2, 0: 0.4, 1: 0.65, 2: 0.9}
+
+
+def _card_of(sheet):
+    """The structured sense card of an observer's sheet, for the tell gate:
+    a character's or a persona's (`_sense_card`), or a bare `{"senses": [...]}`
+    -- one reading for the gate's sight, its hearing and its acuity, so the
+    three cannot answer from two different cards."""
     if not isinstance(sheet, dict):
-        return 0.4
+        return []
     senses = (
         character_senses(sheet)
         if ("psychology" in sheet or "core" in sheet)
@@ -592,21 +645,42 @@ def _tell_acuity(sheet):
         if "narration" in sheet
         else sheet.get("senses") or []
     )
-    rank = {
-        "absent": 0.0, "none": 0.0, "impaired": 0.2, "poor": 0.25,
-        "ordinary": 0.4, "normal": 0.4, "keen": 0.65,
-        "heightened": 0.75, "exceptional": 0.9,
-    }
+    return senses if isinstance(senses, list) else []
+
+
+def _tell_acuity(sheet, channels=("sight", "hearing")):
+    """Numeric visual/auditory acuity for physical-tell delivery, ranked on
+    the scale a tell's subtlety is graded on (`_TELL_ACUITY_BY_OFFSET`):
+    the better of the card's acuity on the `channels` the tell reached this
+    observer by (`_delivered_manifest`) -- both, where none is named.
+
+    PER CHANNEL. The old table took the best of whatever entries a card
+    LISTED, so `vision: poor` alone read 0.25; the world's reader answers
+    every channel (an unlisted one is ordinary), so the best of both would
+    hand a poor eye an ordinary ear's reach for a tell only seen. A seen tell
+    is caught by the eye, a heard one by the ear.
+
+    ONE READER OF A CARD'S SENSES. This kept its own: a channel counted only
+    when spelled exactly `vision`, `hearing` or `general`, and the acuity
+    came from a nine-word table with everything else at 0.4 -- so it
+    disagreed with `sense_acuity_offset` on 6 of 8 ordinary spellings
+    (audit agents_perception F5, 2026-11-01): `sight: keen`, `eyes: keen`,
+    `vision: acute`, `vision: sharp` read as ordinary, and an author who
+    made a mind perceptive saw it miss every `subtle` tell. Read on the
+    owner's db (2026-11-01): 22 vision/hearing card entries grade higher
+    now (`enhanced`, `expert`, `sharp`, `acute`, `high`, `superior`,
+    `extraordinary`), three `heightened` ones grade 0.65 where the old
+    table said 0.75, and `exceptional` -- 0.9 in the old table, +1 in the
+    world's -- is keen, as it is everywhere else in the engine."""
+    if not isinstance(sheet, dict):
+        return _TELL_ACUITY_BY_OFFSET[0]
+    senses = _card_of(sheet)
     values = []
-    for sense in senses if isinstance(senses, list) else []:
-        if not isinstance(sense, dict):
-            continue
-        channel = str(sense.get("channel") or "").casefold()
-        if channel not in ("vision", "hearing", "general"):
-            continue
-        label = str(sense.get("acuity") or "ordinary").casefold()
-        values.append(rank.get(label, 0.4))
-    return max(values) if values else 0.4
+    for channel in channels or ("sight", "hearing"):
+        offset = sense_acuity_offset(senses, channel)
+        values.append(0.0 if offset is None else _TELL_ACUITY_BY_OFFSET.get(
+            max(-1, min(2, offset)), _TELL_ACUITY_BY_OFFSET[0]))
+    return max(values)
 
 
 #: THE SENSE A TELL ARRIVES BY -- the one question `manifest.tells[].channel`
@@ -644,22 +718,70 @@ def tell_is_audible(channel) -> bool:
     return str(channel or "").strip().casefold() in _AUDIBLE_TELL_CHANNELS
 
 
+#: THE LOUDNESS A HEARD TELL CARRIES, on the hearing rule's own volume
+#: ladder (`spatial_senses.hear_level`). A breath is unvoiced -- "a whisper
+#: is breath with no voicing" -- so it carries as far as a whisper does; a
+#: voice tell rides the source's own voice (`_tell_volume`); any other heard
+#: tell (a hand drumming the table) keeps the ordinary voice it was always
+#: graded at.
+_TELL_VOLUME = {"breath": "whisper"}
+
+
+def _tell_volume(channel, line_volume=None):
+    """The volume a heard tell on `channel` is graded at: a breath at a
+    whisper's; a voice at the source's own voice this beat (`line_volume`,
+    the loudest line it spoke) or an ordinary one where it said nothing; any
+    other heard channel at an ordinary voice."""
+    word = str(channel or "").strip().casefold()
+    if word in _TELL_VOLUME:
+        return _TELL_VOLUME[word]
+    if word == "voice":
+        return str(line_volume or "normal")
+    return "normal"
+
+
+def _loudest_voices(lines):
+    """`{speaker: the loudest volume they spoke at}` over a beat's dialogue
+    rows, on the speech ladder's own order (`SPEECH_ONE_PACE_DB`) -- the
+    voice a VOICE tell rides (`_tell_volume`). A volume the ladder does not
+    know is left out, and the tell keeps an ordinary voice."""
+    from world.spatial import SPEECH_ONE_PACE_DB
+    out = {}
+    for line in lines or ():
+        if not isinstance(line, dict):
+            continue
+        speaker = str(line.get("speaker") or "").strip()
+        volume = str(line.get("volume") or "normal").strip().casefold()
+        if not speaker or volume not in SPEECH_ONE_PACE_DB:
+            continue
+        held = out.get(speaker)
+        if held is None or SPEECH_ONE_PACE_DB[volume] > SPEECH_ONE_PACE_DB[held]:
+            out[speaker] = volume
+    return out
+
+
 def _delivered_manifest(ctx, scene, observer, sources, known, cast_by_name,
-                        observer_sheet=None):
+                        observer_sheet=None, *, sound=None, voices=None):
     """Per SOURCE this observer can read: {surface_demeanor, cues:[cue,...]} --
     the interior-depth payoff (Phase 4). A character's `manifest` (surface
     demeanor + physical tells) is authored by that character; the ENGINE decides
     which cues reach THIS observer here, before the LLM call, exactly like the
     dialogue-injection backstop. A tell is delivered iff (a) the observer can
-    receive its channel -- sight reaches any tell (same-visual-channel, not in
+    receive its channel -- sight reaches any tell (the card's sight, not in
     the rear blind spot), and a tell `tell_is_audible` recognises also reaches
-    a listener who cannot see it happen -- AND (b) affect.tell_gate: subtlety
-    <= acuity + familiarity + attention, where knowing the source and watching
-    it are each worth one grade (`affect.TELL_ADVANTAGE`) and worth nothing
-    when absent. MEANING and the character's own labels never cross; only the
-    observable cue text does -- with, beside it (`cue_at`), the event id of
-    the source's own step the read-back said it shows at, which orders the
-    cue and is never rendered (`_cue_slots`)."""
+    a listener who cannot see it happen, where the hearing rule carries it
+    whole at the tell's own loudness (`_tell_volume`) to this card's ears --
+    AND (b) affect.tell_gate: subtlety <= acuity + familiarity + attention,
+    where knowing the source and watching it are each worth one grade
+    (`affect.TELL_ADVANTAGE`) and worth nothing when absent. MEANING and the
+    character's own labels never cross; only the observable cue text does --
+    with, beside it (`cue_at`), the event id of the source's own step the
+    read-back said it shows at, which orders the cue and is never rendered
+    (`_cue_slots`).
+
+    `sound` is this observer's sound field for the stage (the one its channel
+    maps were stamped with); `voices` is `{source: the loudest volume it
+    spoke at this beat}`, for a voice tell."""
     out = {}
     focus = _focus_target(scene, observer)
     behind = set(_behind_sources(scene, observer, sources))
@@ -671,6 +793,9 @@ def _delivered_manifest(ctx, scene, observer, sources, known, cast_by_name,
     # beat, so it grew as N x M). Resolved on the first source that has a
     # tell to gate, so a beat where nobody declared one still reads nothing.
     acuity = None
+    card = _card_of(observer_sheet)
+    deaf = "hearing" in _channels_the_card_cuts(card)
+    voices = voices or {}
     for s in sources:
         sname = s.get("name")
         cid = cast_by_name.get(sname) if sname else None
@@ -688,11 +813,16 @@ def _delivered_manifest(ctx, scene, observer, sources, known, cast_by_name,
             continue
         rel = spatial_rel_between(scene, observer, sname,
                                   observer_room=o_room,
-                                  target_room=s.get("room"))
+                                  target_room=s.get("room"), sound=sound)
         # Per-BODY, so a source standing in a torch's pool is visible while the
         # rest of the dark room is not -- the room-level answer cannot see that.
-        visible = (visual_level_between(scene, observer, sname,
-                                        _sense_card(observer_sheet)) != "none"
+        # THROUGH THE CARD, as every other sight reader here grades it
+        # (`composer._sense_graded`): `visual_level_between` spends a card only
+        # on `needs_light`, so an authored-blind card in a lit room was handed
+        # seen tells and the demeanor (audit agents_perception F2, 2026-11-01).
+        visible = (composer._sense_graded(
+            visual_level_between(scene, observer, sname, card),
+            "sight", card) != "none"
                    and sname not in behind)
         # A voice/breath tell needs clean hearing, not mere co-location: an
         # enclosed body's position derives to its carrier's room, so bare
@@ -701,19 +831,38 @@ def _delivered_manifest(ctx, scene, observer, sources, known, cast_by_name,
         # (observer inside the source) stays full, so those tells survive;
         # a crate stays a thing you can be heard through (no body-mass flag,
         # unchanged).
-        audible = bool(rel.get("same_room")) \
-            and hear_level(rel, "normal") == "full"
+        #
+        # BY THE LINE'S OWN RULE, NOT A ROOM AND A NORMAL VOICE. This was
+        # `same_room and hear_level(rel, "normal") == "full"`, card-blind:
+        # a deaf observer in a dark cellar was handed "a ragged breath catches
+        # in the dark", a breath carried twenty-eight paces down a dark hall
+        # where a whisper reaches nobody, and a voice tell through an open
+        # doorway was withheld where the voice arrives whole (audit
+        # agents_perception F2, 2026-11-01). Now the hearing rule decides, at
+        # the loudness the tell carries (`_tell_volume`), through this card's
+        # ears, wherever the source stands.
+        def audible(tell, _rel=rel, _source=sname):
+            if deaf:
+                return False
+            return composer._sense_graded(
+                hear_level(_rel, _tell_volume(tell.get("channel"),
+                                              voices.get(_source))),
+                "hearing", card) == "full"
         familiarity = affect.TELL_ADVANTAGE if (
             observer in (known.get(sname) or [])
             or sname in (known.get(observer) or [])) else 0.0
         attention = affect.TELL_ADVANTAGE if focus == sname else 0.0
         cues, cue_at = [], []
         if tells and acuity is None:
-            acuity = _tell_acuity(observer_sheet)
+            acuity = {channel: _tell_acuity(observer_sheet, (channel,))
+                      for channel in ("sight", "hearing")}
         for t in tells:
-            reachable = visible or (audible
-                                    and tell_is_audible(t.get("channel")))
-            if reachable and affect.tell_gate(t, acuity, familiarity, attention):
+            heard = tell_is_audible(t.get("channel")) and audible(t)
+            reachable = visible or heard
+            # Caught by the sense that reached it (`_tell_acuity`).
+            reach = max([acuity["sight"]] * bool(visible)
+                        + [acuity["hearing"]] * bool(heard), default=0.0)
+            if reachable and affect.tell_gate(t, reach, familiarity, attention):
                 cues.append(t.get("cue"))
                 cue_at.append(str(t.get("at_event") or ""))
         entry = {}

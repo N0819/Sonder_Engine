@@ -373,9 +373,21 @@ def observations_from_render(pid, rendered):
     out = []
     for index, (percept, sentence) in enumerate(rendered.spans):
         ambiguity = _FIDELITY_AMBIGUITY.get(percept.fidelity, 0.15)
+        # A CHANGE IS THE OBSERVER'S, NEVER THE WORLD'S. `force` says a
+        # body's visible form moved this beat, objectively; read alone it
+        # filed a woman seen for the FIRST time, on the beat she changed her
+        # coat, under `changes_noticed` -- a bit of her past state handed to
+        # a mind that never held it (audit agents_composer F2, 2026-11-01).
+        # What says THIS observer saw a change: the renderer's `beat` mark,
+        # stamped from the observer's own ledger; an appearance `delta`,
+        # attached only for an observer who held the body last beat; and --
+        # on the tier that marks no beat -- a moved body the observer held
+        # last beat (`held`).
+        data = percept.data or {}
+        changed = (data.get("beat") or appearance_delta(percept)
+                   or (data.get("force") and data.get("held")))
         phase = ("event" if percept.order_key is not None else
-                 "change" if percept.data.get("force") or
-                 percept.data.get("beat") else "state")
+                 "change" if changed else "state")
         # A presence sentence can enumerate several bodies. Its first
         # percept is a rendering representative, not the actor of the group.
         actor = percept.source_label if percept.kind != "presence" else ""

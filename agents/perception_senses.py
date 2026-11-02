@@ -49,10 +49,12 @@ from world.spatial import (
     sight_level,
     comms_link,
     same_subject,
+    sense_acuity_offset,
     spatial_rel_between,
     sound_field,
     visible_adjacent_rooms,
 )
+from core.pipeline_context import note_step_decision
 from . import composer
 from .common import CROWDS_KEY
 
@@ -198,6 +200,86 @@ def _sense_card(sheet):
     if "narration" in sheet:
         return persona_senses(sheet)
     return []
+
+
+#: The percept channels an authored card can take away, under the card's own
+#: channel names (`spatial.sense_acuity_offset`). Touch and interoception are
+#: no sense a card authors, and `mixed` is no sense in particular.
+_CARD_CUTS = (("sight", "sight"), ("hearing", "hearing"), ("smell", "scent"))
+
+
+def _channels_the_card_cuts(senses):
+    """The percept channels this card says are ABSENT (blind, deaf,
+    anosmic): `sense_acuity_offset` answers None, a full cut and not a
+    shift. Empty for no card and for every ordinary or dulled one."""
+    if not senses:
+        return frozenset()
+    return frozenset(channel for channel, card in _CARD_CUTS
+                     if sense_acuity_offset(senses, card) is None)
+
+
+def _where_without_eyes(percept):
+    """The environment percept a sightless body keeps: WHERE it is -- the
+    room's name and its own description, which the dark leaves a sighted
+    body too -- and nothing an eye reports (what is in reach, the ways out
+    and what lies past them, the light). On no sense in particular, since
+    no sense delivered it."""
+    import dataclasses
+    d = percept.data or {}
+    where = composer.environment_percept(
+        d.get("room_id"), d.get("room_name"), d.get("room_notes") or "")
+    return dataclasses.replace(where, channel="mixed") if where else None
+
+
+def _card_admitted(percepts, senses, *, observer=""):
+    """THE SENSE CARD'S FLOOR, asked once a stage, after every builder.
+
+    `composer._sense_graded` was asked by the builders that grade a BODY or
+    a LINE and by nothing else, so an authored-blind card standing in a lit
+    kitchen was told "You can see the hearth ... Through the back door is
+    The Yard. A muddy yard. There is a silver coin at the long oak counter."
+    byte-identical to a sighted one, and an authored-deaf card heard the
+    generator's din and the kettle's shriek (audit agents_perception F1,
+    2026-11-01: the environment, things, openings, notices, chatter,
+    soundscape, weather, the beat's own sounds, the near and far field --
+    every `_gated_ambient_percepts` and `heard_events` site -- asked no
+    card). Nine builders each asking is nine places to forget; a percept
+    already says which channel it arrived on, so the rule is stated once,
+    here, where the observer's percepts are whole: what arrived on a channel
+    the card says is ABSENT does not reach the mind.
+
+    Only the absent case. A dulled or keen card is graded by the builders
+    that grade (`_sense_graded`), and an ordinary or empty card returns the
+    list unchanged. Never more than the card says:
+
+      * the observer's OWN body and keeping (`source_label` "you", a thing
+        in its own hands -- `kept`) are proprioception and touch whatever
+        channel their sentence is filed on;
+      * a sightless body still knows WHERE it stands (`_where_without_eyes`);
+      * touch, interoception and an unclassified `mixed` channel are no
+        card's to take.
+    """
+    cut = _channels_the_card_cuts(senses)
+    if not cut:
+        return percepts
+    kept, withheld = [], []
+    for p in percepts or ():
+        if p.channel not in cut or p.source_label == "you" \
+                or (p.data or {}).get("kept"):
+            kept.append(p)
+            continue
+        if p.kind == "environment":
+            where = _where_without_eyes(p)
+            if where is not None:
+                kept.append(where)
+        withheld.append(p.kind)
+    if withheld:
+        note_step_decision(
+            "sense_card", observer or "?", "refused",
+            "the card says %s is absent: %d percept(s) withheld (%s)" % (
+                "/".join(sorted(cut)), len(withheld),
+                ", ".join(sorted(set(withheld)))))
+    return kept
 
 
 def _own_name_forms(ctx, name):
@@ -801,6 +883,13 @@ def _sight_detail(sc, observer_name, actor_name, rel, senses=None):
     The one thing acuity does here is the presence line's own subtraction:
     a body a dulled eye cannot make out at all shows that eye no act.
     """
+    if "sight" in _channels_the_card_cuts(senses):
+        # AN ABSENT SIGHT SEES NO CONDUCT, IN THE ROOM OR OUT OF IT. The
+        # same-room arm below grades the world alone (`visual_level_between`
+        # spends a card only on `needs_light`), so an authored-blind card
+        # was handed "Hinami crosses the hall toward the window" by sight
+        # (audit agents_perception F1/F2, 2026-11-01).
+        return "none"
     level = ""
     measured = room_of(sc, observer_name) is not None
     if measured:

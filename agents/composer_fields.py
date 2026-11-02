@@ -22,6 +22,7 @@ from agents.composer_common import (
     _join_clauses,
     _noun_phrase,
     _safe_renderer,
+    _strip_sentence_ends,
     _subject_prefix,
     _t,
     standing_key,
@@ -476,7 +477,13 @@ def ambient_percepts(sensory_events, observer_room, *, order_key=None,
             continue
         room = str(event.get("room") or event.get("room_id")
                    or event.get("source_room") or "")
-        if room and observer_room and room != str(observer_room):
+        # FAIL CLOSED on the one input the scope cannot judge. An observer
+        # with NO room passed `room and observer_room and ...` and was handed
+        # every room's sounds -- a cast member attached but not placed heard
+        # the hiss behind the vault door (audit agents_composer F3,
+        # 2026-11-01) -- while `environment_percept` gives the same mind
+        # nothing. A roomless event is scene ambience and reaches everyone.
+        if room and room != str(observer_room or ""):
             continue
         # `detail` FIRST, because it is the canonical key and the other
         # three are not. `spatial_sound_field.normalize_sensory_event` holds
@@ -508,7 +515,10 @@ def ambient_percepts(sensory_events, observer_room, *, order_key=None,
             continue
         channel = _ambient_channel(event)
         if event.get("echo") and channel != "sight":
-            desc = desc.rstrip(".") + _en("sound_echo")
+            # The story's own echo clause, after the story's own stops: the
+            # English one was appended in every pack -- 「鐘の音が鳴り響く。,
+            # and the place gives it back」 (audit agents_composer F9).
+            desc = _strip_sentence_ends(desc) + _t("sound_echo")
         if after in ("moment", "seconds") and channel != "sight":
             from language_runtime import compositor_text
             desc = compositor_text("sound_after_sight_" + after,

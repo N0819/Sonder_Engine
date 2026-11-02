@@ -149,3 +149,142 @@ def test_a_deaf_card_does_not_receive_a_spoken_line(temp_db):
 def test_a_deaf_card_still_sees(temp_db):
     ctx, char_id = _ctx(temp_db, senses=DEAF)
     assert "close by" in _act_view(ctx, char_id)
+
+
+# --------------------------------------------------------------------------
+# THE ROOM, NOT ONLY ITS BODIES AND LINES (audit agents_perception F1,
+# 2026-11-01). The card above gated presence, pose, appearance, far places,
+# vistas, scent and spoken lines, and nothing else: an authored-blind card
+# in a lit kitchen was told "You can see the hearth ... Through the back
+# door is The Yard. A muddy yard. There is a silver coin at the long oak
+# counter.", byte-identical to a sighted one, and an authored-deaf card
+# heard the generator's din and the kettle shriek. One floor now asks the
+# card at each stage, after every builder has spoken: what arrived on a
+# channel the card says is absent does not reach the mind. The place a
+# sightless body stands in is still where it is -- its name and the room's
+# own description, which the dark leaves a sighted body too -- and touch is
+# no channel a card takes away.
+# --------------------------------------------------------------------------
+
+KETTLE = "a kettle shrieks on the stove"
+TOAST = "the smell of burnt toast"
+
+
+def _kitchen():
+    return {
+        "location": "the kitchen", "time": "day",
+        "rooms": {
+            "kitchen": {
+                "name": "Kitchen", "notes": "A warm kitchen with a scrubbed table.",
+                "light": "lit",
+                "cells": [[0, 0], [1, 0], [2, 0], [0, 1], [1, 1], [2, 1]],
+                "anchors": {
+                    "hearth": {"desc": "the hearth", "cell": [0, 0],
+                               "height": "waist"},
+                    "counter": {"desc": "the long oak counter", "cell": [1, 0],
+                                "height": "waist"}},
+                "adjacent": [{"to": "yard", "barrier": "open_door",
+                              "name": "the back door"}]},
+            "yard": {"name": "The Yard", "notes": "A muddy yard.",
+                     "light": "lit",
+                     "adjacent": [{"to": "kitchen", "barrier": "open_door",
+                                   "name": "the back door"}]},
+        },
+        "positions": {PLAYER: "kitchen", WATCHER: "kitchen", "coin": "kitchen",
+                      "gen": "kitchen"},
+        "stations": {WATCHER: {"at": "counter", "near": []},
+                     "coin": {"at": "counter", "near": []},
+                     "gen": {"at": "hearth", "near": []}},
+        "entities": {
+            "coin": {"name": "silver coin", "kind": "coin", "portable": True},
+            "gen": {"name": "the generator", "kind": "machine",
+                    "sound_source": "loud"}},
+        "contained": {}, "contacts": [], "attire": {}, "overlays": {}}
+
+
+def _kitchen_ctx(temp_db, *, senses):
+    ctx, char_id = _ctx(temp_db, senses=senses)
+    temp_db.wset(ctx.chat.id, "scene", _kitchen())
+    ctx["_player_room"] = "kitchen"
+    ctx.director_resolve["state_diff"] = {"sensory_events": [
+        {"kind": "sound", "room": "kitchen", "level": "loud",
+         "detail": KETTLE},
+        {"kind": "smell", "room": "kitchen", "detail": TOAST}]}
+    return ctx, char_id
+
+
+ANOSMIC = [{"channel": "smell", "acuity": "absent"}]
+
+
+def test_an_ordinary_card_is_given_the_kitchen(temp_db):
+    """The baseline: every subtraction below is measured against it."""
+    ctx, char_id = _kitchen_ctx(temp_db, senses=ORDINARY)
+    view = _outcome_view(ctx, char_id)
+    for said in ("You are in Kitchen", "the long oak counter", "silver coin",
+                 "The Yard", KETTLE, TOAST, LINE):
+        assert said.casefold() in view.casefold(), (said, view)
+    assert "generator" in view, view
+
+
+def test_a_blind_card_is_not_shown_the_room(temp_db):
+    ctx, char_id = _kitchen_ctx(temp_db, senses=BLIND)
+    view = _outcome_view(ctx, char_id)
+    for unseen in ("You can see", "long oak counter", "silver coin",
+                   "The Yard", "muddy yard"):
+        assert unseen.casefold() not in view.casefold(), (
+            f"an authored-blind card was shown {unseen!r}: {view!r}")
+    # where it stands, what it hears and smells, are not sight's to take
+    assert "You are in Kitchen" in view, view
+    for heard in (KETTLE, TOAST, LINE):
+        assert heard.casefold() in view.casefold(), (heard, view)
+
+
+def test_a_blind_card_is_not_shown_the_room_at_onset(temp_db):
+    ctx, char_id = _kitchen_ctx(temp_db, senses=BLIND)
+    view = _act_view(ctx, char_id)
+    for unseen in ("You can see", "long oak counter", "silver coin",
+                   "The Yard"):
+        assert unseen.casefold() not in view.casefold(), (unseen, view)
+    ctx, char_id = _kitchen_ctx(temp_db, senses=ORDINARY)
+    assert "silver coin" in _act_view(ctx, char_id)
+
+
+def test_a_deaf_card_hears_no_room(temp_db):
+    ctx, char_id = _kitchen_ctx(temp_db, senses=DEAF)
+    view = _outcome_view(ctx, char_id)
+    assert KETTLE not in view, view
+    assert "generator" not in view and "noise" not in view.casefold(), view
+    # it still sees and smells
+    assert "long oak counter" in view and TOAST.casefold() in view.casefold(), view
+
+
+def test_an_anosmic_card_smells_no_room(temp_db):
+    ctx, char_id = _kitchen_ctx(temp_db, senses=ANOSMIC)
+    view = _outcome_view(ctx, char_id)
+    assert TOAST.casefold() not in view.casefold(), view
+    assert KETTLE.casefold() in view.casefold() \
+        and "long oak counter" in view, view
+
+
+def test_a_blind_card_is_not_shown_the_room_at_the_opening(temp_db):
+    """The third stage, the scene's opening, through the same floor."""
+    import agents.perception as perception
+
+    def opening(senses):
+        ctx, char_id = _kitchen_ctx(temp_db, senses=senses)
+        ctx.director_establish = {"sensory_events": [
+            {"kind": "sound", "room": "kitchen", "level": "loud",
+             "detail": KETTLE}]}
+        return perception.perception_establish(
+            ctx, nonce=0)["views"].get(str(char_id)) or ""
+
+    seen = opening(ORDINARY)
+    assert "silver coin" in seen and "The Yard" in seen, seen
+    blind = opening(BLIND)
+    for unseen in ("You can see", "long oak counter", "silver coin",
+                   "The Yard"):
+        assert unseen not in blind, (unseen, blind)
+    assert "You are in Kitchen" in blind and KETTLE in blind.casefold(), blind
+    deaf = opening(DEAF)
+    assert KETTLE not in deaf.casefold() and "din" not in deaf, deaf
+    assert "silver coin" in deaf, deaf

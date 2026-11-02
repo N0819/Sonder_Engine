@@ -3353,7 +3353,7 @@ def player_handle_for_mind(chat, viewer_name):
     greeting launch's answer to the same question). Never the name to a
     stranger, and never "the player".
     """
-    from agents.common_names import _recognizes
+    from agents.common import _recognizes
     from story.greetings import player_handle_for
     persona = persona_of(chat)
     name = persona_name(persona)

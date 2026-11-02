@@ -17,6 +17,7 @@ from agents.composer_common import (
     _en,
     _noun_phrase,
     _t,
+    _with_full_stop,
     standing_key,
 )
 
@@ -213,8 +214,7 @@ def room_content_percepts(*groups):
             desc = " ".join(str(entry.get("what") or "").split())
             if not desc:
                 continue
-            if desc[-1:] not in ".!?":
-                desc += "."
+            desc = _with_full_stop(desc)
             # Keyed on the subject's own uid where it has one, so a crowd that
             # thins from a crush to a press is a CHANGED percept and re-renders
             # in a delta view, while the same crowd unchanged stays furniture.
@@ -266,7 +266,10 @@ def room_content_percepts(*groups):
                 dedupe = standing_key("content", subject, (desc,))
             out.append(Percept(
                 kind="ambient", channel="sight",
-                data={"desc": desc},
+                # `kept`: a thing in the observer's own keeping is known by
+                # its weight in the hand, so no sense card takes it
+                # (`perception._card_admitted`).
+                data={"desc": desc, **({"kept": True} if kept_in else {})},
                 salience=0.35,
                 dedupe_key=dedupe,
             ))
@@ -302,8 +305,7 @@ def chatter_percepts(entries):
         desc = " ".join(str(entry.get("what") or "").split())
         if not desc:
             continue
-        if desc[-1:] not in ".!?":
-            desc += "."
+        desc = _with_full_stop(desc)
         if entry.get("kind") == "fragment":
             data = {"desc": desc}
             for field in ("speaker_label", "act", "other_label",

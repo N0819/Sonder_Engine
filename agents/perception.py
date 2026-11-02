@@ -279,6 +279,7 @@ from agents.perception_scrub import (  # noqa: F401
     _composer_scrub_surface,
     _composer_tripwires,
     _disguise_leak_check,
+    _disguise_leak_checks,
     _excerpt_in,
     _inverted_motion_check,
     _redact_concealed_from_event,

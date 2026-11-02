@@ -9,7 +9,6 @@ Carved verbatim from `agents/composer.py` on 2026-11-01;
 from __future__ import annotations
 
 import logging
-import re
 from .common import (
     _appearance_as_prose,
     _base_from_third_person_s,
@@ -50,14 +49,41 @@ from agents.composer_render import (
 # Layer B -- the episode renderer (memory mode)
 # --------------------------------------------------------------------------
 
-#: English compatibility view; the live table is read per-language below.
-_YOU_TO_ME = tuple(
-    (re.compile(pattern), replacement)
-    for pattern, replacement in _ENGLISH_COMPOSITOR["second_to_first"]
-)
-
-
 _GENERIC_LABELS = frozenset(_ENGLISH_COMPOSITOR["generic_labels"])
+
+
+def _observed_conduct(p, surface, key, **extra):
+    """"I saw/heard <label> <the act in its base form>." -- the act's
+    surface with its verbs turned, through `key` (`episode_act`,
+    `episode_communication[_via]`), or the observable predicate where the
+    leading verb cannot be turned."""
+    words = surface.split()
+    if words:
+        base = _base_from_third_person_s(words[0])
+        if base:
+            # EVERY VERB OF THE ACTOR'S OWN PHRASES after "I saw X" takes
+            # the base form, by the one rule the mind's own attempt is
+            # turned by (`_verbs_in_base`): only the first verb was, and the
+            # lighthouse probe's keeper filed "I saw Rhona Carrick dig into
+            # her jacket and brings out a sealed letter" (2026-10-20, chat 2
+            # row 40). Where the rule cannot turn the phrase exactly, the
+            # first verb alone is turned, as before.
+            turned = _verbs_in_base(surface).split()
+            if turned:
+                head = turned[0]
+                action = (head if head.isupper() and len(head) > 1
+                          else head[:1].lower() + head[1:])
+                rest = " ".join(turned[1:]).rstrip(".")
+            else:
+                action, rest = base, " ".join(words[1:]).rstrip(".")
+            ending = f" {rest}." if rest else "."
+            return _en(key, label=p.source_label, action=action,
+                       ending=ending, **extra)
+    sentence = _observable_predicate(p.source_label, surface)
+    if sentence and extra.get("via"):
+        sentence = _en("speech_via", sentence=sentence.rstrip("."),
+                       via=extra["via"])
+    return sentence or ""
 
 
 def _episode_sentence(p):
@@ -106,6 +132,18 @@ def _episode_sentence(p):
                 "episode_conducted", label=_cap(p.source_label), body=body)
         return _en("episode_speech", label=p.source_label, body=body)
     if p.kind == "act":
+        if p.data.get("unseen"):
+            # HEARD, NOT SEEN, AND NOBODY NAMED: what crossed from the rear
+            # arc is that something moved, and where (`act_percept`). This
+            # fell to the `shapes` branch below with an empty label --
+            # " moved, too little of it to make out." -- the bearing gone and
+            # a sound filed as a sight (audit agents_composer F5,
+            # 2026-11-01). The bearing is the observer's own ("behind you"),
+            # turned into memory's first person.
+            bearing = str(p.data.get("bearing") or "").strip()
+            return _first_person(
+                _en("episode_act_heard_placed", where=bearing) if bearing
+                else _en("episode_act_heard"))
         if p.fidelity == "shapes":
             room = str(p.data.get("room") or "")
             if room:
@@ -114,31 +152,19 @@ def _episode_sentence(p):
                            where=_en("presence_in_room", room=room))
             return _en("episode_act_shapes", label=_cap(p.source_label))
         surface = _said_as_mine(p.data, "surface")
-        words = surface.split()
-        if words:
-            base = _base_from_third_person_s(words[0])
-            if base:
-                # EVERY VERB OF THE ACTOR'S OWN PHRASES after "I saw X" takes
-                # the base form, by the one rule the mind's own attempt is
-                # turned by (`_verbs_in_base`): only the first verb was, and the
-                # lighthouse probe's keeper filed "I saw Rhona Carrick dig into
-                # her jacket and brings out a sealed letter" (2026-10-20, chat 2
-                # row 40). Where the rule cannot turn the phrase exactly, the
-                # first verb alone is turned, as before.
-                turned = _verbs_in_base(surface).split()
-                if turned:
-                    head = turned[0]
-                    action = (head if head.isupper() and len(head) > 1
-                              else head[:1].lower() + head[1:])
-                    rest = " ".join(turned[1:]).rstrip(".")
-                else:
-                    action, rest = base, " ".join(words[1:]).rstrip(".")
-                ending = f" {rest}." if rest else "."
-                return _en(
-                    "episode_act", label=p.source_label,
-                    action=action, ending=ending)
-        sentence = _observable_predicate(p.source_label, surface)
-        return sentence or ""
+        return _observed_conduct(p, surface, "episode_act")
+    if p.kind == "communication":
+        # A REPORTED ACT OF SPEECH IS REMEMBERED AS HEARD. This renderer had
+        # no branch for it, so "Rhona warns the tide is turning" reached the
+        # view and no English memory, while the Japanese episode filed it
+        # (audit agents_composer F6, 2026-11-01). The same verb turning an
+        # act gets, and the channel it came over, as a line's memory keeps
+        # it (`episode_speech_via`).
+        surface = str(p.data.get("surface") or "").strip()
+        via = str(p.data.get("via") or "").strip()
+        return _observed_conduct(
+            p, surface, "episode_communication_via" if via
+            else "episode_communication", via=via)
     if p.kind == "cue":
         cue = str(p.data.get("cue") or "").strip()
         return _en("episode_cue", label=p.source_label, cue=cue) if cue else ""
@@ -367,6 +393,12 @@ def episode_signature(p):
         # ambient line is keyed by what it says already, and a look at a
         # vista said the standing line's words and was dropped as a repeat
         # of it -- in no memory at all (review 2026-10-05).
+        return ""
+    if p.kind == "act" and (p.data or {}).get("unseen"):
+        # A movement HEARD is keyed by its body already (`act-heard:`), and
+        # its sentence names nobody, so every such percept signed the same
+        # string: one body's movement at the onset swallowed another body's
+        # at the outcome as a "repeat" (audit agents_composer F5).
         return ""
     try:
         return " ".join(str(_episode_sentence(p) or "").split()).casefold()

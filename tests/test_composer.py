@@ -559,8 +559,11 @@ def test_residue_is_the_whole_output_for_a_non_awake_mind():
 # ---------------------------------------------------------------------------
 
 def test_explicit_look_intent_reads_structured_interpretation():
-    assert perception._explicit_look_intent(
-        {"location_query": "the far shelf"}) is True
+    # `location_query` was read here and nothing writes it (audit
+    # agents_perception F11, 2026-11-01); the declared look is the field.
+    assert perception._explicit_look_intent({"sequence": [
+        {"type": "action", "look": "around",
+         "attempt": "turns slowly in place"}]}) is True
     assert perception._explicit_look_intent({"sequence": [
         {"type": "action", "attempt": "examines the mural closely",
          "observable": "examines the mural closely"}]}) is True

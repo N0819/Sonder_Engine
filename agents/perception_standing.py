@@ -52,6 +52,7 @@ from .common import (
 )
 
 from agents.perception_bodies import _bare_body_details, _self_body_detail
+from agents.perception_senses import _channels_the_card_cuts
 
 
 def _standing_contacts_for(scene, observer_name):
@@ -212,7 +213,7 @@ def _composer_bare_details(rows):
     for row in rows or []:
         if not isinstance(row, dict):
             continue
-        label = str(row.get("body") or "someone").strip()
+        label = str(row.get("body") or composer._t("someone")).strip()
         for region, surface in (row.get("regions") or {}).items():
             for place, detail in _bare_body_details(region, surface):
                 rendered = _self_body_detail(detail) if label == "you" else detail
@@ -419,6 +420,16 @@ def _with_body_description(appearance, described):
     return "%s; %s" % (appearance.rstrip(" ;"), described)
 
 
+def _feature_rows(sc, name, sweep=False):
+    """`feature_visibility` for (observer, sweep), derived once per read pass:
+    the furniture, the things and the openings each asked it of the same
+    observer, three times a stage (audit agents_perception E3, 2026-11-01).
+    By reference inside a pass -- every reader here only reads the rows."""
+    from world.scene_memo import scene_memo
+    return scene_memo(sc, ("feature_visibility", str(name), bool(sweep)),
+                      lambda: feature_visibility(sc, name, sweep=bool(sweep)))
+
+
 def _visible_features(sc, name, room, *, sweep=False):
     """The room's furniture as THIS observer's eyes reach it, or None.
 
@@ -433,7 +444,7 @@ def _visible_features(sc, name, room, *, sweep=False):
     """
     if not room or not room_has_geometry(sc, room):
         return None
-    rows = feature_visibility(sc, name, sweep=bool(sweep))
+    rows = _feature_rows(sc, name, sweep)
     # ...save a door whose edge says what it is like (`desc`): the exits
     # digest names the way through, and this is the door itself, where it
     # stands from here -- once on an anchor minted on top of the edge, now
@@ -517,7 +528,7 @@ def _visible_things(sc, name, room, *, sweep=False, bodies=()):
     # Rule 5's evidence, read once: which anchors this observer's eyes reach,
     # and what each is called.
     seen_anchors = {}
-    for row in (feature_visibility(sc, name, sweep=bool(sweep)) or ()):
+    for row in (_feature_rows(sc, name, sweep) or ()):
         if row.get("visible"):
             seen_anchors[str(row.get("anchor") or "")] = str(row.get("desc") or "")
     # Rule 4: the room's own authored furniture, by anchor id and by name.
@@ -683,8 +694,8 @@ def _visible_openings(sc, name, room, *, sweep=False, gate=None,
 
     seen_doors = None
     if room_has_geometry(sc, room):
-        seen_doors = {r["anchor"] for r in feature_visibility(
-            sc, name, sweep=bool(sweep)) if r.get("implicit") and r["visible"]}
+        seen_doors = {r["anchor"] for r in _feature_rows(sc, name, sweep)
+                      if r.get("implicit") and r["visible"]}
     out = []
     for edge in effective_adjacent(sc, room) or ():
         if not isinstance(edge, dict) or not edge.get("to"):
@@ -847,6 +858,21 @@ def _was_hearing_this_room(prev_standing, room):
     return any(composer._subject_prefix(key) == want for key in prev_standing)
 
 
+def _heard_without_eyes(shape, senses):
+    """A sound shape as a SIGHTLESS ear has it. The shape is graded by ear
+    and placed by eye: its `groups` are the visible anchors the noise is
+    graded at and its `openings` the doorways in view a sound comes through
+    (`spatial_sound_field.sound_shape` rules b and c), so an authored-blind
+    card was told "The noise from the generator is a din at the long oak
+    counter" -- an anchor it cannot see, placed (audit agents_perception
+    F1, 2026-11-01). What the ear has stays: how loud it is where the body
+    stands, and the sources it hears. Unchanged for every card that sees."""
+    if not isinstance(shape, dict) or "sight" not in _channels_the_card_cuts(
+            senses):
+        return shape
+    return {**shape, "groups": [], "openings": []}
+
+
 def _composer_standing_percepts(sc, p, name, others, display_map, known, *,
                                 entity_state=None, appearance_changed=(),
                                 appearance_deltas=None, prev_seen=None,
@@ -910,7 +936,7 @@ def _composer_standing_percepts(sc, p, name, others, display_map, known, *,
     if env:
         percepts.append(env)
     if room:
-        soundscape = composer.soundscape_percept(
+        soundscape = composer.soundscape_percept(_heard_without_eyes(
             sound_shape(sc, name, sound=sound, room=room, sweep=sweep)
             # AN EVEN ROOM'S STEADY SOUND (DESIGN_SOUND_FIELD § 17): the
             # shape speaks only for an uneven room, and a clock in a quiet
@@ -920,6 +946,7 @@ def _composer_standing_percepts(sc, p, name, others, display_map, known, *,
             # so the ceased branch below and the habituation read one
             # ledger for both.
             or sound_fill(sc, name, sound=sound, room=room, sweep=sweep),
+            p.get("sense_card")),
             room)
         if soundscape:
             percepts.append(soundscape)
@@ -1145,7 +1172,7 @@ def _composer_standing_percepts(sc, p, name, others, display_map, known, *,
                      if prune_appearance and changed and saw_before else "")
             percepts.append(composer.appearance_percept(
                 b_name, label, description, force=changed, delta=delta,
-                reearn=reencountered))
+                reearn=reencountered, held=saw_before))
     if entity_state:
         state_percept = composer.body_state_percept(entity_state)
         if state_percept:
@@ -1237,8 +1264,10 @@ def _composer_standing_percepts(sc, p, name, others, display_map, known, *,
     region_labels = {name: "you"}
     for body in others:
         if body.get("name"):
+            # The story's word for a body the map cannot name, never the
+            # English literal (audit agents_composer F9, 2026-11-01).
             region_labels[body["name"]] = display_map.get(
-                body["name"], "someone")
+                body["name"], composer._t("someone"))
     rows = observer_body_regions(sc, name, region_labels,
                                  extra_parts=extra_parts)
     percepts.extend(
@@ -1248,7 +1277,7 @@ def _composer_standing_percepts(sc, p, name, others, display_map, known, *,
     # when the two features merged -- landed the whole extra-parts feature
     # silently dead on the live path: gated correctly, rendered nowhere.
     percepts.extend(composer.body_part_percepts([
-        (str(row.get("body") or "someone"), part)
+        (str(row.get("body") or composer._t("someone")), part)
         for row in rows or [] if isinstance(row, dict)
         for part in (row.get("part_data") or [])
     ]))

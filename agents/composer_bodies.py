@@ -71,7 +71,7 @@ def body_part_percepts(rows):
             count = 1
         out.append(Percept(
             kind="body_part", channel="sight",
-            source_label=str(label or "someone"),
+            source_label=str(label or _t("someone")),
             data={"part": kind, "count": count,
                   "at": str(part.get("at") or "torso"),
                   "aspect": str(part.get("aspect") or "back"),
@@ -326,7 +326,10 @@ def _pose_referent(scene, observer_name, display_map, co_present, other,
         if same_subject(scene, text, str(name or "")):
             return label
     if _names_a_body(scene, text, co_present):
-        return "someone" if is_self else None
+        # In the story's own word: the Japanese adapter translates only the
+        # self label, so a literal "someone" reached a Japanese page (audit
+        # agents_composer F9, 2026-11-01).
+        return _t("someone") if is_self else None
     entity = _entity_named(scene, text)
     named = str((entity or {}).get("name") or "").strip()
     if named:
@@ -468,7 +471,7 @@ def pose_percepts(scene, observer_name, co_present, display_map,
                 continue
             if entity_arc(scene, observer_name, name) == "rear":
                 continue
-            label = display_map.get(name) or "someone"
+            label = display_map.get(name) or _t("someone")
         # Every exact handle for the receiving observer becomes second person
         # before it enters the IR.  This applies to OTHER bodies' details too:
         # ``Mara ... squeezing Rhea's hand`` in Rhea's own view must
@@ -478,6 +481,10 @@ def pose_percepts(scene, observer_name, co_present, display_map,
         pose = {f: (_no_engine_ids(scene, pose[f])
                     if f in _POSE_FREE_TEXT else pose[f])
                 for f in pose}
+        # WHAT THE ARRANGEMENT IS, before this observer's words for it: the
+        # ledger key is cut from this (below), never from the scrubbed and
+        # relabelled fields the sentence is built from.
+        authored = dict(pose)
         if scrub is not None:
             pose = {f: (scrub(pose[f]) if f in _POSE_FREE_TEXT and pose[f]
                         else pose[f])
@@ -559,9 +566,22 @@ def pose_percepts(scene, observer_name, co_present, display_map,
             fidelity="full" if level == "full" else "degraded",
             data={**data, **firsts, "directed_at_self": is_self},
             salience=0.3,
+            # KEYED ON WHAT THE ARRANGEMENT IS, NOT ON WHAT THIS OBSERVER
+            # CALLS ITS PARTS. `support` and `relative_to` render through the
+            # observer's display map and the free text through its identity
+            # scrub, so learning a name re-keyed an unchanged pose: Xan
+            # leaning against "the woman in grey" and against "Yul" were two
+            # arrangements, and the player view led with "The tall man is
+            # leaning against Yul." as a numbered change (audit
+            # agents_composer F7, 2026-11-01 -- the 1.70 class `scent_percepts`
+            # left long ago). The authored fields, hashed, and only those the
+            # sight grade delivered (a silhouette's posture alone). A new tag,
+            # so a ledger keyed the old way reads as first sight -- the
+            # background, never a claim that anything moved.
             dedupe_key=standing_key(
-                "pose", (body_key(name),),
-                tuple(str(data.get(f) or "")
+                "arrangement", (body_key(name),),
+                tuple(str(authored.get(f) or "")
+                      if f == "posture" or level == "full" else ""
                       for f in (_OWN_POSE_KEY_FIELDS if is_self
                                 else _POSE_RENDER_FIELDS))),
         ))
@@ -592,7 +612,7 @@ _POSE_FREE_TEXT = ("posture", "constraint", "detail")
 
 
 def appearance_percept(source_name, label, description, *, force=False,
-                       delta="", reearn=False):
+                       delta="", reearn=False, held=False):
     """The FULL authored appearance -- discovery/structural-change data, first
     mention only (the render ledger gates re-emission; ``force=True`` marks a
     structural change this beat, which re-earns the description).
@@ -615,6 +635,11 @@ def appearance_percept(source_name, label, description, *, force=False,
     beat 3 is never described again in a two-hundred-beat story, however
     many times they leave and come back.
 
+    ``held=True`` says THIS observer held the body at full sight last beat
+    (perception's `saw_before`), which is what makes a `force` a change FOR
+    THEM: the observation projection files a moved body under the changes
+    noticed only then (`observations_from_render`).
+
     `description` must already be identity-safe for this observer
     (name-stripped when the observer does not recognize the body). The
     canonical name is folded into an opaque `body_key` for the ledger; it
@@ -624,6 +649,7 @@ def appearance_percept(source_name, label, description, *, force=False,
         data={"source_key": body_key(source_name),
               "description": description, "force": bool(force),
               **({"reearn": True} if reearn else {}),
+              **({"held": True} if held else {}),
               **({"delta": str(delta)} if str(delta or "").strip() else {})},
         salience=0.5,
         dedupe_key=standing_key("described", (body_key(source_name),),
@@ -786,7 +812,7 @@ def body_region_percepts(bare_details):
     for body_label, place, detail in bare_details or []:
         out.append(Percept(
             kind="body_region", channel="sight",
-            source_label=str(body_label or "someone"),
+            source_label=str(body_label or _t("someone")),
             data={"place": place, "detail": detail},
             salience=0.3,
             dedupe_key=standing_key(

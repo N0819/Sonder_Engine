@@ -18,6 +18,7 @@ from language_runtime import (
     current_language_id,
     language_pack,
     linguistic,
+    on_packs_reloaded,
     renderer_for,
 )
 from world.spatial import sense_adjusted
@@ -80,14 +81,31 @@ def _t(key, **values):
     return str(template).format(**values)
 
 
+#: `_pack_words`' answers by (active language, table): built once per
+#: language, not once per call (audit agents_composer E3, 2026-11-01: a
+#: frozenset per call, up to three calls per spliced description). Dropped
+#: whenever the packs reload (`language_runtime.on_packs_reloaded`), so a
+#: reloaded pack is never answered from the one it replaced.
+_PACK_WORDS_CACHE: dict = {}
+
+
 def _pack_words(name):
     """A determiner table from the ACTIVE pack, empty where it has none, so a
     language that takes no article leaves every branch a no-op in fact and
     not only in the docstring."""
     try:
-        return frozenset(str(w).casefold() for w in (_compositor(name) or ()))
+        key = (current_language_id.get(), name)
+        hit = _PACK_WORDS_CACHE.get(key)
+        if hit is None:
+            hit = frozenset(str(w).casefold()
+                            for w in (_compositor(name) or ()))
+            _PACK_WORDS_CACHE[key] = hit
+        return hit
     except Exception:
         return frozenset()
+
+
+on_packs_reloaded(_PACK_WORDS_CACHE.clear)
 
 
 def _lower_lead(text):
@@ -118,6 +136,22 @@ def _strip_sentence_ends(text):
     except Exception:
         ends = ".!?"
     return text.rstrip(ends + ";:,、；：").rstrip()
+
+
+def _with_full_stop(text):
+    """`text` ending a sentence in the ACTIVE pack's own stops: kept where it
+    already ends on one, else given the pack's full stop (`full_stop`). Layer
+    A writes text a language adapter prints verbatim, so an ASCII-only test
+    here put "." after "。" on a Japanese page (audit agents_composer F9,
+    2026-11-01: 「群衆がざわめいている。.」). English is byte-identical."""
+    text = str(text or "")
+    if not text:
+        return text
+    try:
+        ends = str(_ling("_SENTENCE_ENDS") or ".!?")
+    except Exception:
+        ends = ".!?"
+    return text if text[-1:] in ends else text + _t("full_stop")
 
 
 @dataclass(frozen=True)

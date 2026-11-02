@@ -257,7 +257,13 @@ def act_percept(scene, event, observer_name, actor_name, rel, *,
         kind="act", channel="sight", source_label=display,
         data={"surface": surface,
               **({"surface_mine": mine} if mine else {}),
-              "directed_at_self": bool(
+              # THE STRUCTURAL ANSWER FIRST: the event's own typed targets
+              # name the observer. The English regex over the rewritten
+              # surface was the only test, so a Japanese act on the observer
+              # said False where the same English act said True (audit
+              # agents_composer F10, 2026-11-01); it stays as the fallback
+              # for an act whose targets are not typed.
+              "directed_at_self": bool(targets_self or
                   re.search(r"\byou\b|\byour\b", surface, re.I))},
         salience=0.65,
         suddenness=_surface_suddenness(surface),

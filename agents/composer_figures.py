@@ -24,12 +24,14 @@ from world.spatial import (
     visual_level_between,
 )
 from .common import _recognizes, _unknown_actor_label, stranger_label_ladder
+from language_runtime import current_language_id
 
 from agents.composer_common import (
     Percept,
     _ENGLISH_COMPOSITOR,
     _compositor,
     _noun_phrase,
+    _pack_words,
     _sense_graded,
     _strip_sentence_ends,
     _t,
@@ -85,8 +87,8 @@ def _label_core(text):
                 and text.casefold().startswith(prefix.casefold()):
             text = text[len(prefix):].strip()
             break
-    articles = frozenset(str(a).casefold() for a in _compositor("articles"))
-    ordinals = frozenset(str(w).casefold() for w in _ORDINAL_WORDS.values())
+    articles = _pack_words("articles")
+    ordinals = _ENGLISH_ORDINALS
     parts = text.split()
     while parts and parts[0].casefold() in articles:
         parts = parts[1:]
@@ -129,6 +131,10 @@ _ORDINAL_WORDS = {
     int(number): str(word)
     for number, word in _ENGLISH_COMPOSITOR["ordinal_words"].items()
 }
+
+
+#: The English ordinal words, casefolded, for `_label_core` -- built once.
+_ENGLISH_ORDINALS = frozenset(str(w).casefold() for w in _ORDINAL_WORDS.values())
 
 
 def _active_ordinal_words():
@@ -190,7 +196,30 @@ def _ordinal_label(label, n):
     return _t("ordinal_label", ordinal=word, label=core)
 
 
-def assign_stranger_labels(bodies):
+def _ladder_of(scene, name, appearance, aliases, role, noun):
+    """`common.stranger_label_ladder` for one stranger, once per read pass
+    over `scene` (`world.scene_memo`): it depends only on the stranger and
+    the active pack, and was recomputed for every observer at every call
+    site -- ~3 ms a body, so a room of six mutual strangers paid it some
+    thirty times a stage (audit agents_composer E1, 2026-11-01). Outside a
+    pass, or with no scene, it runs as before. The ladder is read, never
+    written, by its one caller."""
+    def build():
+        return stranger_label_ladder(
+            name, appearance, aliases, role=role, head_noun=noun or None)
+    if scene is None:
+        return build()
+    try:
+        key = ("stranger_label_ladder", current_language_id.get(), str(name),
+               str(appearance or ""), tuple(str(a) for a in aliases or ()),
+               str(role or ""), str(noun or ""))
+    except TypeError:
+        return build()
+    from world.scene_memo import scene_memo
+    return scene_memo(scene, key, build)
+
+
+def assign_stranger_labels(bodies, scene=None):
     """name -> distinguishing label, chosen jointly against the others present.
 
     `bodies` is ``[(name, appearance, aliases)]`` -- or
@@ -232,8 +261,7 @@ def assign_stranger_labels(bodies):
         # phrase and the steps are the feature phrases the summary attached
         # to its noun, one at a time ("the fox woman with six tails" -> "...
         # and amber eyes"), so no step is ever a cut inside a phrase.
-        base, wider = stranger_label_ladder(
-            name, appearance, aliases, role=role, head_noun=noun or None)
+        base, wider = _ladder_of(scene, name, appearance, aliases, role, noun)
         labels[str(name)] = base
         ladders[str(name)] = wider
     for step in range(max((len(l) for l in ladders.values()), default=0)):
@@ -351,7 +379,7 @@ def observer_display_map(scene, observer_name, co_present, known,
             out[name] = _unfamiliar_person()
         else:
             silhouettes.append((name, body.get("surface"), level))
-    out.update(assign_stranger_labels(strangers))
+    out.update(assign_stranger_labels(strangers, scene=scene))
     out.update(_silhouette_labels(silhouettes))
     return out
 
@@ -385,9 +413,10 @@ def _silhouette_labels(silhouettes):
 # import before, so a Japanese reader in a dim room was told about "an
 # indistinct figure" -- and `generic_labels` (which filters these out of
 # memory entities) is per-pack, so the English form also got indexed as if it
-# named somebody. The English compat exports stay for tests and audits.
+# named somebody. The English compat export stays for tests and audits
+# (`DIM_FIGURE`, read by three test files); its plural had no reader anywhere
+# and went (audit agents_composer F11, 2026-11-01).
 DIM_FIGURE = str(_ENGLISH_COMPOSITOR["dim_figure"])
-DIM_FIGURES = str(_ENGLISH_COMPOSITOR["dim_figures"])
 
 
 def _dim_figure(plural=False):

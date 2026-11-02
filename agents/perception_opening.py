@@ -28,7 +28,6 @@ from story.scene import (
     get_scene,
     is_player_speaker,
     persona_of,
-    senses_of,
     sheet_state,
 )
 from world.spatial import (
@@ -68,24 +67,19 @@ from agents.perception_bodies import (
     _subject_disguise_context,
 )
 from agents.perception_senses import (
-    _behind_rooms,
-    _behind_sources,
+    _card_admitted,
     _felt_percepts_for,
-    _focus_target,
     _in_plain_view,
     _own_name_forms,
-    _proximity_to_sources,
     _sense_card,
     _sound_field_for,
     _source_channels,
     _speech_bearing,
-    _visible_rooms_for,
     _voice_register_for,
     _voice_sound_for,
     _with_comm_channel,
 )
 from agents.perception_identity import (
-    _ambient_location_for,
     _attributed_label,
     _character_known_places,
     _charter_titles_of,
@@ -151,68 +145,62 @@ def perception_establish(ctx, nonce):
     # One registry read for the whole stage; each perceiver's room reuses it
     # through the memo inside (see `chatter_inputs`).
     chatter = chatter_inputs(ctx.chat.id, sc, turn_idx=ctx.turn.idx)
-    perceivers = [{
-        "id": "player", "name": p_name, "room": p_room,
-        "pronouns": (pers.get("identity") or {}).get("pronouns") or {},
-        "room_name": room_display_name(p_rdata, p_room) or "an unspecified area",
-        "room_notes": _room_notes_for_view(p_rdata, p_room, ctx, sc),
-        "ambient_location": _ambient_location_for(sc, p_room),
-        "crowds": crowds_for_room(ctx.chat.id, sc, p_room, chatter),
-        "chatter": chatter_for_room(
-            ctx.chat.id, sc, p_room, chatter,
-            attending=attending_this_room(sc, p_name, p_room)),
-        "couriers": couriers_for_room(ctx.chat.id, sc, p_room, chatter),
-        "notices": artifacts_for_room(ctx.chat.id, sc, p_room, chatter),
-        "visible_rooms": _visible_rooms_for(sc, p_name, p_room),
-        "known_places": _player_known_places(ctx),
-        "senses": senses_of(pers), "sense_card": _sense_card(pers),
-        "attention": "engaged",
-        "knows_identity": True,
-        "entity_state": p_state,
-        **_source_channels(sc, p_name, p_room, sources,
-                           senses=_sense_card(pers),
-                           sound=_sound_field_for(ctx, sc, p_name, p_room)),
-        "proximity_to_sources": _proximity_to_sources(sc, p_name, sources),
-        "behind_sources": _behind_sources(sc, p_name, sources),
-        "behind_rooms": _behind_rooms(sc, p_name),
-        "focus_target": _focus_target(sc, p_name),
-    }]
-
-    for c in ctx.cast:
-        sh, act, _ = sheet_state(c)
-        r = character_room(sc, sh)
-        rdata = (sc.get("rooms") or {}).get(r) if r else None
-        c_sources = [s for s in sources if s["name"] != character_name(sh)]
-        perceivers.append({
-            "id": c["id"], "name": character_name(sh), "room": r,
-            # Through the ONE identity reader, never the stored blob: a card
-            # that parked its pronouns at top level is repaired only for
-            # whoever normalizes, so the raw read handed this view -- the one
-            # the narrator falls back on -- nothing at all (review 2026-09-07
-            # B12). Same at the two sibling builders below.
-            "pronouns": character_identity(sh)["pronouns"],
-            "room_name": room_display_name(rdata, r) or "an unspecified area",
-            "room_notes": _room_notes_for_view(rdata, r, ctx, sc),
-            "ambient_location": _ambient_location_for(sc, r),
-            "crowds": crowds_for_room(ctx.chat.id, sc, r, chatter),
+    # ONE READ PASS OVER THE PERCEIVER LOOP (audit agents_perception E1,
+    # 2026-11-01): every relation and sight below is a pure read of the
+    # scene, and `_presence_bodies`, which writes it, runs after. Nine
+    # payload fields nothing read went with the pass (F9:
+    # `ambient_location`, `visible_rooms`, the prose `senses`, `attention`,
+    # `knows_identity`, `proximity_to_sources`, `behind_sources`,
+    # `behind_rooms`, `focus_target`).
+    with scene_read_pass(sc):
+        perceivers = [{
+            "id": "player", "name": p_name, "room": p_room,
+            "pronouns": (pers.get("identity") or {}).get("pronouns") or {},
+            "room_name": room_display_name(p_rdata, p_room) or "an unspecified area",
+            "room_notes": _room_notes_for_view(p_rdata, p_room, ctx, sc),
+            "crowds": crowds_for_room(ctx.chat.id, sc, p_room, chatter),
             "chatter": chatter_for_room(
-                ctx.chat.id, sc, r, chatter,
-                attending=attending_this_room(sc, character_name(sh), r)),
-            "couriers": couriers_for_room(ctx.chat.id, sc, r, chatter),
-            "notices": artifacts_for_room(ctx.chat.id, sc, r, chatter),
-            "visible_rooms": _visible_rooms_for(sc, character_name(sh), r),
-            "known_places": _character_known_places(c),
-            "senses": senses_of(sh), "sense_card": _sense_card(sh),
-            "attention": act.get("goal") or "ambient",
-            "knows_identity": p_name in (known.get(character_name(sh)) or []),
-            "entity_state": entity_states.get(character_name(sh)) or {},
-            **_source_channels(sc, character_name(sh), r, c_sources,
-                               senses=_sense_card(sh),
-                               sound=_sound_field_for(
-                                   ctx, sc, character_name(sh), r)),
-            "proximity_to_sources": _proximity_to_sources(sc, character_name(sh), c_sources),
-            "behind_sources": _behind_sources(sc, character_name(sh), c_sources),
-        })
+                ctx.chat.id, sc, p_room, chatter,
+                attending=attending_this_room(sc, p_name, p_room)),
+            "couriers": couriers_for_room(ctx.chat.id, sc, p_room, chatter),
+            "notices": artifacts_for_room(ctx.chat.id, sc, p_room, chatter),
+            "known_places": _player_known_places(ctx),
+            "sense_card": _sense_card(pers),
+            "entity_state": p_state,
+            **_source_channels(sc, p_name, p_room, sources,
+                               senses=_sense_card(pers),
+                               sound=_sound_field_for(ctx, sc, p_name, p_room)),
+        }]
+
+        for c in ctx.cast:
+            sh, act, _ = sheet_state(c)
+            r = character_room(sc, sh)
+            rdata = (sc.get("rooms") or {}).get(r) if r else None
+            c_sources = [s for s in sources if s["name"] != character_name(sh)]
+            perceivers.append({
+                "id": c["id"], "name": character_name(sh), "room": r,
+                # Through the ONE identity reader, never the stored blob: a
+                # card that parked its pronouns at top level is repaired only
+                # for whoever normalizes, so the raw read handed this view --
+                # the one the narrator falls back on -- nothing at all (review
+                # 2026-09-07 B12). Same at the two sibling builders below.
+                "pronouns": character_identity(sh)["pronouns"],
+                "room_name": room_display_name(rdata, r) or "an unspecified area",
+                "room_notes": _room_notes_for_view(rdata, r, ctx, sc),
+                "crowds": crowds_for_room(ctx.chat.id, sc, r, chatter),
+                "chatter": chatter_for_room(
+                    ctx.chat.id, sc, r, chatter,
+                    attending=attending_this_room(sc, character_name(sh), r)),
+                "couriers": couriers_for_room(ctx.chat.id, sc, r, chatter),
+                "notices": artifacts_for_room(ctx.chat.id, sc, r, chatter),
+                "known_places": _character_known_places(c),
+                "sense_card": _sense_card(sh),
+                "entity_state": entity_states.get(character_name(sh)) or {},
+                **_source_channels(sc, character_name(sh), r, c_sources,
+                                   senses=_sense_card(sh),
+                                   sound=_sound_field_for(
+                                       ctx, sc, character_name(sh), r)),
+            })
 
     # Consciousness gate (rare at opening, but a scenario may start someone
     # unconscious/asleep): overlay the establish diff onto committed conditions.
@@ -434,6 +422,9 @@ def _composer_establish_views(ctx, sc, perceivers, known, p_name,
                         appearances=appearances, aliases=body_aliases)
                     if percept:
                         percepts.append(percept)
+            # THE CARD'S FLOOR, after every builder (`_card_admitted`).
+            percepts = _card_admitted(percepts, p.get("sense_card"),
+                                      observer=name)
             company[pid] = _composer_company(others, display_map, percepts)
         # A scene opening is the one beat where everything is legitimately
         # new: full render for every mind, and the ledger starts here.

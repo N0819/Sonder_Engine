@@ -995,8 +995,15 @@ def _render_view_english(percepts, *, mode="character",
                 spans=[(as_beat(p), text)] + list(after.spans),
                 standing_keys=set(after.standing_keys),
                 described=after.described, verdicts=dict(after.verdicts))
+        # A VOICE ONCE KNOWN STAYS KNOWN, asleep as awake (`carried_voices`):
+        # the ledger is replaced each beat, and filing the residue's key alone
+        # forgot every voice this mind knew, so its first line after a beat
+        # asleep re-declared each speaker's register. The Japanese renderer
+        # carried them; this one did not (audit agents_composer F8,
+        # 2026-11-01).
         return RenderedView(text=text, spans=[(p, text)],
-                            standing_keys={p.dedupe_key},
+                            standing_keys=carried_voices(prev_standing)
+                            | {p.dedupe_key},
                             described=set(prev_described))
 
     standing = sorted(

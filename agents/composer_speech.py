@@ -500,8 +500,9 @@ def speech_percept(entry, rel, observer_name, *, display, can_see,
                       "attributed": bool(str(display or "").strip()),
                       "fragment": _muffled_fragment(""),
                       "tone": "", "manner": "",
-                      "directed_at_self": _addresses(
-                          entry.get("intended_target"), observer_name)},
+                      # No word arrived, so neither did whom the line was
+                      # for (`_said_to_you`).
+                      "directed_at_self": False},
                 salience=0.5, order_key=order_key)
         return None
     channel = rel.get("comm_channel")
@@ -615,6 +616,8 @@ def speech_percept(entry, rel, observer_name, *, display, can_see,
     if fidelity in ("fragment", "voice") and name_forms \
             and own_name_said(body, name_forms):
         data["own_name"] = True
+    data["directed_at_self"] = _said_to_you(
+        fidelity, data["directed_at_self"], data.get("own_name"))
     # WHICH channel carried it, when one did. Not decoration: a voice arriving
     # over a speaker is a different fact from a voice arriving from a body in
     # the room, and a mind handed the second when the first is true has been
@@ -647,6 +650,27 @@ def speech_percept(entry, rel, observer_name, *, display, can_see,
                     if fidelity == "voice"
                     else "speech:" + _short_hash(entry.get("speaker"), body)),
     )
+
+
+def _said_to_you(fidelity, addressed_to_you, own_name=False):
+    """Whether a heard line's evidence row may say it concerned the listener.
+
+    THE PAGE DECIDES, NOT THE LINE'S ADDRESSEE. `observations_from_render`
+    copies this flag into the row the character payload and the narrator
+    packet carry, and it was set from `intended_target` at every fidelity:
+    a gaoler's "Tomorrow you hang." through a door rendered `A voice -- the
+    words do not carry.` for the prisoner and for the cook alike, and the
+    prisoner's row alone said `directed_at_self: true` (audit
+    agents_composer F1, 2026-11-01) -- the second representation carrying a
+    fact the first cannot. Whom a line is FOR rides on its words; a listener
+    holding all of them (`full`) has it, one holding pieces or the voice
+    alone does not. The one self-directed fact such a page does say is the
+    listener's own name caught in it (`own_name`, "You catch your name in
+    it."), so below `full` the flag says that and nothing about the
+    addressee."""
+    if fidelity == "full":
+        return bool(addressed_to_you)
+    return bool(own_name)
 
 
 def _trace_percept(entry, *, bearing="", order_key=0):
@@ -882,8 +906,11 @@ def _names_kept(percepts):
         if first.get(p.dedupe_key) == i and p.dedupe_key not in done:
             done.add(p.dedupe_key)
             if not (p.data or {}).get("own_name"):
+                # The name caught is the group's one self-directed fact
+                # (`_said_to_you`), so the row that says it says that too.
                 p = dataclasses.replace(p, data={**(p.data or {}),
-                                                 "own_name": True})
+                                                 "own_name": True,
+                                                 "directed_at_self": True})
         out.append(p)
     return out
 
@@ -961,9 +988,12 @@ def communication_percept(entry, rel, observer_name, *, display, can_see,
     data = {
         "surface": surface if level == "full" else "speaks indistinctly",
         "level": level, "volume": volume, "can_see": bool(can_see),
-        "directed_at_self": any(
-            _addresses(target, observer_name)
-            for target in entry.get("targets") or []),
+        # Whom it was for rides on what was heard (`_said_to_you`): "speaks
+        # indistinctly" says nothing of it.
+        "directed_at_self": _said_to_you(
+            "full" if level == "full" else "fragment",
+            any(_addresses(target, observer_name)
+                for target in entry.get("targets") or [])),
     }
     channel = rel.get("comm_channel")
     if isinstance(channel, dict) and not rel.get("same_room"):

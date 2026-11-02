@@ -184,7 +184,6 @@ from agents.composer_person import (  # noqa: F401
 )
 from agents.composer_figures import (  # noqa: F401
     DIM_FIGURE,
-    DIM_FIGURES,
     SURFACE_WIDENING_CAPS,
     _LABEL_DANGLING,
     _ORDINAL_WORDS,
@@ -398,7 +397,6 @@ from agents.composer_episode import (  # noqa: F401
     _EPISODE_SOUND_TAGS,
     _EPISODE_STANDING_KINDS,
     _GENERIC_LABELS,
-    _YOU_TO_ME,
     _episode_sentence,
     _files_as_memory,
     _render_episode_english,

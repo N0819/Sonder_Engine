@@ -29,7 +29,6 @@ from story.scene import (
     awareness_of,
     get_scene,
     persona_of,
-    senses_of,
     sheet_state,
 )
 from world.spatial import (
@@ -83,10 +82,9 @@ from agents.perception_bodies import (
     _subject_disguise_context,
 )
 from agents.perception_senses import (
+    _card_admitted,
     _addressee_name,
-    _behind_rooms,
     _felt_percepts_for,
-    _focus_target,
     _in_plain_view,
     _line_is_to,
     _own_name_forms,
@@ -96,7 +94,6 @@ from agents.perception_senses import (
     _sleep_hears,
     _sound_field_for,
     _speech_bearing,
-    _visible_rooms_for,
     _voice_register_for,
     _voice_sound_for,
     _with_comm_channel,
@@ -112,11 +109,9 @@ from agents.perception_conduct import (
     _speech_room_for,
 )
 from agents.perception_identity import (
-    _ambient_location_for,
     _attributed_label,
     _character_known_places,
     _charter_titles_of,
-    _co_present_company,
     _composer_identity_space,
     _composer_self_forms,
     _composer_unknown_sources,
@@ -132,6 +127,7 @@ from agents.perception_scrub import (
     _composer_finish_observer,
     _composer_scrub_surface,
     _disguise_leak_check,
+    _disguise_leak_checks,
     _scrub_episode_identities,
 )
 from agents.perception_standing import (
@@ -276,69 +272,68 @@ def perception_act(ctx, nonce):
     co_present.extend(_presence_bodies(
         ctx, sc, [p_room, *(b["room"] for b in co_present)], chatter))
 
-    for c in ctx.cast:
-        if c["id"] not in present_ids:
-            continue
-        sh, act, _ = sheet_state(c)
-        r = character_room(sc, sh)
-        # THE body-to-body relation builder: concealment, the
-        # threshold-crossing grace, and the three enclosure directions in one
-        # place (register L2 -- built by hand here, the enclosure flags were
-        # never set and hear_level's guards could not fire). Argument order is
-        # (observer, actor): spatial_rel stamps the light of the room being
-        # LOOKED AT, and the hand-built form passed (p_room, r), grading
-        # sight OF the actor by the light where the OBSERVER stood -- a full
-        # visual channel to an actor standing in darkness (register L6).
-        rel = spatial_rel_between(sc, character_name(sh), p_name,
-                                  observer_room=r, target_room=p_room,
-                                  sound=_sound_field_for(
-                                      ctx, sc, character_name(sh), r))
-        if _previous_open_group_continuity(
-                ctx, sc, p_name, character_name(sh), c["id"], p_room, r):
-            rel = {**rel, "open_group_continuity": True}
-        rdata = (sc.get("rooms") or {}).get(r) if r else None
-        prox_to_others, behind_others = _co_present_company(
-            sc, character_name(sh), co_present, known)
+    # ONE READ PASS OVER THE PERCEIVER LOOP (audit agents_perception E1,
+    # 2026-11-01): every relation and sight below is a pure read of the
+    # scene; `_presence_bodies`, which writes it, ran above. Nine payload
+    # fields nothing read went with the pass (F9: `ambient_location`,
+    # `visible_rooms`, the prose `senses`, `attention`,
+    # `proximity_to_sources`, `behind_sources` -- with `_co_present_company`,
+    # computed for those two alone -- `knows_identity`, `behind_rooms`,
+    # `focus_target`).
+    with scene_read_pass(sc):
+        for c in ctx.cast:
+            if c["id"] not in present_ids:
+                continue
+            sh, act, _ = sheet_state(c)
+            r = character_room(sc, sh)
+            # THE body-to-body relation builder: concealment, the
+            # threshold-crossing grace, and the three enclosure directions in one
+            # place (register L2 -- built by hand here, the enclosure flags were
+            # never set and hear_level's guards could not fire). Argument order is
+            # (observer, actor): spatial_rel stamps the light of the room being
+            # LOOKED AT, and the hand-built form passed (p_room, r), grading
+            # sight OF the actor by the light where the OBSERVER stood -- a full
+            # visual channel to an actor standing in darkness (register L6).
+            rel = spatial_rel_between(sc, character_name(sh), p_name,
+                                      observer_room=r, target_room=p_room,
+                                      sound=_sound_field_for(
+                                          ctx, sc, character_name(sh), r))
+            if _previous_open_group_continuity(
+                    ctx, sc, p_name, character_name(sh), c["id"], p_room, r):
+                rel = {**rel, "open_group_continuity": True}
+            rdata = (sc.get("rooms") or {}).get(r) if r else None
 
-        perceivers.append({
-            "id": c["id"], "name": character_name(sh), "room": r,
-            "pronouns": character_identity(sh)["pronouns"],
-            "room_name": room_display_name(rdata, r) or "an unspecified area",
-            "room_notes": _room_notes_for_view(rdata, r, ctx, sc),
-            "ambient_location": _ambient_location_for(sc, r),
-            "crowds": crowds_for_room(ctx.chat.id, sc, r, chatter),
-            "chatter": chatter_for_room(
-                ctx.chat.id, sc, r, chatter,
-                attending=attending_this_room(sc, character_name(sh), r)),
-            "couriers": couriers_for_room(ctx.chat.id, sc, r, chatter),
-            "notices": artifacts_for_room(ctx.chat.id, sc, r, chatter),
-            "visible_rooms": _visible_rooms_for(sc, character_name(sh), r),
-            "known_places": _character_known_places(c),
-            "senses": senses_of(sh), "sense_card": _sense_card(sh),
-            "attention": act.get("goal") or "ambient",
-            "spatial_to_actor": rel,
-            "visual_channel_to_actor": _sight_reaches(
-                sc, character_name(sh), act.get("actor") or "",
-                _sense_card(sh), rel=rel),
-            # ONE LINE, ONE FLOOR (PR5). This key feeds `speech_percept` and
-            # `communication_percept` and nothing else, and
-            # `composer.line_hear_level` states the contract in its own
-            # docstring: pass only a MEASURED tier, because `proximity_rel`
-            # returns "near" both as a reading and as its fallback when
-            # nobody wrote stations (6.7% of live bodies carry one), and a
-            # gate that reads the fallback as evidence of separation
-            # silences a conversation. The OUTCOME pass already passes
-            # `measured_proximity_rel`; this one passed the raw tier, so the
-            # same beat's same line was graded by two different floors --
-            # F61's class at the proximity gate.
-            "proximity_to_actor": measured_proximity_rel(
-                sc, character_name(sh), p_name),
-            "proximity_to_sources": prox_to_others,
-            "behind_sources": behind_others,
-            "knows_identity": p_name in (known.get(character_name(sh)) or []),
-            "behind_rooms": _behind_rooms(sc, character_name(sh)),
-            "focus_target": _focus_target(sc, character_name(sh)),
-        })
+            perceivers.append({
+                "id": c["id"], "name": character_name(sh), "room": r,
+                "pronouns": character_identity(sh)["pronouns"],
+                "room_name": room_display_name(rdata, r) or "an unspecified area",
+                "room_notes": _room_notes_for_view(rdata, r, ctx, sc),
+                "crowds": crowds_for_room(ctx.chat.id, sc, r, chatter),
+                "chatter": chatter_for_room(
+                    ctx.chat.id, sc, r, chatter,
+                    attending=attending_this_room(sc, character_name(sh), r)),
+                "couriers": couriers_for_room(ctx.chat.id, sc, r, chatter),
+                "notices": artifacts_for_room(ctx.chat.id, sc, r, chatter),
+                "known_places": _character_known_places(c),
+                "sense_card": _sense_card(sh),
+                "spatial_to_actor": rel,
+                "visual_channel_to_actor": _sight_reaches(
+                    sc, character_name(sh), act.get("actor") or "",
+                    _sense_card(sh), rel=rel),
+                # ONE LINE, ONE FLOOR (PR5). This key feeds `speech_percept` and
+                # `communication_percept` and nothing else, and
+                # `composer.line_hear_level` states the contract in its own
+                # docstring: pass only a MEASURED tier, because `proximity_rel`
+                # returns "near" both as a reading and as its fallback when
+                # nobody wrote stations (6.7% of live bodies carry one), and a
+                # gate that reads the fallback as evidence of separation
+                # silences a conversation. The OUTCOME pass already passes
+                # `measured_proximity_rel`; this one passed the raw tier, so the
+                # same beat's same line was graded by two different floors --
+                # F61's class at the proximity gate.
+                "proximity_to_actor": measured_proximity_rel(
+                    sc, character_name(sh), p_name),
+            })
 
     # Input-side hygiene (defense-in-depth under the output scrub below):
     # when NO perceiver in this call recognizes the player, the model has
@@ -574,14 +569,19 @@ def _composer_act_views(ctx, sc, interp, perceivers, known, p_name, p_visible,
             self_forms = _composer_self_forms(
                 name, self_forms_by_name.get(name),
                 bodies_by_name.get(name), joint_labels, display_map)
+            # ONE GATE FOR THIS OBSERVER (audit agents_perception E4,
+            # 2026-11-01): it was rebuilt for each of its three readers
+            # below, each re-running `_composer_unknown_sources` over the
+            # chat's identity space.
+            gate = _authored_prose_gate(
+                ctx, "perception_act", name, known, identity_space)
             percepts = _composer_standing_percepts(
                 sc, p, name, others, display_map, known,
                 entity_state=p.get("entity_state")
                 or _own_body_state(sc, name),
                 prev_seen=_composer_prev_seen(prev_ledger, pid),
                 seen_out=seen_bodies,
-                gate=_authored_prose_gate(
-                    ctx, "perception_act", name, known, identity_space),
+                gate=gate,
                 extra_parts=cast_parts, body_scents=body_scents,
                 body_descriptions=body_descriptions,
                 self_forms=self_forms,
@@ -594,9 +594,8 @@ def _composer_act_views(ctx, sc, interp, perceivers, known, p_name, p_visible,
                 # THIS BEAT'S sounds are the beat's, not the air of the
                 # place (`_AMBIENT_BEAT_BAND`; round 2, lane B).
                 percepts.extend(_gated_ambient_percepts(
-                    _authored_prose_gate(
-                        ctx, "perception_act", name, known, identity_space),
-                    act_sounds, p.get("room"), order_key=_AMBIENT_BEAT_BAND))
+                    gate, act_sounds, p.get("room"),
+                    order_key=_AMBIENT_BEAT_BAND))
                 _afar = heard_events(
                     sc, name, act_sounds, room=p.get("room"),
                     turn_idx=getattr(ctx.turn, "idx", None),
@@ -604,9 +603,7 @@ def _composer_act_views(ctx, sc, interp, perceivers, known, p_name, p_visible,
                 if _afar:
                     _here = str(p.get("room") or "")
                     percepts.extend(_gated_ambient_percepts(
-                        _authored_prose_gate(
-                            ctx, "perception_act", name, known,
-                            identity_space),
+                        gate,
                         [{**event, "room": _here, "room_id": _here,
                           "source_room": _here} for event, _level in _afar],
                         p.get("room"), order_key=_AMBIENT_BEAT_BAND))
@@ -882,6 +879,9 @@ def _composer_act_views(ctx, sc, interp, perceivers, known, p_name, p_visible,
                         in _onset_sounding)
                     if percept:
                         percepts.append(percept)
+            # THE CARD'S FLOOR, after every builder (`_card_admitted`).
+            percepts = _card_admitted(percepts, p.get("sense_card"),
+                                      observer=name)
             company[pid] = _composer_company(others, display_map, percepts)
         rendered = composer.render_view(
             percepts, mode="character", prev_standing=prev_standing,
@@ -920,8 +920,7 @@ def _composer_act_views(ctx, sc, interp, perceivers, known, p_name, p_visible,
     merged = dict(prev_ledger)
     merged.update(ledger)
     ctx["_composer_turn_ledger"] = merged
-    _disguise_leak_check(ctx, "perception_act", clean_views, perceivers,
-                         p_name, p_disguise_terms, p_disguise_known)
+    _disguise_leak_checks(ctx, "perception_act", clean_views, perceivers, known)
     return {
         "views": clean_views,
         "observations": observations,

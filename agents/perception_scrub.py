@@ -220,24 +220,59 @@ def _disguise_leak_check(ctx, stage, views, perceivers, subject_name,
     features. Scoped to that subject's own terms, so unrelated lore (a
     'Nine-Tailed Fox' task-force name) is never touched. The real fix is
     upstream -- feeding the disguised appearance so correct text is generated
-    -- this only catches a model that leaked anyway."""
+    -- this only catches a model that leaked anyway.
+
+    A TRIPWIRE THAT CAN FIRE. A term is found as a whole word in whatever
+    script it is written (`name_boundary_regex`), never by `\\b`, which
+    matches between no two Japanese characters: 「狐の耳」 in a Japanese view
+    was never warned (audit agents_perception F7, 2026-11-01). And the one
+    perceiver exempt is the SUBJECT itself -- it was the player, whoever
+    the subject was, so the player watching a disguised character was never
+    checked. Every disguised body is asked by `_disguise_leak_checks`."""
     if not concealed_terms:
         return
     known = known_to or set()
+    subject = str(subject_name or "").strip().casefold()
     for p in perceivers:
         pid = str(p["id"])
-        if pid.casefold() == "player":
-            continue  # the player is the subject / always knows
-        if str(p.get("name") or "").casefold() in known:
+        name = str(p.get("name") or "")
+        if name.strip().casefold() == subject:
+            continue  # the subject is wearing it, and knows
+        if name.casefold() in known:
             continue
-        v = str(views.get(pid) or "").lower()
+        v = str(views.get(pid) or "")
         for t in concealed_terms:
-            t = str(t).strip().lower()
-            if t and re.search(rf"\b{re.escape(t)}\b", v):
+            t = str(t).strip()
+            if t and name_boundary_regex(t, re.IGNORECASE).search(v):
                 ctx.warnings.append(
-                    f"{stage}: disguise leak -- '{t}' (a concealed feature of "
-                    f"{subject_name}) surfaced in the view of {p.get('name')}")
+                    f"{stage}: disguise leak -- '{t.lower()}' (a concealed "
+                    f"feature of {subject_name}) surfaced in the view of "
+                    f"{p.get('name')}")
                 break
+
+
+def _disguise_leak_checks(ctx, stage, views, perceivers, known):
+    """`_disguise_leak_check` for EVERY body this turn holds disguised, each
+    against its own concealed terms (`_subject_concealed_terms`: a
+    transformed body conceals nothing) and its own aware audience
+    (`scene.disguise_known_to`). Both stages passed the player's terms alone,
+    so a character's disguise was never tripwired (audit agents_perception
+    F7, 2026-11-01)."""
+    from story.scene import disguise_known_to
+    from agents.perception_bodies import (
+        _subject_concealed_terms, _turn_disguises)
+    names = {str(p.get("name") or "").strip().casefold():
+             str(p.get("name") or "") for p in perceivers or ()}
+    for key, disguise in sorted((_turn_disguises(ctx) or {}).items()):
+        if not isinstance(disguise, dict):
+            continue
+        subject = names.get(str(key).strip().casefold()) or str(
+            disguise.get("subject") or key)
+        terms = _subject_concealed_terms(ctx, subject)
+        if not terms:
+            continue
+        _disguise_leak_check(ctx, stage, views, perceivers, subject, terms,
+                             disguise_known_to(disguise, subject, known))
 
 def _touch_only_sources(scene, perceiver_name, spatial_to_sources,
                         visual_channel_to_sources):

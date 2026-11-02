@@ -554,6 +554,16 @@ class JapaneseRenderer:
             # observable predicate an `act` does; what it adds is the route
             # it arrived over, which is a perceptual fact and not decoration.
             #
+            # HEARD, NOT SEEN, AND NOBODY NAMED (`composer.act_percept`'s
+            # rear arc). This fell to the `shapes` branch below with an empty
+            # label -- 「が動いているが、それ以上は見て取れない。」, no subject
+            # and a claim of sight for a sound behind the reader -- while the
+            # pack's `act_heard` sentences went unused (audit agents_composer
+            # F4, 2026-11-01). Before `shapes`, as the English renderer has it.
+            if data.get("unseen"):
+                bearing = str(data.get("bearing") or "").strip()
+                return (self._text(prefix + "act_heard_placed", where=bearing)
+                        if bearing else self._text(prefix + "act_heard"))
             # A `shapes` grade names no object, in either kind: the sight
             # grade decides how much of an act is delivered (the 2026-09-05
             # manor run spent a shape as full sight), and the same sentence
@@ -570,9 +580,16 @@ class JapaneseRenderer:
             surface = str(data.get("surface") or "").strip()
             if not surface:
                 return ""
+            via = str(data.get("via") or "").strip()
+            if prefix and p.kind == "communication":
+                # Remembered as HEARD, as the English episode files it
+                # (`composer._episode_sentence`), and over the channel it came
+                # by: 「のを見た」 filed a reported act of speech as a sight.
+                return self._text(
+                    prefix + ("communication_via" if via else "communication"),
+                    label=label, action=surface, via=via)
             sentence = self._text(prefix + "act", label=label,
                                   action=surface)
-            via = str(data.get("via") or "").strip()
             if via and p.kind == "communication":
                 sentence = self._text("speech_via",
                                       sentence=sentence.rstrip("。"), via=via)

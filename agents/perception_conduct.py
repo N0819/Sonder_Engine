@@ -26,8 +26,22 @@ from agents.perception_common import _ling
 from agents.perception_senses import _sight_reaches
 
 
+#: The typed pace that is a run -- `MovementDecl.pace` and an action's `pace`,
+#: the engine's own word (`director_movement.RUN_PACE`,
+#: `spatial.TREAD_GAITS`), never a reading of the declaration's prose.
+RUN_PACE = "run"
+
+
 def _declares_rapid_movement(value):
     """Whether one structured declaration says the actor moves rapidly.
+
+    THE TYPED PACE FIRST, as the Director's follow guard reads it
+    (`director_movement._declares_rapid_movement`): the declaration's own
+    `movement.pace`, or an action's `pace`, is the answer in every language.
+    Two readers of one question disagreed -- a Japanese declaration with an
+    empty `verb` whose movement said `run` was a run to the Director and a
+    walk to this floor (lane L7b's request, 2026-11-01). The verb table
+    below stays the fallback for a declaration that carries no pace.
 
     The verb table is the ACTIVE PACK's (`agents.perception._RAPID_MOVEMENT_VERBS`),
     not seven English words: a Japanese story declaring 走る got no match, so
@@ -38,10 +52,17 @@ def _declares_rapid_movement(value):
     without widening what is tested.
     """
     pattern = _ling("_RAPID_MOVEMENT_VERBS")
+    if isinstance(value, dict):
+        movement = value.get("movement")
+        if isinstance(movement, dict) and str(
+                movement.get("pace") or "").strip().casefold() == RUN_PACE:
+            return True
     sequence = value if isinstance(value, list) else (value or {}).get("sequence")
     for event in sequence or []:
         if not isinstance(event, dict) or event.get("type") != "action":
             continue
+        if str(event.get("pace") or "").strip().casefold() == RUN_PACE:
+            return True
         verb = str(event.get("verb") or "").strip().casefold()
         words = str(
             event.get("attempt") or event.get("observable") or ""
@@ -531,18 +552,18 @@ def _channel_to_every_leg(sc, prev_sc, observer_name, observer_room, legs,
 
 def _explicit_look_intent(interp):
     """Did the player explicitly look/examine this beat? Read from the
-    Director's structured interpretation (location_query, or a declared
-    action whose leading verb is a look verb), never from raw input. An
-    explicit look re-renders the player's full standing state instead of the
-    delta.
+    Director's structured interpretation (a declared `look: around`, or a
+    declared action whose leading verb is a look verb), never from raw input.
+    An explicit look re-renders the player's full standing state instead of
+    the delta. (`location_query` was read here too; no prompt asks for it and
+    nothing has written it since 2026-09-27 -- audit agents_perception F11,
+    2026-11-01.)
 
     The verb table is the ACTIVE PACK's (`agents.perception._LOOK_VERBS`). A
     Japanese story never re-earned a full render on an explicit look, because
     the eleven English words could not match 見回す."""
     if not isinstance(interp, dict):
         return False
-    if str(interp.get("location_query") or "").strip():
-        return True
     # A DECLARED LOOK FIRST (the owner, 2026-09-15): the interpret's row says
     # `look: around` when the player sweeps the room, and that field speaks
     # for a character too. The pack's look-verb table stays as the fallback

@@ -48,16 +48,16 @@ def test_the_prompts_source_room_field_scopes_the_event():
 def test_the_channel_vocabulary_covers_the_words_models_actually_send():
     """`visual` and `sound` are what the live rows say; neither is a percept
     channel name, and both name a channel the engine has."""
-    assert ambient_percepts([_event(kind="visual")], "")[0].channel == "sight"
-    assert ambient_percepts([_event(kind="sound")], "")[0].channel == "hearing"
-    assert ambient_percepts([_event(kind="olfactory")], "")[0].channel == "smell"
+    assert ambient_percepts([_event(kind="visual")], "entrance_hall")[0].channel == "sight"
+    assert ambient_percepts([_event(kind="sound")], "entrance_hall")[0].channel == "hearing"
+    assert ambient_percepts([_event(kind="olfactory")], "entrance_hall")[0].channel == "smell"
 
 
 def test_an_invented_kind_still_falls_to_mixed():
     """`spiritual_pressure` is a real live row. A fiction may invent a sense
     the engine does not model, and inventing one must cost the event nothing
     -- it arrives, unclassified, exactly as before."""
-    [percept] = ambient_percepts([_event(kind="spiritual_pressure")], "")
+    [percept] = ambient_percepts([_event(kind="spiritual_pressure")], "entrance_hall")
     assert percept.channel == "mixed"
     assert percept.channel in CHANNELS
 
@@ -67,7 +67,7 @@ def test_the_declared_channel_field_still_wins():
     emitting `channel` keeps working, and an explicit channel outranks a
     kind."""
     [percept] = ambient_percepts(
-        [_event(kind="smell", channel="hearing")], "")
+        [_event(kind="smell", channel="hearing")], "entrance_hall")
     assert percept.channel == "hearing"
 
 

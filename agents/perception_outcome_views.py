@@ -64,6 +64,7 @@ from agents.perception_bodies import (
     _subject_disguise_context,
 )
 from agents.perception_senses import (
+    _card_admitted,
     _asleep_when_the_beat_began,
     _blast_exposure,
     _felt_percepts_for,
@@ -118,6 +119,7 @@ from agents.perception_scrub import (
     _composer_finish_observer,
     _composer_scrub_surface,
     _disguise_leak_check,
+    _disguise_leak_checks,
     _inverted_motion_check,
     _scrub_episode_identities,
 )
@@ -188,6 +190,11 @@ def _composer_outcome_views(ctx, sc, prev_scene, diff, interp, res, known,
     beat_events = _outcome_event_stream(
         ctx, sc, interp, res, p_name, enriched_dlog,
         _background_beats(ctx, sc))
+    # Where each source stands, as the perceiver maps were built with it
+    # (`_source_channels`' `target_room`), for `_channel_as_of`'s restamp.
+    _source_rooms = {str(src.get("name")): src.get("room")
+                     for src in (sources or ()) if isinstance(src, dict)
+                     and src.get("name")}
     from world.causal_program import event_worlds
     _composed = ctx.get("_composed_beat")
     causal_moments = event_worlds(
@@ -918,10 +925,32 @@ def _composer_outcome_views(ctx, sc, prev_scene, diff, interp, res, known,
                                          _senses),
                     "sight", _senses) != "none"
             def _channel_as_of(counterparty, at_index, _observer=name,
-                               _spatial=spatial):
+                               _spatial=spatial, _field=field,
+                               _room=p.get("room")):
                 standing = _spatial.get(counterparty)
                 moment = _as_of(at_index)
                 if moment is None:
+                    # ONE BEAT, ONE FIELD (PC3), for a line no moment cites
+                    # too. The perceiver map was stamped on a field built
+                    # before the beat's sounds were known, so a background
+                    # presence's line, a Director row and every line of an
+                    # archived beat were graded as if the falls were not
+                    # roaring while the cast's lines beside them were lost
+                    # to it (audit agents_perception F4, 2026-11-01:
+                    # `line heard without the beat's events=full / with
+                    # them=none`). Restamped on THIS observer's field for
+                    # the beat -- the one its soundscape, ambient sounds
+                    # and acts are graded on. A relation the rescue kept
+                    # from the beat's start (`was_reachable_at_beat_start`)
+                    # is a channel the beat itself closed, and stays as it
+                    # was kept.
+                    if (isinstance(standing, dict) and _field is not None
+                            and not standing.get("was_reachable_at_beat_start")):
+                        standing = spatial_rel_between(
+                            sc, _observer, counterparty, observer_room=_room,
+                            target_room=_source_rooms.get(counterparty)
+                            or room_of(sc, counterparty),
+                            sound=_field)
                     return standing, measured_proximity_rel(
                         sc, _observer, counterparty)
                 then, observer_room, field_then = moment
@@ -1336,6 +1365,9 @@ def _composer_outcome_views(ctx, sc, prev_scene, diff, interp, res, known,
                 name, display_map, recognized,
                 unknown, order, sense_card=p.get("sense_card"))
             percepts.extend(minted)
+            # THE CARD'S FLOOR, after every builder (`_card_admitted`).
+            percepts = _card_admitted(percepts, p.get("sense_card"),
+                                      observer=name)
             company[pid] = _composer_company(others, display_map, percepts)
         rendered = composer.render_view(
             percepts,
@@ -1447,8 +1479,7 @@ def _composer_outcome_views(ctx, sc, prev_scene, diff, interp, res, known,
     merged = dict(base_ledger)
     merged.update(ledger)
     ctx["_composer_turn_ledger"] = merged
-    _disguise_leak_check(ctx, "perception_outcome", clean_views, perceivers,
-                         p_name, p_disguise_terms, p_disguise_known)
+    _disguise_leak_checks(ctx, "perception_outcome", clean_views, perceivers, known)
     _inverted_motion_check(ctx, "perception_outcome", clean_views,
                            res.get("resolved_event"))
     out = {

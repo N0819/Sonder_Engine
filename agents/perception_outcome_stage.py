@@ -27,7 +27,6 @@ from story.scene import (
     awareness_of,
     is_player_speaker,
     persona_of,
-    senses_of,
     sheet_state,
 )
 from world.spatial import room_display_name, resolve_substance_ops, room_of
@@ -51,17 +50,11 @@ from agents.perception_bodies import (
     _subject_disguise_context,
 )
 from agents.perception_senses import (
-    _behind_rooms,
-    _behind_sources,
-    _focus_target,
-    _proximity_to_sources,
     _sense_card,
     _sound_field_for,
     _source_channels,
-    _visible_rooms_for,
 )
 from agents.perception_identity import (
-    _ambient_location_for,
     _character_known_places,
     _player_known_places,
     _presence_bodies,
@@ -69,9 +62,48 @@ from agents.perception_identity import (
 from agents.perception_stream import (
     _background_beats,
     _delivered_manifest,
+    _loudest_voices,
     _settled_character_result,
 )
+from world.scene_memo import scene_read_pass
 from agents.perception_outcome_views import _composer_outcome
+
+
+def _outcome_perceiver(ctx, sc, prev_scene, sources, known, cast_by_name,
+                       voices, chatter, pid, name, room, rdata, sheet,
+                       **fields):
+    """One outcome perceiver's payload: the fields every reader downstream
+    reads (`_composer_outcome_views`, `common_views`), and nothing more.
+
+    TEN FIELDS WENT, READ BY NOTHING (audit agents_perception F9,
+    2026-11-01): `visible_rooms`, `behind_rooms`, `proximity_to_sources`,
+    `behind_sources`, `focus_target`, `ambient_location`, the prose `senses`,
+    `attention` and `knows_identity` were computed for every perceiver at
+    every stage and read by no line of the engine -- 375 ms a stage on chat
+    175's six bodies, 115 ms on chat 172's seven (`scent_channel_to_sources`
+    stays: `_source_channels` keeps it deliberately, and says why). The
+    channel maps and the tell gate share THIS perceiver's sound field, built
+    once."""
+    field = _sound_field_for(ctx, sc, name, room)
+    card = _sense_card(sheet)
+    return {
+        "id": pid, "name": name, "room": room,
+        "room_name": room_display_name(rdata, room) or "an unspecified area",
+        "room_notes": _room_notes_for_view(rdata, room, ctx, sc),
+        "crowds": crowds_for_room(ctx.chat.id, sc, room, chatter),
+        "chatter": chatter_for_room(
+            ctx.chat.id, sc, room, chatter,
+            attending=attending_this_room(sc, name, room)),
+        "couriers": couriers_for_room(ctx.chat.id, sc, room, chatter),
+        "notices": artifacts_for_room(ctx.chat.id, sc, room, chatter),
+        "sense_card": card,
+        **fields,
+        **_source_channels(sc, name, room, sources, prev_sc=prev_scene,
+                           senses=card, sound=field),
+        "source_manifest": _delivered_manifest(
+            ctx, sc, name, sources, known, cast_by_name, sheet,
+            sound=field, voices=voices),
+    }
 
 
 def perception_outcome(ctx, nonce):
@@ -282,98 +314,42 @@ def perception_outcome(ctx, nonce):
 
     # One registry read for the whole stage (see `chatter_inputs`).
     chatter = chatter_inputs(ctx.chat.id, sc, turn_idx=ctx.turn.idx)
-    perceivers = [{
-        "id": "player", "name": p_name, "room": p_room,
-        "pronouns": (pers.get("identity") or {}).get("pronouns") or {},
-        "room_name": room_display_name(p_rdata, p_room) or "an unspecified area",
-        "room_notes": _room_notes_for_view(p_rdata, p_room, ctx, sc),
-        "ambient_location": _ambient_location_for(sc, p_room),
-        "crowds": crowds_for_room(ctx.chat.id, sc, p_room, chatter),
-        "chatter": chatter_for_room(
-            ctx.chat.id, sc, p_room, chatter,
-            attending=attending_this_room(sc, p_name, p_room)),
-        "couriers": couriers_for_room(ctx.chat.id, sc, p_room, chatter),
-        "notices": artifacts_for_room(ctx.chat.id, sc, p_room, chatter),
-        "visible_rooms": _visible_rooms_for(sc, p_name, p_room),
-        "known_places": _player_known_places(ctx),
-        "senses": senses_of(pers), "sense_card": _sense_card(pers),
-        "attention": "engaged",
-        "knows_identity": True,
-        **_source_channels(sc, p_name, p_room, sources, prev_sc=prev_scene,
-                           senses=_sense_card(pers),
-                           sound=_sound_field_for(ctx, sc, p_name, p_room)),
-        "proximity_to_sources": _proximity_to_sources(sc, p_name, sources),
-        "behind_sources": _behind_sources(sc, p_name, sources),
-        "behind_rooms": _behind_rooms(sc, p_name),
-        "focus_target": _focus_target(sc, p_name),
-        "source_manifest": _delivered_manifest(
-            ctx, sc, p_name, sources, known, cast_by_name, pers),
-    }]
+    # THE TELL GATE HEARS A VOICE TELL AT THE VOICE ITS SOURCE SPOKE IN
+    # (`_delivered_manifest`, `_tell_volume`).
+    voices = _loudest_voices(enriched_dlog)
 
-    for extra, pid_key, e_name, e_room in extra_entries:
-        e_rdata = (sc.get("rooms") or {}).get(e_room) if e_room else None
-        perceivers.append({
-            "id": f"extra:{pid_key}", "name": e_name, "room": e_room,
-            "pronouns": (extra.get("identity") or {}).get("pronouns") or {},
-            "room_name": room_display_name(e_rdata, e_room) or "an unspecified area",
-            "room_notes": _room_notes_for_view(e_rdata, e_room, ctx, sc),
-            "ambient_location": _ambient_location_for(sc, e_room),
-            "crowds": crowds_for_room(ctx.chat.id, sc, e_room, chatter),
-            "chatter": chatter_for_room(
-                ctx.chat.id, sc, e_room, chatter,
-                attending=attending_this_room(sc, e_name, e_room)),
-            "couriers": couriers_for_room(ctx.chat.id, sc, e_room, chatter),
-            "notices": artifacts_for_room(ctx.chat.id, sc, e_room, chatter),
-            "visible_rooms": _visible_rooms_for(sc, e_name, e_room),
-            "known_places": {},
-            "senses": senses_of(extra), "sense_card": _sense_card(extra),
-            "attention": "engaged",
-            "knows_identity": True,
-            **_source_channels(sc, e_name, e_room, sources, prev_sc=prev_scene,
-                               senses=_sense_card(extra),
-                               sound=_sound_field_for(ctx, sc, e_name, e_room)),
-            "proximity_to_sources": _proximity_to_sources(sc, e_name, sources),
-            "behind_sources": _behind_sources(sc, e_name, sources),
-            "behind_rooms": _behind_rooms(sc, e_name),
-            "focus_target": _focus_target(sc, e_name),
-            "source_manifest": _delivered_manifest(
-                ctx, sc, e_name, sources, known, cast_by_name, extra),
-        })
+    # ONE READ PASS OVER THE PERCEIVER LOOP (review C12; audit
+    # agents_perception E1, 2026-11-01): every relation, sight and field
+    # derivation below is a pure read of the scene, and outside a pass each
+    # paid the sound field's scene-wide key and an uncached sight walk --
+    # 413 ms against 92 ms inside one on chat 175, outputs byte-identical.
+    # `_presence_bodies`, which WRITES the scene, runs after the loop.
+    with scene_read_pass(sc), scene_read_pass(prev_scene):
+        perceivers = [_outcome_perceiver(
+            ctx, sc, prev_scene, sources, known, cast_by_name, voices, chatter,
+            "player", p_name, p_room, p_rdata, pers,
+            pronouns=(pers.get("identity") or {}).get("pronouns") or {},
+            known_places=_player_known_places(ctx))]
 
-    for c in ctx.cast:
-        sh, act, _ = sheet_state(c)
-        r = character_room(sc, sh)
-        appearances[character_name(sh)] = _appearance_as_prose(appearance_of(
-            character_name(sh), character_appearance(sh), sc))
-        rdata = (sc.get("rooms") or {}).get(r) if r else None
-        perceivers.append({
-            "id": c["id"], "name": character_name(sh), "room": r,
-            "pronouns": character_identity(sh)["pronouns"],
-            "room_name": room_display_name(rdata, r) or "an unspecified area",
-            "room_notes": _room_notes_for_view(rdata, r, ctx, sc),
-            "ambient_location": _ambient_location_for(sc, r),
-            "crowds": crowds_for_room(ctx.chat.id, sc, r, chatter),
-            "chatter": chatter_for_room(
-                ctx.chat.id, sc, r, chatter,
-                attending=attending_this_room(sc, character_name(sh), r)),
-            "couriers": couriers_for_room(ctx.chat.id, sc, r, chatter),
-            "notices": artifacts_for_room(ctx.chat.id, sc, r, chatter),
-            "visible_rooms": _visible_rooms_for(sc, character_name(sh), r),
-            "known_places": _character_known_places(c),
-            "senses": senses_of(sh), "sense_card": _sense_card(sh),
-            "attention": act.get("goal") or "ambient",
-            "knows_identity": p_name in (known.get(character_name(sh)) or []),
-            **_source_channels(sc, character_name(sh), r, sources,
-                               prev_sc=prev_scene, senses=_sense_card(sh),
-                               sound=_sound_field_for(
-                                   ctx, sc, character_name(sh), r)),
-            "proximity_to_sources": _proximity_to_sources(sc, character_name(sh), sources),
-            "behind_sources": _behind_sources(sc, character_name(sh), sources),
-            "behind_rooms": _behind_rooms(sc, character_name(sh)),
-            "focus_target": _focus_target(sc, character_name(sh)),
-            "source_manifest": _delivered_manifest(
-                ctx, sc, character_name(sh), sources, known, cast_by_name, sh),
-        })
+        for extra, pid_key, e_name, e_room in extra_entries:
+            e_rdata = (sc.get("rooms") or {}).get(e_room) if e_room else None
+            perceivers.append(_outcome_perceiver(
+                ctx, sc, prev_scene, sources, known, cast_by_name, voices,
+                chatter, f"extra:{pid_key}", e_name, e_room, e_rdata, extra,
+                pronouns=(extra.get("identity") or {}).get("pronouns") or {},
+                known_places={}))
+
+        for c in ctx.cast:
+            sh, act, _ = sheet_state(c)
+            r = character_room(sc, sh)
+            appearances[character_name(sh)] = _appearance_as_prose(appearance_of(
+                character_name(sh), character_appearance(sh), sc))
+            rdata = (sc.get("rooms") or {}).get(r) if r else None
+            perceivers.append(_outcome_perceiver(
+                ctx, sc, prev_scene, sources, known, cast_by_name, voices,
+                chatter, c["id"], character_name(sh), r, rdata, sh,
+                pronouns=character_identity(sh)["pronouns"],
+                known_places=_character_known_places(c)))
 
     # Consciousness gate: overlay THIS beat's just-resolved awareness
     # conditions (a knockout resolves before perception_outcome commits) onto
