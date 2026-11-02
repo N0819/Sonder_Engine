@@ -276,6 +276,12 @@
     "layout_relate": {
       "$text": "prose_contract/layout_relate.txt"
     },
+    "layout_lore": {
+      "$text": "prose_contract/layout_lore.txt"
+    },
+    "layout_lot": {
+      "$text": "prose_contract/layout_lot.txt"
+    },
     "encoder_cue": {
       "$text": "prose_contract/encoder_cue.txt"
     },

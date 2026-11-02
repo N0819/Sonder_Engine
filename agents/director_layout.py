@@ -104,6 +104,9 @@ LAYOUT_RUNS_KEY = "layout_tier_runs"
 SORT_STEP = "director_rooms_layout_sort"
 RELATE_STEP = "director_rooms_layout_relate"
 BRIEF_STEP = "director_rooms_layout_brief"
+#: The architect's first call, which chooses the lore the other three read
+#: (`architect_lore`).
+LORE_STEP = "director_rooms_layout_lore"
 
 
 _ON = ("1", "on", "true", "yes")
@@ -383,32 +386,32 @@ def _label(text, articles):
     return rest if rest and head in articles else slug
 
 
-def building_description(cid, building, frame_id=None):
-    """WHAT THE STORY'S OWN LORE SAYS OF THIS BUILDING, for the tier's two
-    calls: every entry of the chat's lorebooks (`chat_lorebook_ids`, the
-    story's overlays merged by `lore_rows`) whose authored labels -- its
-    keys, title, aliases and uid -- name the building or one of its rooms by
-    name or id, the entries naming the building itself first, then in the
-    books' own order, whole, up to `LAYOUT_DESCRIPTION_CHARS`. "" when none.
-
-    The plan holds a room's one-line purpose; the lore holds what the room is
-    -- its fixtures, its windows, what its floor is laid with -- and a solver
-    sizes a room by what it holds. Without it the owner's shrine (chat 164)
-    came back with every room a third of its planned size; the layout lab's
-    liked shrine was laid out FROM such a description. Matched by the labels
-    the lorebook's author wrote, WHOLE -- a key that runs on past a room's
-    name ("seal cavern divine side") names somewhere else, and a word the
-    building's name merely contains ("shrine") names no building -- never by
-    reading the entries' prose. On the owner's lorebook this is exactly the
-    seven entries the layout lab was laid out from; the ground the building
-    stands in is laid out with it, so its places' labels match too, after
-    the building's own entries."""
-    from language_runtime import compositor_value
+def _story_lore(cid, frame_id=None):
+    """Every entry of the chat's lorebooks as the story reads them
+    (`chat_lorebook_ids`, the story's overlays merged by `lore_rows`), in the
+    books' own order, each a plain dict; entries with no text left out."""
     from mind.memory import chat_lorebook_ids, lore_rows
+    ids = chat_lorebook_ids(cid)
+    if not ids:
+        return []
+    rows = (dict(row) for row in lore_rows(ids, chat_id=cid, frame_id=frame_id))
+    return [row for row in rows if str(row.get("content") or "").strip()]
+
+
+def _named_by_labels(rows, building):
+    """`(own, named)`: the ids of the entries in `rows` whose authored labels
+    -- keys, title, aliases and uid -- name the building itself (`own`), and
+    of every entry whose labels name the building, one of its rooms or a
+    place of the ground it stands in (`named`, which holds `own`), each in
+    the books' order. Matched WHOLE, never by reading the entries' prose:
+    a key that runs on past a room's name ("seal cavern divine side") names
+    somewhere else, and a word the building's name merely contains
+    ("shrine") names no building."""
+    from language_runtime import compositor_value
     articles = {str(a).casefold() for a in compositor_value("articles") or ()}
-    own = {_label(building.get("structure"), articles),
-           _label(building.get("structure_name"), articles)}
-    building_labels = set(own)
+    own_labels = {_label(building.get("structure"), articles),
+                  _label(building.get("structure_name"), articles)}
+    building_labels = set(own_labels)
     for uid in building.get("rooms") or ():
         building_labels.add(_label(uid, articles))
         building_labels.add(_label((building.get("names") or {}).get(uid), articles))
@@ -419,13 +422,9 @@ def building_description(cid, building, frame_id=None):
         building_labels.add(_label(place.get("id"), articles))
         building_labels.add(_label(place.get("name"), articles))
     building_labels.discard("")
-    own.discard("")
-    ids = chat_lorebook_ids(cid)
-    if not ids:
-        return ""
-    first, rest = [], []
-    for row in lore_rows(ids, chat_id=cid, frame_id=frame_id):
-        row = dict(row)
+    own_labels.discard("")
+    own, named = [], []
+    for row in rows:
         labels = {_label(row.get("title"), articles), _label(row.get("entry_uid"), articles)}
         labels.update(_label(key, articles) for key in str(row.get("keys") or "").split(","))
         aliases = row.get("aliases")
@@ -435,19 +434,172 @@ def building_description(cid, building, frame_id=None):
             aliases = []
         labels.update(_label(a, articles) for a in (aliases or ()) if a)
         labels.discard("")
-        if not labels & building_labels:
+        if labels & building_labels:
+            named.append(row["id"])
+            if labels & own_labels:
+                own.append(row["id"])
+    return own, named
+
+
+def _described(rows, order):
+    """The entries of `rows` with the ids in `order`, whole and in that
+    order, up to `LAYOUT_DESCRIPTION_CHARS`: an entry that does not fit is
+    passed over and a shorter one after it may still be read."""
+    text_of = {row["id"]: str(row.get("content") or "").strip() for row in rows}
+    out, total, seen = [], 0, set()
+    for eid in order:
+        text = text_of.get(eid)
+        if not text or eid in seen or total + len(text) > LAYOUT_DESCRIPTION_CHARS:
             continue
-        text = str(row.get("content") or "").strip()
-        if not text:
-            continue
-        (first if labels & own else rest).append(text)
-    out, total = [], 0
-    for text in first + rest:
-        if total + len(text) > LAYOUT_DESCRIPTION_CHARS:
-            continue
+        seen.add(eid)
         out.append(text)
         total += len(text) + 2
     return "\n\n".join(out)
+
+
+def building_description(cid, building, frame_id=None):
+    """WHAT THE STORY'S OWN LORE SAYS OF THIS BUILDING, by its labels alone:
+    every entry whose authored labels name the building or one of its rooms
+    by name or id (`_named_by_labels`), the entries naming the building
+    itself first, then in the books' own order, whole, up to
+    `LAYOUT_DESCRIPTION_CHARS`. "" when none. The floor of what the tier's
+    calls read; the architect adds to it (`architect_lore`).
+
+    The plan holds a room's one-line purpose; the lore holds what the room is
+    -- its fixtures, its windows, what its floor is laid with -- and a solver
+    sizes a room by what it holds. Without it the owner's shrine (chat 164)
+    came back with every room a third of its planned size; the layout lab's
+    liked shrine was laid out FROM such a description."""
+    rows = _story_lore(cid, frame_id)
+    own, named = _named_by_labels(rows, building)
+    return _described(rows, own + named)
+
+
+#: Entries of the story's lore the architect is shown to choose from
+#: (`architect_lore`). Past it, the entries the labels name and then the
+#: lore search's best (`search_lore`, on the building's names and purposes)
+#: fill the index. The owner's shrine lorebook is 13 entries; named per
+#: ask-before-limiting.
+LAYOUT_LORE_INDEX_MAX = 80
+#: Characters of each entry the architect is shown in the index, from its
+#: start: enough to say what the entry is about (the shrine's top-floor
+#: entry says "The top floor is smaller due to the roofline" in its first
+#: line). The entries it chooses are read whole.
+LAYOUT_LORE_OPENING_CHARS = 600
+
+
+def _lore_index(cid, building, rows, named, frame_id=None):
+    """The entries the architect chooses from: all of `rows` up to
+    `LAYOUT_LORE_INDEX_MAX`; past it, the entries the labels name and then
+    the lore search's best for the building, in the books' order. A search
+    that fails leaves the named entries and then the books' first."""
+    if len(rows) <= LAYOUT_LORE_INDEX_MAX:
+        return list(rows)
+    from core.logging_utils import logger
+    wanted = list(named)
+    try:
+        from mind.memory import chat_lorebook_ids, search_lore
+        specs = building.get("specs") or {}
+        words = [str(building.get("structure_name") or building.get("structure") or "")]
+        for uid in building.get("rooms") or ():
+            words.append(str((building.get("names") or {}).get(uid) or uid))
+            words.append(str((specs.get(uid) or {}).get("purpose") or ""))
+        words += [str(place.get("name") or place.get("id") or "")
+                  for place in building.get("grounds") or ()]
+        found = search_lore(chat_lorebook_ids(cid), " ".join(w for w in words if w),
+                            k=LAYOUT_LORE_INDEX_MAX, chat_id=cid, frame_id=frame_id)
+        wanted += [hit["id"] for hit in found]
+    except Exception as exc:  # noqa: BLE001 -- the index is still offered
+        logger.info("layout tier: chat=%s the lore search failed (%s); the index "
+                    "holds the named entries and then the books' first", cid,
+                    " ".join(str(exc).split())[:200])
+        wanted += [row["id"] for row in rows]
+    keep = []
+    for eid in wanted:
+        if eid not in keep:
+            keep.append(eid)
+        if len(keep) >= max(LAYOUT_LORE_INDEX_MAX, len(named)):
+            break
+    keep = set(keep)
+    return [row for row in rows if row["id"] in keep]
+
+
+def lore_payload(building, index):
+    """What the architect chooses the lore from: the building as the sort
+    reads it (rooms, storeys, purposes, joins, stairs and ground -- never a
+    description or a brief), and each entry of `index` by its id, title, keys
+    and opening."""
+    from world import layout_bridge
+    view = layout_bridge.sort_payload(dict(building, description=None, brief=None))
+    entries = []
+    for row in index:
+        text = str(row.get("content") or "").strip()
+        opening = text[:LAYOUT_LORE_OPENING_CHARS]
+        entries.append({
+            "id": row["id"],
+            "title": str(row.get("title") or ""),
+            "keys": [k.strip() for k in str(row.get("keys") or "").split(",") if k.strip()],
+            "opening": opening + ("…" if len(text) > len(opening) else ""),
+        })
+    return {"building": view["building"], "entries": entries}
+
+
+def _chosen(answer, offered):
+    """The ids the architect chose, in its order, each once, kept only where
+    the index offered it: an id may come back as a number or its digits."""
+    raw = answer.get("entries") if isinstance(answer, dict) else None
+    out = []
+    for item in raw if isinstance(raw, list) else ():
+        try:
+            eid = int(str(item).strip())
+        except ValueError:
+            continue
+        if eid in offered and eid not in out:
+            out.append(eid)
+    return out
+
+
+def architect_lore(cid, building, call, language_id, frame_id=None):
+    """WHAT THE ARCHITECT READS: the story's lore of this building, chosen by
+    the architect itself (`LORE_STEP`) from an index of the story's entries
+    (`_lore_index`, `lore_payload`), over the entries the labels name
+    (`building_description`), which it can add to and never take from. The
+    entries naming the building itself come first, then every other entry
+    the labels name, then the architect's own choices in its order, whole,
+    up to `LAYOUT_DESCRIPTION_CHARS`. "" when the story has no lore.
+
+    WHY THE ARCHITECT CHOOSES (chat 179, 2026-10-28). Which entries describe a
+    building is a question about what the entries MEAN, and the labels only
+    answer it where the lorebook's author and the plan happened to spell a
+    room the same way. The owner's shrine lorebook holds seven entries about
+    the house; its three calls read three. The top floor's entry is keyed
+    "third floor, roost, tamamo quarters" and the plan named the room
+    "Tamamo's Roost", so the roost was laid out with no window, its altar on
+    the wrong wall and its nest in a corner; the overview that says the
+    shrine faces south and has three floors is keyed "shrine of the golden
+    fox", and the plan named the building "The House of the Shrine of the
+    Golden Fox"; the cellar stair's entry is keyed "basement", a room of
+    another structure. All seven come to 14,158 characters, inside the
+    budget the three were read under.
+
+    FAILS OPEN to the labels: the call raising, or choosing nothing the index
+    offered, leaves what `building_description` reads."""
+    from core.logging_utils import logger
+    from llm.prompts import layout_prompt
+    rows = _story_lore(cid, frame_id)
+    if not rows:
+        return ""
+    own, named = _named_by_labels(rows, building)
+    index = _lore_index(cid, building, rows, named, frame_id)
+    chosen = []
+    try:
+        answer = call(LORE_STEP, layout_prompt("lore", language_id),
+                      lore_payload(building, index))
+        chosen = _chosen(answer, {row["id"] for row in index})
+    except Exception as exc:  # noqa: BLE001 -- the labels' entries are still read
+        logger.info("layout tier: chat=%s building=%s chose no lore: %s", cid,
+                    building.get("key"), " ".join(str(exc).split())[:200])
+    return _described(rows, own + named + chosen)
 
 
 def lay_out_opening_ground(cid, frame_id=None, *, call=None):
@@ -523,7 +675,7 @@ def lay_out_buildings(job, cid, scene, room_ids, language_id, *, call=None):
         done += 1
         started = time.time()
         try:
-            described = building_description(cid, building)
+            described = architect_lore(cid, building, call, language_id)
         except Exception:
             described = ""
         if described:

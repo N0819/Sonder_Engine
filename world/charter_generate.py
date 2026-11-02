@@ -59,7 +59,7 @@ Return one JSON object and no prose outside it. Do not invent an institution
 unless the lore or author brief implies one. Output: {name, structure:{key,
 max_planned, grammar:[{kind,names,purposes}]}, rooms:{id:{name,purpose,
 exposure:"open"|"sheltered"|"enclosed",far_look,adjacent:[{to,barrier:"open_door"}],frontier:[],
-anchors:{anchor_id:{desc}}}}, charters:[{key,name,naming,
+anchors:{anchor_id:{desc}},extent:{w,d} OPTIONAL,lot:{storeys,cellar} OPTIONAL}}, charters:[{key,name,naming,
 priority,commons,upkeeps:{id:{place,floor,level,fails_untended,one_body_restores_in,
 requires,depends_on}},posts:{id:{place,serves,requires,reports_to,authority}},
 populations:[{post,count,competence,berth,rank}],economy:{goods,stocks,targets,
@@ -83,6 +83,17 @@ anyone. It holds what the place is, never what passes over it -- no light or
 hour, nobody there and nothing happening. It is the phrase for the far eye
 and never the room's description, so a planned room still carries no prose;
 without it, a far eye reads the place as its ground alone.
+A BUILDING IS A LOT until a story goes into it. A home, a shop, an inn, a
+workshop -- any building whose rooms the lore does not give -- is ONE room
+carrying lot:{storeys,cellar}: named as the building, its purpose saying what
+the building is and who keeps it, enclosed, with its far_look, its footprint
+as extent:{w,d} in paces, and its door onto the way or the yard in adjacent;
+storeys is how many stand above the ground, left out for the engine to choose.
+The engine designs the rooms inside when someone first comes upon it and
+deals its sleepers into them, so posts, upkeeps, berths and commons name a lot
+as they name any room. The ways, the yards and the open ground between the
+buildings are rooms of their own, and a building is planned room by room only
+where the lore gives its rooms.
 A room's `anchors` are its FIXTURES: the fixed features of the place a body
 can stand at, work at, set something down on, take cover behind or lay a hand
 against. Give a room the ones it is MADE of rather than every object in it --
@@ -877,11 +888,16 @@ def _spread_berths(rooms, charter_bodies, ceiling=BERTH_CEILING, *,
     standing = standing_fillers(
         grammar, [room.get("name") for room in rooms.values()
                   if isinstance(room, dict)])
+    from world.lots import LOT_KEY, normalize_lot
     for berth in sorted(occupancy):
         sleepers = sorted(occupancy[berth])
         if len(sleepers) <= ceiling:
             continue
         base = rooms[berth] if isinstance(rooms.get(berth), dict) else {}
+        # A LOT IS A WHOLE BUILDING (`world/lots.py`): its sleepers are dealt
+        # over the rooms it is expanded into, never into copies of it
+        if normalize_lot(base.get(LOT_KEY)) is not None:
+            continue
         annexes = berth in workplaces
         needed = -(-len(sleepers) // ceiling)
         frame = None if annexes or not place_names.DEAL_SIBLING_NAMES \
@@ -1159,7 +1175,7 @@ def close_plan(plan, *, history=None, featured_residents=None,
     # planted beside them kept all three. The same fail-open normalizer the
     # package path reads a planned room through (`plot_packages._plan_geometry`,
     # F47), so the two paths into the registry hold the same kind of value.
-    from story.plot_packages import _plan_far_look, _plan_geometry
+    from story.plot_packages import _plan_far_look, _plan_geometry, _plan_lot
     rooms = {}
     for uid, raw in _mapping(plan.get("rooms")).items():
         if not isinstance(raw, dict):
@@ -1178,6 +1194,9 @@ def close_plan(plan, *, history=None, featured_residents=None,
             # (`structure.PLAN_SEEDED_FIELDS`). The package path's own reader,
             # so the two paths into the registry keep one spelling.
             **{k: v for k, v in _plan_far_look(raw).items() if k == "far_look"},
+            # A LOT (`world/lots.py`): one room standing for a whole building
+            # designed when someone first comes upon it.
+            **_plan_lot(raw),
             # A PLAN THAT NAMED ITS FIXTURES KEEPS THEM. This rebuild is an
             # allowlist and it dropped `anchors` the same way `plant_structure`
             # did, so even a furnished plan arrived bare.

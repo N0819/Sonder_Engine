@@ -19,13 +19,14 @@
 | `agents/director_evidence.py` | 4107 |  | `agents.common`, `agents.director_lingua`, `agents.director_scopes`, `llm`, `story.character_schema`, `world.spatial` |
 | `agents/director_fanout.py` | 1121 |  | `agents.common`, `agents.director_evidence`, `agents.director_scopes`, `core.db`, `story.character_schema`, `world.spatial`, `world.survival` |
 | `agents/director_floors.py` | 2548 |  | `agents.common`, `agents.director_lingua`, `agents.director_movement`, `story.character_schema`, `story.scene`, `world.mechanics`, `world.spatial` |
-| `agents/director_layout.py` | 594 |  | — |
+| `agents/director_layout.py` | 746 |  | — |
 | `agents/director_lingua.py` | 29 |  | — |
+| `agents/director_lots.py` | 450 |  | `world.lots` |
 | `agents/director_movement.py` | 3372 |  | `agents.director_lingua`, `story.character_schema`, `world.mechanics`, `world.spatial` |
-| `agents/director_prose.py` | 5171 |  | `agents.director_fanout`, `agents.director_scopes`, `core.db`, `llm`, `llm.prompts`, `llm.providers`, `llm.schemas` |
+| `agents/director_prose.py` | 5186 |  | `agents.director_fanout`, `agents.director_scopes`, `core.db`, `llm`, `llm.prompts`, `llm.providers`, `llm.schemas` |
 | `agents/director_reconcile.py` | 559 |  | `agents.common`, `agents.director_evidence`, `agents.director_scopes`, `core.db`, `llm.schemas`, `story`, `world.spatial` |
 | `agents/director_repair.py` | 1691 |  | `core.db`, `llm`, `llm.prompts` |
-| `agents/director_rooms.py` | 2986 |  | — |
+| `agents/director_rooms.py` | 3003 |  | — |
 | `agents/director_scopes.py` | 608 |  | `agents.director_lingua`, `agents.director_views`, `core.db`, `world.survival` |
 | `agents/director_views.py` | 760 |  | `agents.common`, `story.character_schema`, `story.scene`, `world.background_claims` |
 | `agents/dramaturge.py` | 469 |  | `core.db`, `core.logging_utils`, `story.room_proposals` |
@@ -134,7 +135,7 @@
 | `story/mandates.py` | 809 |  | `core.db` |
 | `story/naming.py` | 555 |  | `core.db`, `world.charter_identity` |
 | `story/opening_plan.py` | 128 |  | `core.db` |
-| `story/plot_packages.py` | 4557 |  | `world.spatial` |
+| `story/plot_packages.py` | 4571 |  | `world.spatial` |
 | `story/prelude.py` | 189 |  | `core.db` |
 | `story/provenance_text.py` | 132 |  | — |
 | `story/room_bible.py` | 447 |  | `core.db` |
@@ -176,7 +177,7 @@
 | `world/charter_enrol.py` | 431 |  | `world.charter_generate`, `world.charter_model`, `world.charter_needs`, `world.charter_roster`, `world.charter_surface` |
 | `world/charter_feel.py` | 469 |  | `mind.psychology_runtime`, `world.charter_mark`, `world.charter_needs`, `world.charter_temper` |
 | `world/charter_figure.py` | 140 |  | — |
-| `world/charter_generate.py` | 1930 |  | `world.charter_identity`, `world.charter_model`, `world.charter_needs`, `world.charter_roster`, `world.charter_surface` |
+| `world/charter_generate.py` | 1949 |  | `world.charter_identity`, `world.charter_model`, `world.charter_needs`, `world.charter_roster`, `world.charter_surface` |
 | `world/charter_harm.py` | 264 |  | — |
 | `world/charter_history.py` | 897 |  | — |
 | `world/charter_identity.py` | 1270 |  | — |
@@ -216,9 +217,10 @@
 | `world/gaps.py` | 459 |  | `core.db`, `mind.canon_provenance`, `world.spatial`, `world.subjects` |
 | `world/landscape.py` | 1761 |  | — |
 | `world/layout_arrange.py` | 5169 |  | `world.layout_solver` |
-| `world/layout_bridge.py` | 3833 |  | `world.layout_arrange`, `world.layout_solver`, `world.structure` |
+| `world/layout_bridge.py` | 3960 |  | `world.layout_arrange`, `world.layout_solver`, `world.lots`, `world.structure` |
 | `world/layout_solver.py` | 3479 |  | — |
 | `world/living_world.py` | 639 |  | `core.logging_utils`, `world.mechanics` |
+| `world/lots.py` | 119 |  | — |
 | `world/mechanics.py` | 1658 |  | `core`, `world.spatial`, `world.spatial_frames` |
 | `world/offscreen.py` | 2305 |  | `core`, `core.logging_utils`, `llm.prompts` |
 | `world/paradox.py` | 655 |  | `core.db`, `core.frames`, `story.character_schema`, `world.spatial` |
@@ -259,7 +261,7 @@
 | `world/spatial_transit.py` | 1631 |  | `world.spatial_barriers`, `world.spatial_identity` |
 | `world/spatial_walk.py` | 548 |  | `world.spatial_fov`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_routing` |
 | `world/stimulation.py` | 239 |  | `story`, `world.spatial` |
-| `world/structure.py` | 3280 |  | `world.charter_model`, `world.frontage`, `world.place_names`, `world.regions`, `world.spatial` |
+| `world/structure.py` | 3285 |  | `world.charter_model`, `world.frontage`, `world.lots`, `world.place_names`, `world.regions`, `world.spatial` |
 | `world/subjects.py` | 505 |  | `core.db`, `mind.canon_provenance`, `world.spatial` |
 | `world/survival.py` | 489 |  | `core.db` |
 | `world/vistas.py` | 391 |  | — |
@@ -421,20 +423,33 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `lay_out_buildings()` | 488 | 107 lines |
-| `lay_out()` | 268 | 69 lines |
-| `building_description()` | 386 | 65 lines |
-| `_take_off_what_is_not_laid()` | 226 | 40 lines |
-| `lay_out_opening_ground()` | 453 | 33 lines |
-| `_briefed()` | 339 | 25 lines |
-| `layout_tier_enabled()` | 134 | 20 lines |
-| `layout_grounds_enabled()` | 113 | 19 lines |
+| `lay_out_buildings()` | 640 | 107 lines |
+| `lay_out()` | 271 | 69 lines |
+| `_named_by_labels()` | 401 | 41 lines |
+| `architect_lore()` | 562 | 41 lines |
+| `_take_off_what_is_not_laid()` | 229 | 40 lines |
+| `_lore_index()` | 491 | 34 lines |
+| `lay_out_opening_ground()` | 605 | 33 lines |
+| `_briefed()` | 342 | 25 lines |
 
 ### `agents/director_lingua.py`
 
 | Function | Start | Size |
 |---|---:|---:|
 | `_ling()` | 16 | 14 lines |
+
+### `agents/director_lots.py`
+
+| Function | Start | Size |
+|---|---:|---:|
+| `planned_rooms_of()` | 134 | 141 lines |
+| `expand_lot()` | 335 | 53 lines |
+| `deal_berths()` | 306 | 27 lines |
+| `lots_near()` | 390 | 26 lines |
+| `lot_people()` | 61 | 24 lines |
+| `lot_payload()` | 108 | 24 lines |
+| `expand_entered_lots()` | 431 | 20 lines |
+| `_door()` | 87 | 19 lines |
 
 ### `agents/director_movement.py`
 
@@ -453,7 +468,7 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `run()` | 4670 | 368 lines |
+| `run()` | 4670 | 383 lines |
 | `a_walk_is_its_owners()` | 2107 | 239 lines |
 | `encode()` | 3954 | 151 lines |
 | `the_account_places_its_own_body()` | 2455 | 139 lines |
@@ -493,7 +508,7 @@
 | Function | Start | Size |
 |---|---:|---:|
 | `design_rooms()` | 1841 | 267 lines |
-| `_predevelop_run()` | 2795 | 192 lines |
+| `_predevelop_run()` | 2802 | 202 lines |
 | `_doorways_that_fit()` | 1289 | 176 lines |
 | `_derive_far_bearings()` | 1029 | 103 lines |
 | `_check()` | 407 | 101 lines |
@@ -1729,14 +1744,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_package_checks()` | 3681 | 143 lines |
-| `_preview_plan_rooms()` | 1098 | 125 lines |
-| `fire_due_clocks()` | 4270 | 102 lines |
+| `_package_checks()` | 3695 | 143 lines |
+| `_preview_plan_rooms()` | 1112 | 125 lines |
+| `fire_due_clocks()` | 4284 | 102 lines |
 | `_plan_geometry()` | 781 | 93 lines |
-| `_preview_plan_entity()` | 1354 | 91 lines |
+| `_preview_plan_entity()` | 1368 | 91 lines |
 | `_plan_edge()` | 912 | 84 lines |
-| `publish_package()` | 4051 | 84 lines |
-| `_reach_warning()` | 3832 | 81 lines |
+| `publish_package()` | 4065 | 84 lines |
+| `_reach_warning()` | 3846 | 81 lines |
 
 ### `story/prelude.py`
 
@@ -2203,14 +2218,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `close_plan()` | 1102 | 461 lines |
-| `_spread_berths()` | 819 | 140 lines |
-| `_json_call()` | 282 | 100 lines |
-| `_featured_assignments()` | 1015 | 85 lines |
-| `_ensure_shift_crews()` | 591 | 62 lines |
-| `ensure_required_rooms()` | 1593 | 60 lines |
-| `narrate_actual_history()` | 1764 | 58 lines |
-| `_scale_populations()` | 707 | 50 lines |
+| `close_plan()` | 1118 | 464 lines |
+| `_spread_berths()` | 830 | 145 lines |
+| `_json_call()` | 293 | 100 lines |
+| `_featured_assignments()` | 1031 | 85 lines |
+| `_ensure_shift_crews()` | 602 | 62 lines |
+| `ensure_required_rooms()` | 1612 | 60 lines |
+| `narrate_actual_history()` | 1783 | 58 lines |
+| `_scale_populations()` | 718 | 50 lines |
 
 ### `world/charter_harm.py`
 
@@ -2704,14 +2719,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `planned_layout()` | 2888 | 484 lines |
-| `_ground_plan()` | 1515 | 429 lines |
-| `ground_breaches()` | 2273 | 350 lines |
-| `spec_from_answers()` | 1267 | 246 lines |
-| `_building()` | 709 | 224 lines |
-| `hold_inventory()` | 1021 | 108 lines |
-| `_ground_geometry()` | 3450 | 87 lines |
-| `_stair_halls()` | 3590 | 79 lines |
+| `planned_layout()` | 3015 | 484 lines |
+| `_ground_plan()` | 1642 | 429 lines |
+| `ground_breaches()` | 2400 | 350 lines |
+| `spec_from_answers()` | 1394 | 246 lines |
+| `_building()` | 816 | 244 lines |
+| `plan_buildings()` | 434 | 121 lines |
+| `hold_inventory()` | 1148 | 108 lines |
+| `_ground_geometry()` | 3577 | 87 lines |
 
 ### `world/layout_solver.py`
 
@@ -2738,6 +2753,16 @@
 | `effective_depth()` | 270 | 27 lines |
 | `owed_history()` | 585 | 24 lines |
 | `normalize_living_world()` | 231 | 20 lines |
+
+### `world/lots.py`
+
+| Function | Start | Size |
+|---|---:|---:|
+| `normalize_lot()` | 58 | 32 lines |
+| `lot_marks()` | 92 | 13 lines |
+| `is_unexpanded_lot()` | 107 | 6 lines |
+| `_int()` | 51 | 5 lines |
+| `unexpanded_lots()` | 115 | 5 lines |
 
 ### `world/mechanics.py`
 
@@ -3233,14 +3258,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `claim_frontier_spaces()` | 2917 | 207 lines |
-| `mint_frontier()` | 1162 | 197 lines |
-| `plant_structure()` | 1361 | 191 lines |
-| `prepare_frontier_expansion()` | 2684 | 177 lines |
-| `materialize_planned_fringe()` | 1554 | 152 lines |
-| `hold_planned_fixtures()` | 2174 | 141 lines |
-| `planned_room_brief()` | 2022 | 97 lines |
-| `apply_planned_layout()` | 238 | 94 lines |
+| `claim_frontier_spaces()` | 2922 | 207 lines |
+| `mint_frontier()` | 1163 | 197 lines |
+| `plant_structure()` | 1362 | 195 lines |
+| `prepare_frontier_expansion()` | 2689 | 177 lines |
+| `materialize_planned_fringe()` | 1559 | 152 lines |
+| `hold_planned_fixtures()` | 2179 | 141 lines |
+| `planned_room_brief()` | 2027 | 97 lines |
+| `apply_planned_layout()` | 239 | 94 lines |
 
 ### `world/subjects.py`
 

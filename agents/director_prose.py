@@ -4718,6 +4718,21 @@ def run(ctx, stage, sc, model_payload, view, extras, facts=None):
     channels, jev = select_channels(
         ctx, stage, prose, model_payload, facts, planned, scene=sc)
     develop = {rid: planned[rid] for rid in jev.get("entered") or () if rid in planned}
+    # A LOT THE BEAT WALKS INTO BEFORE THE JOB REACHED IT is expanded into its
+    # building first (`agents/director_lots.py`), so its room is designed as
+    # the building's entry, with its rooms beyond, and never as the whole
+    # building in one room. One call in this beat; the building is then not
+    # laid out by the tier, its entry being a room the story has seen.
+    if develop:
+        try:
+            from .director_lots import expand_entered_lots
+            chat = ctx.chat
+            develop = expand_entered_lots(
+                chat["id"] if isinstance(chat, dict) else chat.id, develop, sc,
+                ctx.language, turn_idx=ctx.turn["idx"] if ctx.turn is not None else None,
+                frame_id=ctx.turn.get("frame_id") if ctx.turn is not None else None)
+        except Exception:  # noqa: BLE001 -- a lot never stops a beat
+            pass
     # Designs prepared between turns for the planned rooms this beat enters.
     try:
         from .director_rooms import prepared_rooms

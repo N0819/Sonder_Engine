@@ -49,7 +49,13 @@ LANGUAGES = ("en", "ja")
 #: BOTH lost the same file. It moves when a prompt or fragment is added, and
 #: the move belongs in the same commit as the addition.
 #: 111 at the split (2026-08-29); 112 since `card_person_note` (2026-08-30).
-PART_COUNT = 306   # +1 (2026-10-22, fix lane B6): `prose_contract.encoder_skip`,
+PART_COUNT = 308   # +1 (2026-10-28): `prose_contract.layout_lore`, the
+                   # architect choosing which of the story's lore entries
+                   # the layout tier's calls read (agents/director_layout.py
+                   # `architect_lore`). +1 (2026-10-28): `prose_contract.
+                   # layout_lot`, the architect turning a building lot into
+                   # its building's rooms (agents/director_lots.py).
+                   # +1 (2026-10-22, fix lane B6): `prose_contract.encoder_skip`,
                    # the encoder's piece for a mind's own work in a skip
                    # (agents/skip_work.py).
                    # +1 (2026-10-21, fix lane B3): `jev_questions.skip_without`,

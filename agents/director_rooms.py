@@ -2341,6 +2341,13 @@ def rooms_to_build(cid, scene, bodies):
     if not reach:
         return []
     held_open = provisional_room_ids(cid)
+    # A LOT IS ITS BUILDING'S TO BECOME (`agents/director_lots.py`): designed
+    # here it would be the whole building in one room, its rooms never
+    # planned. It is expanded before the layout tier runs, and its entry is
+    # designed then, under the lot's own uid.
+    from world.lots import unexpanded_lots
+    from world.structure import registry_rows
+    held_open = set(held_open) | unexpanded_lots(registry_rows(cid))
     return [rid for rid in reach if rid not in held_open]
 
 
@@ -2824,6 +2831,16 @@ def _predevelop_run(job, cid, frame_id, language_id):
         seen.update(tier)
         tiers.append(tier)
     near = [rid for tier in tiers for rid in tier]
+    # A LOT AN ACTOR HAS COME UPON IS EXPANDED INTO ITS BUILDING FIRST
+    # (`agents/director_lots.py`, the owner's lots of 2026-10-28): in reach,
+    # or its door opening off the room an actor stands in. Its uid is its
+    # building's entry now, a planned stub like any other, and the tier lays
+    # the building out below before anything of it is designed.
+    from agents.director_lots import expand_lots_near
+    for lot in expand_lots_near(job, cid, current, players + cast, language_id,
+                                frame_id=frame_id):
+        if lot not in near:
+            near.append(lot)
     # A PLANNED BUILDING IS LAID OUT BEFORE ITS ROOMS ARE DESIGNED
     # (`agents/director_layout.py`, on unless the host or the story turns it
     # off): the solver places a building of several storeys with a room in

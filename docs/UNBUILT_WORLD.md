@@ -3956,6 +3956,69 @@ Left, each with what it needs:
     is dropped rather than the house handed to the old search; a door with
     no asked side faces the way it serves. Every price and budget is a named
     constant in `layout_arrange.py`.
+- **Chat 179, the owner's shrine laid fresh (2026-10-28): what is left.**
+  The lore half is answered (the architect chooses what the calls read,
+  `director_layout.architect_lore`), and so are the three seams that cascaded
+  -- the cellar stair laid as a door outdoors, the `sheltered` genkan laid as
+  ground, the kitchen's back door taken for the front door
+  (`DESIGN_LAYOUT_TIER.md`, "The shrine, lab against engine"): on the
+  untouched plan the engine now keeps 36-37 of the 41 placements the lore
+  states, the liked lab shrine 34. These are not:
+  - *Read whole, the roost's lore made it too shallow for its nest.* Both
+    runs with the roost's entry laid it 7x3 with every placement the lore
+    states, and left the 4x4 nest that "dominates the center" unplaced.
+  - *The basement is never under the north half of the house* (0 of 4 live
+    runs on the fixed path), and its workbench stood on its east wall in 1.
+  - *A cellar that other buildings' cellars open into* is still each
+    house's way out (`layout_bridge._a_storey_of` refuses it): its stair is
+    laid as a door in an outside wall, as every cross-structure stair was.
+- **Six buildings asked of the Room in plain words (2026-10-28)**, on
+  copies of chat 179, the Room with a free hand: an inn, a smithy with the
+  family above it, the headman's house with its storehouse, a temple with its
+  priest's quarters, a watchtower, a merchant's shop with the family upstairs.
+  Four went through `request_location` and came back flat -- no storey, no
+  bearing on any join, every join `open_door` (the plan specification's
+  template offers `barrier:"open_door"` as a value to copy), several rooms with
+  no exposure, the charter's split copies beside them ("Family Parlor 2") --
+  and the shop's "family upstairs" became a stair ROOM joined by doors on one
+  storey. None of the four was laid out: a one-storey cluster is no building
+  to the tier. The watchtower came back as an open platform up a ladder (no
+  walls, nothing to lay out). The smithy, the one `plan_rooms` answer with a
+  storey and a stair, was laid out in 8 s. Since the same day the location
+  path plans a building as a lot (below), which the engine expands with its
+  storeys and its stairs; what is left: the location path still states no
+  bearing, its template still offers `open_door`, and a building it plans room
+  by room is still flat.
+- **Building lots (2026-10-28): what is left** (`DESIGN_BUILDING_LOTS.md`).
+  - *A long walk in one beat invents the places a plan already holds.* Asked
+    once for the valley village, the Room planned it whole as lots, joined to
+    the shrine's torii from the village's side; Hinami walked from her room,
+    through the torii and down the mountain in ONE beat, the torii was never
+    occupied at a commit, so the fringe never brought the planned path into the
+    scene (`structure.materialize_planned_fringe` reads a join declared from
+    the far side only round an occupied room), and the beat minted its own
+    mountain path, village, shop and farmhouse beside the planned ones. The
+    planned village was never entered and no lot was reached. Either the
+    fringe brings in the planned neighbours of every room a beat's walk passes
+    through, or a plan that joins a room of another part of the map writes the
+    way back onto that room's plan (`plant_structure` writes reciprocals only
+    within one planting).
+  - *A lot the beat walks into before the job reached it* is built room by
+    room, never laid out: its entry is described that beat, and a described
+    room is never re-measured. Measured: the general store on the second walk
+    (the job expanded the first lot in view, the headman's house, the beat
+    before). Laying it out in that beat would cost the tier's four calls and
+    solve, about 30 s, once a building.
+  - *A lot's building the tier refuses* is built room by room as well: the
+    tea house twice, for one doorway the solver did not lay between two rooms
+    sharing a wall.
+  - *A lot's footprint is advisory*: the architect is told it, the tier sizes
+    the rooms from what they hold.
+  - *Only sleepers move*: the posts and upkeeps at a lot stay at its entry.
+  - *A street of open doors* puts every lot on it in view, one expanded a
+    beat while an actor lingers (`LOTS_PER_RUN`), the lot it walks to first.
+  - *Names the location path left as ids* ("general_store", "main_street")
+    are the names the lot's entry keeps.
 - **Buildings other than the shrine, asked of the Room live (2026-10-15).**
   The owner asked for "actual engine tests on ... other structures that we
   just ask the room to make, like ... hospital buildings, lighthouse". Three

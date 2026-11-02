@@ -1249,6 +1249,146 @@ def test_a_stair_from_a_storey_down_to_open_ground_is_a_way_out_of_the_building(
     assert "yard_steps" in {j["to"] for j in loft["joins"]}
 
 
+def _with_a_cellar(structure="town_under"):
+    """SPECS with a cellar down a stair from the hall and a vault beyond the
+    cellar's far door, both filed in `structure`: the shape of the owner's
+    shrine (chat 179), whose plan filed its basement and cavern as the
+    ground beneath the house."""
+    specs = copy.deepcopy(SPECS)
+    specs["hall"][1]["adjacent"].append({"to": "cellar", "vertical": "down", "way": "stair",
+                                         "barrier": "a low door"})
+    specs["cellar"] = ("the Cellar", {
+        "purpose": "a cellar of barrels", "structure": structure, "exposure": "enclosed",
+        "level": -1,
+        "adjacent": [{"to": "hall", "vertical": "up", "way": "stair"},
+                     {"to": "vault", "dir": "n", "barrier": "an iron door"}]})
+    specs["vault"] = ("the Vault", {
+        "purpose": "a vault cut in the rock", "structure": structure, "exposure": "enclosed",
+        "level": -1, "adjacent": [{"to": "cellar", "dir": "s", "barrier": "an iron door"}]})
+    return specs
+
+
+def test_a_cellar_filed_in_another_part_of_the_map_is_a_storey_of_its_house():
+    """A stair joins two storeys of one building whatever part of the map
+    each is filed in: the rooms it reaches below the house, joined to no
+    walled room beyond it, are its cellar storey, never a way out. Chat 179
+    filed the shrine's basement and cavern apart from the house, and the
+    cellar stair was laid as a door in the hall's outside wall."""
+    b = _building(specs=_with_a_cellar())
+    assert b["refusal"] is None
+    assert b["rooms"] == ["cellar", "hall", "kitchen", "loft", "vault"]
+    assert b["levels"]["cellar"] == -1 and b["levels"]["vault"] == -1
+    assert {"low": "cellar", "high": "hall", "way": "stair"} in b["stairs"]
+    assert not [o for o in b["outside"] if o["to"] in ("cellar", "vault")]
+    assert b["structure"] == "town", "the house's own part of the map, not its cellar's"
+    assert b["entrance"]["room"] == "hall"
+
+
+def test_a_vault_other_cellars_open_into_is_no_storey_of_one_house():
+    """The catacomb a dozen cellars open into belongs to none of them: the
+    rooms a stair reaches stay a way out of the building where they join a
+    walled room beyond it, as before."""
+    specs = _with_a_cellar()
+    specs["vault"][1]["adjacent"].append({"to": "next_cellar", "dir": "e", "barrier": "a grate"})
+    specs["next_cellar"] = ("the Next Cellar", {
+        "purpose": "the neighbour's cellar", "structure": "next_door", "exposure": "enclosed",
+        "level": -1, "adjacent": [{"to": "vault", "dir": "w", "barrier": "a grate"}]})
+    b = _building(specs=specs)
+    assert b["rooms"] == ["hall", "kitchen", "loft"]
+    way_down = [o for o in b["outside"] if o["to"] == "cellar"]
+    assert way_down and way_down[0]["vertical"] == "down"
+
+
+def test_a_building_of_its_own_on_the_ground_is_met_by_a_stair_never_joined():
+    """Another part of the map with a room on the ground is a building of its
+    own: a stair from the loft onto its gallery leaves the two apart."""
+    specs = copy.deepcopy(SPECS)
+    specs["loft"][1]["adjacent"].append({"to": "gallery", "dir": "e", "barrier": "a door"})
+    specs["gallery"] = ("the Gallery", {
+        "purpose": "the chapel's gallery", "structure": "chapel", "exposure": "enclosed",
+        "level": 1, "adjacent": [{"to": "loft", "dir": "w", "barrier": "a door"},
+                                 {"to": "nave", "vertical": "down", "way": "stair"}]})
+    specs["nave"] = ("the Nave", {
+        "purpose": "the chapel's nave", "structure": "chapel", "exposure": "enclosed",
+        "level": 0, "adjacent": [{"to": "gallery", "vertical": "up", "way": "stair"}]})
+    specs["loft"][1]["adjacent"].append({"to": "chapel_stair_top", "vertical": "up", "way": "stair"})
+    specs["chapel_stair_top"] = ("the Belfry", {
+        "purpose": "the chapel's belfry", "structure": "chapel", "exposure": "enclosed",
+        "level": 2, "adjacent": [{"to": "loft", "vertical": "down", "way": "stair"},
+                                 {"to": "gallery", "vertical": "down", "way": "stair"}]})
+    buildings = lb.plan_buildings(specs, _scene())
+    house = next(b for b in buildings if "hall" in b["rooms"])
+    assert house["rooms"] == ["hall", "kitchen", "loft"]
+
+
+def test_the_front_door_is_the_entrys_whatever_ground_each_way_out_opens_onto():
+    """Among the ways out on the entrance's storey, an entry's door is the
+    front door, then a hall's, then the first by id -- never the back door
+    whose room's id sorts first. Chat 179's house opened onto its well, its
+    latrine and its genkan, and the kitchen's door to the well was laid as
+    the front door."""
+    specs = copy.deepcopy(SPECS)
+    specs["hall"][1]["adjacent"] = [e for e in specs["hall"][1]["adjacent"] if e["to"] != "street"]
+    specs["hall"][1]["adjacent"].append({"to": "porch", "barrier": "open_door"})
+    specs["porch"] = ("the Porch", {
+        "purpose": "the entryway, where boots come off", "structure": "town",
+        "exposure": "enclosed",
+        "adjacent": [{"to": "hall", "barrier": "open_door"},
+                     {"to": "street", "dir": "s", "barrier": "closed_door"}]})
+    specs["street"][1]["adjacent"] = [{"to": "porch", "dir": "n"}]
+    specs["hall"][1]["adjacent"].append({"to": "back_garden", "barrier": "closed_door"})
+    specs["back_garden"] = ("the Back Garden", {"purpose": "a garden", "structure": "town",
+                                                "exposure": "open",
+                                                "adjacent": [{"to": "hall"}]})
+    specs["kitchen"][1]["adjacent"].append({"to": "a_well", "barrier": "closed_door"})
+    specs["a_well"] = ("the Well", {"purpose": "a well", "structure": "town", "exposure": "open",
+                                    "adjacent": [{"to": "kitchen"}]})
+    scene = _scene()
+    scene["rooms"]["street"]["adjacent"] = [{"to": "porch", "dir": "n"}]
+    b = _building(specs=specs, scene=scene)
+    assert b["entrance"]["room"] == "porch" and b["entrance"]["to"] == "street"
+    assert b["plan"].endswith("porch")
+
+
+def _with_an_entry(barrier):
+    """SPECS with a place the plan states `sheltered` between the hall and the
+    street, the way onto the street carrying `barrier`."""
+    specs = copy.deepcopy(SPECS)
+    specs["hall"][1]["adjacent"] = [e for e in specs["hall"][1]["adjacent"] if e["to"] != "street"]
+    specs["hall"][1]["adjacent"].append({"to": "entry", "dir": "s"})
+    specs["entry"] = ("the Entry", {
+        "purpose": "where boots come off", "structure": "town", "exposure": "sheltered",
+        "adjacent": [{"to": "hall", "dir": "n"},
+                     {"to": "street", "dir": "s", **({"barrier": barrier} if barrier else {})}]})
+    specs["street"][1]["adjacent"] = [{"to": "entry", "dir": "n"}]
+    return specs
+
+
+def test_a_place_entered_from_open_ground_through_a_door_is_within_the_walls():
+    """A door stands in a wall: a place the plan states `sheltered`, joined to
+    a walled room of the house and entered from open ground through a door
+    the engine reads as one, is a room of the building -- the owner's genkan
+    (chat 179), planned `sheltered` behind the house's front door, was laid
+    as a block of the garden and the kitchen's back door taken for the
+    front."""
+    scene = _scene()
+    scene["rooms"]["street"]["adjacent"] = [{"to": "entry", "dir": "n"}]
+    b = _building(specs=_with_an_entry("a heavy timber front door"), scene=scene)
+    assert "entry" in b["rooms"]
+    assert b["entrance"]["room"] == "entry" and b["entrance"]["to"] == "street"
+
+
+def test_a_porch_open_to_the_ground_stays_the_ground_the_house_opens_onto():
+    """A roof with no walls round it -- a porch, a veranda, an archway --
+    opens onto the ground with no door, and stays outside the building."""
+    scene = _scene()
+    scene["rooms"]["street"]["adjacent"] = [{"to": "entry", "dir": "n"}]
+    for barrier in (None, "an archway", "open"):
+        b = _building(specs=_with_an_entry(barrier), scene=scene)
+        assert "entry" not in b["rooms"], barrier
+        assert ("hall", "entry") in {(o["room"], o["to"]) for o in b["outside"]}
+
+
 def test_a_plan_written_while_a_commit_prepares_is_never_written_back_over(temp_db):
     """The commit's registry projection is prepared before the write lock and
     applied inside it; the layout tier writes the plan out of band, at any
@@ -1757,6 +1897,117 @@ def test_the_tier_reads_what_the_storys_lore_says_of_the_building(temp_db):
     assert "another world" not in text
     assert lb.sort_payload(dict(building, description=text))["building"]["description"] == text
     assert "description" not in lb.sort_payload(building)["building"]
+
+
+def _lore_book(temp_db, cid):
+    """The labels name the town and the kitchen; the loft's own entry is
+    keyed by what the lore calls it, which no label of the plan spells."""
+    _book(temp_db, cid, [
+        ("the realm beyond,the dimensional seal", "Past the seal lies another world."),
+        ("kitchen,hearth", "The kitchen keeps a deep stone hearth on its north wall."),
+        ("town,market town", "The town is an old market town on a ford."),
+        ("top floor,eaves", "The top floor is smaller under the roof; its one window is in the gable."),
+    ])
+    return {row["keys"]: row["id"] for row in temp_db.q("SELECT id, keys FROM lore_entries")}
+
+
+def test_the_architect_reads_the_lore_the_labels_miss(temp_db):
+    """Chat 179 (2026-10-28): the owner's shrine lorebook holds seven entries
+    about the house and the tier's calls read three, because the labels only
+    match where the lorebook and the plan spell a room alike -- the top
+    floor's entry keyed "roost" never reached the room planned "Tamamo's
+    Roost". The architect now chooses from an index of the story's entries;
+    what the labels name is read whatever it answers, the building's own
+    entry first, and an id the index never offered is ignored."""
+    from agents.director_layout import LORE_STEP, architect_lore
+    cid = _chat(temp_db)
+    ids = _lore_book(temp_db, cid)
+    building = dict(_building(), structure="town")
+    seen = []
+
+    def call(step, system, payload):
+        seen.append((step, copy.deepcopy(payload)))
+        return {"entries": [ids["top floor,eaves"], "99999", str(ids["top floor,eaves"])]}
+
+    text = architect_lore(cid, building, call, "en")
+    assert [step for step, _p in seen] == [LORE_STEP]
+    assert text.startswith("The town is an old market town"), "the building's own entry first"
+    assert "stone hearth" in text, "what the labels name is read"
+    assert text.count("in the gable") == 1, "the architect's choice is read, once"
+    assert "another world" not in text, "nothing nobody chose"
+    payload = seen[0][1]
+    assert "description" not in payload["building"] and "brief" not in payload["building"]
+    offered = {e["id"]: e for e in payload["entries"]}
+    assert set(offered) == set(ids.values()), "a small lorebook is offered whole"
+    loft = offered[ids["top floor,eaves"]]
+    assert loft["keys"] == ["top floor", "eaves"] and loft["opening"].startswith("The top floor")
+
+
+@pytest.mark.parametrize("answer", ["raises", {}, {"entries": "the loft"}, {"entries": [99999]}, "no"])
+def test_an_architect_who_chooses_nothing_leaves_what_the_labels_name(temp_db, answer):
+    """Fails open: the choice raising, or naming nothing the index offered,
+    leaves the calls exactly what the labels name."""
+    from agents.director_layout import architect_lore, building_description
+    cid = _chat(temp_db)
+    _lore_book(temp_db, cid)
+    building = dict(_building(), structure="town")
+
+    def call(step, system, payload):
+        if answer == "raises":
+            raise ValueError("no JSON")
+        return answer
+
+    text = architect_lore(cid, building, call, "en")
+    assert text == building_description(cid, building)
+    assert "stone hearth" in text and "in the gable" not in text
+
+
+def test_a_story_with_no_lore_asks_the_architect_nothing(temp_db):
+    from agents.director_layout import architect_lore
+    cid = _chat(temp_db)
+    calls = []
+    assert architect_lore(cid, _building(), _answers(calls), "en") == ""
+    assert calls == []
+
+
+def test_past_its_cap_the_index_holds_what_the_labels_name(temp_db, monkeypatch):
+    """A large lorebook is offered by the lore search's best for the
+    building, and never without the entries the labels already name."""
+    import agents.director_layout as director_layout
+    cid = _chat(temp_db)
+    ids = _lore_book(temp_db, cid)
+    monkeypatch.setattr(director_layout, "LAYOUT_LORE_INDEX_MAX", 2)
+    building = dict(_building(), structure="town")
+    rows = director_layout._story_lore(cid)
+    _own, named = director_layout._named_by_labels(rows, building)
+    index = director_layout._lore_index(cid, building, rows, named)
+    assert {ids["kitchen,hearth"], ids["town,market town"]} <= {r["id"] for r in index}
+    assert len(index) == 2
+
+
+def test_the_tier_asks_the_architect_for_its_lore_before_the_brief(temp_db):
+    """The choice is the tier's first call, filed under its own step key, and
+    the three calls after it read what it chose."""
+    from agents.director_layout import (BRIEF_STEP, LAYOUT_TIER_SETTING, LORE_STEP,
+                                        lay_out_buildings)
+    from core.db import set_setting, wset
+    cid = _chat(temp_db)
+    ids = _lore_book(temp_db, cid)
+    _plant(cid)
+    set_setting(LAYOUT_TIER_SETTING, "on")
+    wset(cid, "scene", _scene())
+    seen = []
+    answers = _answers([])
+
+    def call(step, system, payload):
+        seen.append((step, copy.deepcopy(payload)))
+        if step == LORE_STEP:
+            return {"entries": [ids["top floor,eaves"]]}
+        return answers(step, system, payload)
+
+    lay_out_buildings(None, cid, _scene(), ["hall"], "en", call=call)
+    assert [step for step, _p in seen][:2] == [LORE_STEP, BRIEF_STEP]
+    assert "in the gable" in seen[1][1]["building"]["description"]
 
 
 @pytest.mark.parametrize("lang", ["en", "ja"])

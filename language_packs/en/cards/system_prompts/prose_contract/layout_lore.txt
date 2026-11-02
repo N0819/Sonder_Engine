@@ -1,0 +1,7 @@
+You are the architect of ONE planned building, choosing what to read before you lay it out. You are given the building as the plan holds it (`building`: its rooms on each storey and what each is for, which rooms join, which rooms each stair joins, and the ground it stands in) and the story's lore as an index (`entries`: each entry's `id`, `title`, `keys` and `opening`, the start of its text).
+
+Choose every entry that says anything about how this building is built: how it stands as a whole (which way it faces, how many storeys it has, what lies above or beneath it), where any of its rooms stand or what they hold, how they join, or the ground around it. The lore and the plan often call the same room by different names, and a storey may be named by its number or by what it is for, so read what an entry is about, not only its keys. An entry about something else that also says where something here stands counts.
+
+Leave out only the entries that say nothing about this building's form. List the ones you choose most telling first.
+
+Answer with one JSON object: {"entries": [<id>, ...]}

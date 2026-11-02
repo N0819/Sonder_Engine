@@ -17,6 +17,7 @@ import threading
 
 from world.charter_model import integer as _integer
 from world.frontage import split_marks
+from world.lots import lot_marks
 from world.regions import normalize_region_id
 from world.place_names import (SLOT, deal_place_name, is_pattern,
                                name_patterns, resident_name_words,
@@ -1410,6 +1411,10 @@ def plant_structure(cid, structure, rooms, *, owning_book_id=None,
             # from (`world/frontage.py`): the plan is where provenance lives,
             # and the frontage reads it there by the room's own uid.
             **split_marks(raw),
+            # And a LOT's record, or the lot a room was expanded from
+            # (`world/lots.py`): what says a place stands for a building not
+            # designed yet, and which rooms are one building once it is.
+            **lot_marks(raw),
         }
     if len(normalized) > structure["max_planned"]:
         raise ValueError("planned rooms exceed structure.max_planned")

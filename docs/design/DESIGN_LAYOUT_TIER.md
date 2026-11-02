@@ -139,6 +139,33 @@ of 9 to 7 of 9 on the refined; the floor the stair halls swallow did not
 move much either way. It fails open: no brief, the two calls read the lore
 alone.
 
+**The architect chooses its lore, first of all** (2026-10-28, chat 179).
+Before the brief, one call on the room role is shown the building as the
+sort reads it and an index of the story's lore -- every entry's id, title,
+keys and opening, the whole lorebook up to `LAYOUT_LORE_INDEX_MAX` entries
+and past it the entries the labels name plus the lore search's best -- and
+answers which entries say anything about how the building is built, most
+telling first (`prose_contract.layout_lore`,
+`director_layout.architect_lore`, step `director_rooms_layout_lore`). What
+the labels name is read whatever it answers, so it can add and never take
+away: the building's own entries, then every other entry the labels name,
+then its choices, whole, up to `LAYOUT_DESCRIPTION_CHARS`. Why: which
+entries describe a building is a question about what they mean, and the
+labels answer it only where the lorebook and the plan spell a room alike.
+On chat 179 the owner's shrine lorebook held seven entries about the house
+and the calls read three -- the top floor's entry is keyed "roost" and the
+plan named the room "Tamamo's Roost"; the overview is keyed "shrine of the
+golden fox" and the plan named the building "The House of the Shrine of the
+Golden Fox"; the cellar stair's entry is keyed "basement", a room of
+another structure. Measured live on that chat's plan (DeepSeek V4.1 Flash,
+two runs each): read by labels, 3 entries and a roost with no window, its
+altar and desk where the solver chose; with the architect choosing, 10
+entries, and both runs laid the south-gable window, the altar on the north
+wall, the desk beneath the window, the boxes along the east wall and the
+shamisen by the window. It chose all 13 entries both times; its order put
+the three about the realm beyond the seal last, where the budget cut them.
+It fails open to the labels.
+
 **Two calls, the lab's split, narrowed to what a plan leaves open.**
 `prose_contract.layout_sort` says what each planned room holds (fixtures and
 how each stands, zones, windows) and whether each stair is enclosed;
@@ -1128,6 +1155,71 @@ a watchtower and a merchant's house. All seven lay, with a median of 4.8 s.
 The owner read the drawings beside the lab's and the engine's: "it looks
 much much nicer", and then "it's much better than it was before we started
 this workflow". What is left is in `UNBUILT_WORLD.md` §2.43.
+
+## The shrine, lab against engine (2026-10-28)
+
+The owner, of the layout lab's shrine: "beautiful and clearly a pipe dream
+because it's never existed in engine". Then: "Lets test and alter to see how
+close we can get." Every layout was drawn by the lab's own page, and scored
+against the 41 placements the shrine's own lorebook states (the genkan
+mid-front, the kitchen east and the washroom west, both stairs in the hall's
+north wall, the hallway over the hall with its windows west, the meditation
+room north of Hinami's on its east side, the roost's south window and north
+altar, the cavern north of the basement, the torii south and the camphor
+behind; the scorer and page in the round's run output). Model: the room
+role's default, DeepSeek V4.1 Flash.
+
+| Layouts | Lore placements kept, of 41 |
+|---|---|
+| the liked lab shrine (rewritten text, one answer, three hand edits) | 34 |
+| the lab, rewritten text, five fresh answers, its own search | 23, 24, 25, 29, 33 |
+| the lab, the real lorebook, two fresh answers, its own search | 30, 33 |
+| the same lab answers laid by the engine's arrangement core | 29-32 |
+| the engine on chat 179's plan, as it stood | 20, 22 |
+| the engine on the same plan, the three fixes below in code | 36, 37, 37, 37 |
+| the same fixes made by editing the plan, four answers | 35, 36, 36, 38 |
+| those four answers laid by the lab's search instead | 28, 29, 31, 32 |
+
+So the engine's own path -- the Room's plan, the architect's chosen lore, the
+brief, the two calls, the arrangement core -- now keeps more of what the lore
+says than the lab ever did, and the core keeps more than the lab's search on
+the same answers. Drawn, it is the lab's house: the genkan on the south front
+under the hall, the washroom west and the kitchen east (the liked lab has them
+the wrong way round), both stairs along the hall's north wall, the hallway
+north to south over it with the meditation room and then Hinami's room off its
+east side, the roost stair at its south end, the nest in the middle of the
+roost with the altar north and the desk at the south window, the cavern a
+block of its own north of the basement, the latrine behind the west end, the
+well east of the lantern path. What it still misses: the basement is never
+under the north half (0 of 4), the workbench is on the basement's east wall
+once in four, and the hall is smaller and squarer than the lab's.
+
+What made the difference was three seams between the Room's plan and the
+tier, none of them in the solver:
+
+- **A stair into another part of the map joins its storey** (`layout_bridge.
+  plan_buildings`, `_a_storey_of`, `_home_structure`). To the Room a structure
+  is "the part of the map the rooms make", not a roof, and chat 179 filed the
+  basement and the cavern as `shrine_under`. The rooms a stair reaches in
+  another part of the map are now a storey of the building it leaves when
+  they lie wholly off the ground storey and join no walled room beyond the two
+  -- the house's own cellar, never the catacomb a dozen cellars open into, nor
+  a building of its own on the ground -- and only where the two still fit one
+  solve. Worth on its own the basement, the cellar stair in the north wall and
+  every ground place: 20-22 to 28-30.
+- **A place entered from open ground through a door is within the walls**
+  (`_walled_by_a_door`, `DOOR_BARRIERS`), whatever exposure the plan wrote: a
+  door stands in a wall. Chat 179 planned the genkan `sheltered` with the front
+  door between it and the lantern path; a porch, a veranda or an archway opens
+  onto the ground with no door and stays ground. The Room's own help now
+  defines exposure by walls, "a place entered through a door is enclosed",
+  for the plans to come. Worth another 7.
+- **The front door is the entry's** (`entry` in `_building`): among the ways
+  out of the entrance's storey an entry's door, then a hall's, then the first
+  by id -- read off the room's name and id before its purpose, since the
+  kitchen's "service room east of the hall" read as a hall. Chat 179's
+  kitchen door onto the well had been the front door, the house's plan named
+  for the kitchen.
 
 ## Tests
 
