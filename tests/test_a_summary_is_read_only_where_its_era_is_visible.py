@@ -25,7 +25,7 @@ import pytest
 from core.db import active_frame_id
 from core.frames import create_frame
 from mind import memory
-from mind.memory_common import SUMMARY_SCOPE_FIRSTHAND, SUMMARY_SCOPE_HEARSAY
+from mind.memory import SUMMARY_SCOPE_FIRSTHAND, SUMMARY_SCOPE_HEARSAY
 
 FALL = "I watched the city fall to the invaders and fled north."
 THREAD = "whether my brother survived the fall"

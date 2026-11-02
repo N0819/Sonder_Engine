@@ -10,8 +10,8 @@ retired the old one (the behaviour the ja contact card promises), and every
 contact between the same two bodies shared ONE `contact_id`.
 """
 
-from world.spatial_contacts import (_displaces, _part_identity, _same_region,
-                                    canonical_region, contact_id)
+from world.spatial import (_displaces, _part_identity, _same_region,
+                           canonical_region, contact_id)
 
 
 def test_a_japanese_part_is_its_own_kind():

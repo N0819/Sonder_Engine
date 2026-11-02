@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import re
 
-from mind.memory_jev import without_names
+from mind.memory import without_names
 
 OREN = "オレン・ダスク"
 

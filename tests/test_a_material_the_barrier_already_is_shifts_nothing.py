@@ -13,9 +13,8 @@ at all, and the far field charged a wall's 45 dB for a pane's 28. The same
 double count put iron bars on the shut-door rung.
 """
 
-from world.spatial import hear_level, spatial_rel_between
-from world.spatial_senses import _material_shifted_barrier
-from world.spatial_sound_field import _edge_loss_db
+from world.spatial import (_edge_loss_db, _material_shifted_barrier, hear_level,
+                           spatial_rel_between)
 
 VOLUMES = ("mutter", "whisper", "normal", "loud", "shout")
 

@@ -15,13 +15,15 @@ import ast
 from pathlib import Path
 
 import world.spatial as spatial
-from world import spatial_scent_field, spatial_senses
+
+
+def _facade_tree():
+    return ast.parse(Path(spatial.__file__).read_text())
 
 
 def _bound_names():
-    tree = ast.parse(Path(spatial.__file__).read_text())
     names = []
-    for node in tree.body:
+    for node in _facade_tree().body:
         if isinstance(node, ast.ImportFrom):
             names.extend(alias.asname or alias.name for alias in node.names)
         elif isinstance(node, (ast.FunctionDef, ast.ClassDef)):
@@ -31,6 +33,17 @@ def _bound_names():
     return names
 
 
+def _bound_from():
+    """`{name: module}` for every name the facade's import block lifts out of
+    a module. Read off the facade's own source, so the test names no sibling
+    it would only call through (`project_check.check_facade_import_direction`):
+    with `test_no_name_is_bound_twice`, a name bound from a sibling here IS
+    that sibling's object."""
+    return {alias.asname or alias.name: node.module
+            for node in _facade_tree().body if isinstance(node, ast.ImportFrom)
+            for alias in node.names}
+
+
 def test_no_name_is_bound_twice():
     names = _bound_names()
     twice = sorted({n for n in names if names.count(n) > 1})
@@ -38,9 +51,11 @@ def test_no_name_is_bound_twice():
 
 
 def test_the_two_scent_ladders_have_two_names():
-    assert spatial.SCENT_LEVELS is spatial_scent_field.SCENT_LEVELS
+    bound = _bound_from()
+    assert bound["SCENT_LEVELS"] == "world.spatial_scent_field"
+    assert bound["SCENT_GRADE_LEVELS"] == "world.spatial_senses"
     assert spatial.SCENT_GRADE_LEVELS == ("none", "muffled", "full")
-    assert spatial.SCENT_GRADE_LEVELS is spatial_senses.SCENT_GRADE_LEVELS
+    assert spatial.SCENT_LEVELS != spatial.SCENT_GRADE_LEVELS
 
 
 def test_the_body_ledgers_are_the_facades_to_hand_out():
@@ -48,6 +63,5 @@ def test_the_body_ledgers_are_the_facades_to_hand_out():
     identity module's one statement of them, and a reader outside `world/`
     (dressing/backdrops.py keeps a pinned copy until it can) imports it
     through the facade (lane L10's request, 2026-11-01)."""
-    from world import spatial_identity
-    assert spatial._BODY_LEDGERS is spatial_identity._BODY_LEDGERS
+    assert _bound_from()["_BODY_LEDGERS"] == "world.spatial_identity"
     assert spatial._BODY_LEDGERS == ("attire", "scales", "vitals", "overlays")

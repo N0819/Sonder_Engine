@@ -11,7 +11,7 @@ and 3 declared `indoor`/`interior` read as UNDER THE SKY, which the sight cap
 answers "full ... no wall, no floor".
 """
 
-from world.spatial_senses import _under_the_sky
+from world.spatial import _under_the_sky
 from world.weather import room_exposure
 
 

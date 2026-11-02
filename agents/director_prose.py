@@ -801,6 +801,17 @@ def select_channels(ctx, stage, prose, model_payload, facts=None, planned=None,
                 answers.get(WALK_PREFIX + walk["subject"])), 4) for walk in walks}
         record["stopped"] = [subject for subject, p in record["walks"].items()
                              if p >= record["threshold"]]
+    # An unanswered question is not a "no": a key the decision model left out
+    # read as a confident refusal, silently, where a raised error fails open
+    # (review 2026-11-01). Fail open on the missing channels too, out loud.
+    missing = [channel for channel in decisions.unanswered(battery, answers)
+               if channel in questions or channel in extension]
+    if missing:
+        for channel in missing:
+            answers[channel] = {"type": "noul", "noul": 1.0}
+        record["unanswered"] = list(missing)
+        ctx.add_warning(f"{stage}: decision model left {sorted(missing)} "
+                        f"unanswered; granted (fail-open)")
     probabilities = {channel: round(decisions.probability(answers.get(channel)), 4)
                      for channel in [*questions, *extension]}
     selected = [channel for channel in candidates

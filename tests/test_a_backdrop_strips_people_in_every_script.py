@@ -194,7 +194,7 @@ def test_an_owners_name_in_a_possessive_keeps_its_sentence():
 def test_the_strips_body_candidates_are_the_body_predicates_ledgers():
     """`_scene_bodies` reads the body ledgers as candidates and lets
     `scene_names_body` decide; a ledger added there must be read here."""
-    from world.spatial_identity import _BODY_LEDGERS
+    from world.spatial import _BODY_LEDGERS
 
     assert backdrops._BODY_LEDGERS == _BODY_LEDGERS
 

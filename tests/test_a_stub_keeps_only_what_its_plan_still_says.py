@@ -73,7 +73,7 @@ def _expand(plan):
 
 
 def test_an_expanded_lot_s_entry_sheds_the_whole_building_s_footprint(plan):
-    from world.spatial_merge import _merge_room
+    from world.spatial import _merge_room
     plan.update({"store": ("General Store", LOT), "street": ("Street", STREET)})
     scene = _village()
     structure.materialize_planned_fringe(1, scene)

@@ -21,6 +21,7 @@ from enum import Enum, IntEnum
 import pytest
 
 from llm import schemas
+from tests.helpers import model_dict
 
 
 def _reference_plain(value):
@@ -84,7 +85,7 @@ def test_every_example_dumps_as_it_did(step):
     validated = schemas._validate(
         model, schemas.preprocess_llm_output(step, copy.deepcopy(
             schemas.OUTPUT_EXAMPLES[step])))
-    raw = validated.model_dump(exclude_none=True)
+    raw = model_dict(validated, exclude_none=True)
     assert _same(schemas._plain(raw), _reference_plain(raw))
 
 

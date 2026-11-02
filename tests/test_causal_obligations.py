@@ -44,7 +44,17 @@ def test_obligation_patch_has_a_social_owner_and_preserves_its_metadata():
 def test_current_specialist_pipeline_keeps_debts_outside_scene_state(
         temp_db, monkeypatch, prose_director, stage):
     """Through the prose Director and its encoder since 2026-09-27: the
-    promise is spoken, and the one event carrying it writes `obligations`."""
+    promise is spoken, and the one event carrying it writes `obligations`.
+
+    CHANGED 2026-11-01: the write is DROPPED, out loud, and kept nowhere.
+    `obligations` was retired from the Director 2026-10-02 (the owner): what
+    a mind owes is its own to keep. That retirement only stopped the channel
+    being asked, and an encoder that wrote it anyway reached the social owner
+    and was committed -- which this test used to pin as the debt "kept
+    outside scene state" (audit `agents_director_prose_movement_rooms` F16;
+    `tests/test_a_retired_channel_is_dropped_out_loud.py`). Now the stage
+    names the channel in `retired_channels` and warns, and no output,
+    state, causal step or transform carries it."""
     calls = []
     promise = encoder_event(
         "I promise to bring the report.", speech=True,
@@ -57,11 +67,14 @@ def test_current_specialist_pipeline_keeps_debts_outside_scene_state(
     ctx = _make_ctx(temp_db, interp={"sequence": []}, player_input="I promise to bring the report.")
     temp_db.wset(ctx.chat.id, "pending_obligations", [{"id": "old", "who": "Mara", "what": "answer", "opened_turn": 0}])
     out = getattr(director, f"director_{stage}")(ctx, 0)
-    assert out["obligations"][0]["what"] == "bring the report"
+    assert not out.get("obligations")
     state = out["state_assertions" if stage == "interpret" else "state_diff"]
     assert "obligations" not in state
     assert all("obligations" not in step["patch"] for step in state["causal_steps"])
-    assert any(row["patch"].get("obligations") for row in out["orchestration"]["transform_history"])
+    assert not any(row["patch"].get("obligations")
+                   for row in out["orchestration"]["transform_history"])
+    assert out["orchestration"]["prose_contract"]["retired_channels"] == ["obligations"]
+    assert any("obligations" in w and "retired" in w for w in ctx.warnings)
     # The Director no longer carries the ledger (obligations retired from
     # the Director, 2026-10-02): what a mind owes is its own to keep.
     payload = next(call["payload"] for call in calls

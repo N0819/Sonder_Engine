@@ -1685,7 +1685,11 @@ def _demanded_presences(ctx, dr, managed, ceiling):
         # widening, because the significant-word fallback matches every
         # record sharing a word (see `_background_name_named_exactly`).
         flow_hit = _presence_in_addressed_refs(name, addressed_refs)
-        aimed = bool(_character_address_of(dr, name, roster, sc, room))
+        # `shared=`: a role word two records share ("the trader") is no
+        # precise address to either (review 2026-11-01, the commit gate's
+        # rule; this manager gate had kept the leak).
+        aimed = bool(_character_address_of(dr, name, roster, sc, room,
+                                           shared=shared_words))
         named_exactly = _background_name_named_exactly(name, player_input)
         precise = bool(flow_hit or named_exactly or aimed)
         mentioned = _background_name_mentioned(

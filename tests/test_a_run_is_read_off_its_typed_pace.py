@@ -12,7 +12,7 @@ already carried the typed answer (`MovementDecl.pace`) and nothing read it
 prose half is a request to the language lane).
 """
 
-from agents.director_movement import _declares_rapid_movement
+from agents.director import _declares_rapid_movement
 
 
 def test_a_declared_movement_at_a_run_is_rapid_whatever_its_words():

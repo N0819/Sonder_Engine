@@ -99,7 +99,7 @@ from mind.memory_context import (  # noqa: F401
 )
 from mind.memory_jev import (  # noqa: F401
     NET_SIZE, PONDER_FLOOR, PONDER_LIMIT, PONDER_NET, jev_memory_packet, jev_ponder_packet,
-    memory_line, memory_net, memory_state, named_in, ponder_state,
+    memory_line, memory_net, memory_state, named_in, ponder_state, without_names,
 )
 from mind.memory_links import (  # noqa: F401
     CHAIN_HOPS, LINK_CANDIDATES, LINK_QUOTE_CHARS, LINK_THRESHOLD, PULL_CAP,
@@ -108,6 +108,8 @@ from mind.memory_links import (  # noqa: F401
 from mind.memory_routes import (  # noqa: F401
     VERIFY_CHARS, VERIFY_LIMIT, answer, names_place, question_state, read_route, route_question,
     route_questions, routing_on, says_name,
+    # The routed walk's readers of the decision model's answers.
+    _first_sure, _surest, _yes_shares,
 )
 from mind.memory_time import (  # noqa: F401
     JUST_NOW, MemoryClock, PRESTORY_TURN_IDX, UNIT_LADDER, WHEN_BEFORE_RECORD, WHEN_UNPLACEABLE,

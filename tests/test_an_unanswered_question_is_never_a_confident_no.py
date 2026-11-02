@@ -25,7 +25,7 @@ which is what a router or search that cannot finish already does.
 from __future__ import annotations
 
 from mind import character_jev as jev
-from mind import memory_routes
+from mind.memory import _first_sure, _surest, _yes_shares
 
 
 def _yes(p):
@@ -45,21 +45,21 @@ def test_a_first_time_walk_never_steps_past_an_unanswered_row(monkeypatch):
             {"id": 2, "turn_idx": 9, "content": "Crossing again with Oren."}]
     monkeypatch.setattr(jev, "ask", lambda state, qs: {"moment:1": _yes(0.97)})
     record = {}
-    shares = memory_routes._yes_shares(rows, "memory_moment", "STATE", 20, set(), None, record)
+    shares = _yes_shares(rows, "memory_moment", "STATE", 20, set(), None, record)
     assert shares == [None, 0.97]
-    assert memory_routes._first_sure(rows, shares) is None, \
+    assert _first_sure(rows, shares) is None, \
         "row 1 may be the first time; the walk cannot say row 2 is"
     assert record.get("unanswered") == 1
 
 
 def test_a_walk_answered_in_full_reads_as_before():
     rows = [{"id": 1, "turn_idx": 3}, {"id": 2, "turn_idx": 9}]
-    assert memory_routes._first_sure(rows, [0.1, 0.97]) == rows[1]
-    assert memory_routes._first_sure(rows, [0.97, None]) == rows[0], \
+    assert _first_sure(rows, [0.1, 0.97]) == rows[1]
+    assert _first_sure(rows, [0.97, None]) == rows[0], \
         "an unanswered row AFTER the first sure one changes nothing"
 
 
 def test_the_surest_is_not_chosen_from_a_partial_answer():
     rows = [{"id": 1, "turn_idx": 3}, {"id": 2, "turn_idx": 40}]
-    assert memory_routes._surest(rows, [None, 0.9]) == (None, 0.0)
-    assert memory_routes._surest(rows, [0.2, 0.9])[0] == rows[1]
+    assert _surest(rows, [None, 0.9]) == (None, 0.0)
+    assert _surest(rows, [0.2, 0.9])[0] == rows[1]

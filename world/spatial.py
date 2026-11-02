@@ -292,6 +292,9 @@ from world.spatial_senses import (
     voice_carries,
     # A line that names nobody is unknown, never somebody else's (2026-10-20).
     spoken_to,
+    # Two rooms under the sky, read off the weather's one reading of
+    # exposure (2026-11-01, audit world_spatial_sound F11).
+    _under_the_sky,
 )
 
 
@@ -441,6 +444,8 @@ from world.spatial_sound_field import (
     # A sound that HAPPENS: the beat-scoped event channel.
     beat_sensory_events, MAX_SENSORY_EVENTS, normalize_sensory_event,
     SENSORY_EVENTS_KEY,
+    # One edge's loss, after the material shift (2026-11-01).
+    _edge_loss_db,
 )
 
 

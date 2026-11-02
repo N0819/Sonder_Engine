@@ -923,8 +923,23 @@ def merge_player_state_assertions(assertions, resolved, player_name=None,
     the same subject or key it is re-resolving, and it wins; silence is not a
     contradiction. Lists append rather than replace, since an op is an event
     and two events both happened.
+
+    A PROGRAM'S TOP LEVEL IS THE FOLD OF ITS STEPS. Where the merged diff
+    carries `causal_steps`, the commit replays them, and `program_steps`
+    reads any difference between a record at the top level and the steps'
+    fold as a correction a floor made -- since 2026-11-01 one that strips the
+    fields it lacks from every earlier step (`causal_program._strip_to`,
+    world_misc_causal F7). A record both stages wrote, yielding WHOLE here,
+    read as that correction: a room the beat opened on, built in by the
+    interpret's leading step and its door pulled to by the resolve, lost
+    every field the install gave it and was committed as its stub. So such a
+    record folds here as the steps fold it (`causal_program.fold_steps`):
+    the resolve still wins every field it restates, and a field only the
+    assertion wrote is silence, not a contradiction.
     """
     out = dict(resolved) if isinstance(resolved, dict) else {}
+    program = bool(out.get("causal_steps")
+                   or (assertions or {}).get("causal_steps"))
     for channel, value in (assertions or {}).items():
         current = out.get(channel)
         if channel == "causal_steps":
@@ -936,9 +951,15 @@ def merge_player_state_assertions(assertions, resolved, player_name=None,
             merged = dict(current) if isinstance(current, dict) else {}
             for subject, payload in value.items():
                 if subject in merged:
+                    folds = program and _a_record_folds(
+                        channel, payload, merged[subject])
                     if report:
                         report(f"resolve restated {channel} for {subject}; "
-                               "the assertion yields")
+                               "the assertion yields"
+                               + (" where both speak" if folds else ""))
+                    if folds:
+                        merged[subject] = _program_fold(
+                            channel, subject, payload, merged[subject])
                     continue
                 merged[subject] = payload
             out[channel] = merged
@@ -953,3 +974,26 @@ def merge_player_state_assertions(assertions, resolved, player_name=None,
         elif report:
             report(f"resolve restated {channel}; the assertion yields")
     return out
+
+
+def _a_record_folds(channel, asserted, resolved):
+    """Whether a record both stages wrote is one `program_steps` compares
+    field by field -- and so strips from earlier steps by -- rather than a
+    reading, a row list or a removal: a keyed channel's dict record on both
+    sides."""
+    from world.causality import (ATOMIC_CHANNELS, LIST_CHANNELS,
+                                 LIST_MAP_CHANNELS)
+    return (isinstance(asserted, dict) and isinstance(resolved, dict)
+            and channel not in ATOMIC_CHANNELS
+            and channel not in LIST_MAP_CHANNELS
+            and channel not in LIST_CHANNELS
+            and channel != "phase_sources")
+
+
+def _program_fold(channel, subject, asserted, resolved):
+    """The asserted record with the resolve's written over it, folded the
+    way the program's own steps fold (`causal_program.fold_steps`)."""
+    from world.causal_program import fold_steps
+    folded = fold_steps([{"patch": {channel: {subject: asserted}}},
+                         {"patch": {channel: {subject: resolved}}}])
+    return ((folded.get(channel) or {}).get(str(subject), resolved))

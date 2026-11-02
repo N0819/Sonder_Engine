@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import copy
 
-from agents.director_movement import _travel_continues, _travel_in_flight_view
+from agents.director import _travel_continues, _travel_in_flight_view
 
 
 class _Ctx(dict):

@@ -141,9 +141,10 @@ def test_every_facade_family_is_checked():
 
     `agents.common` is the fifth (2026-11-01, `docs/design/SPLIT_COMMON.md`):
     sixteen siblings, and twenty-one patch sites that went inert on the move,
-    ten of which the check below cannot see (string-form patches, and readers
-    that DEFINE the patched name in their own sibling) and were found by the
-    splitter's own repoint table instead.
+    ten of which the check below could not see (string-form patches, and
+    readers that DEFINE the patched name in their own sibling) and were found
+    by the splitter's own repoint table instead. It reads both shapes since
+    (`tests/test_a_facade_patch_in_any_spelling_is_checked.py`).
 
     The set is asserted whole, and deliberately. A family that is split but not
     registered is invisible exactly the way `world.spatial` was.
