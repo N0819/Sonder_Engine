@@ -99,7 +99,11 @@ def story(temp_db):
                           player_input="Listen.", created=now),
             cast=cast, input="Listen.")
         ctx.director_interpret = {"flow": {"reactors": [char_id], "tom_triggers": []}}
-        ctx.director_resolve = {"dialogue_log": []}
+        # A zero-span beat: the mood pass now runs with the story clock
+        # (2026-11-01 review), so these tests stay about WHICH mood is
+        # written, not how far it relaxed.
+        ctx.director_resolve = {"dialogue_log": [],
+                                "state_diff": {"time": {"duration_seconds": 0}}}
         ctx.perception_act = {"views": {str(char_id): "The visitor waits."}}
         ctx.perception_outcome = {
             "views": {str(char_id): "The visitor remains nearby."},
