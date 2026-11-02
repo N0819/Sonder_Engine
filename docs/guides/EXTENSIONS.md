@@ -213,6 +213,13 @@ its own way of disagreeing with what install actually measures.
 enabled set is a JSON list in the `enabled_extensions` setting. Enabling imports
 your Python entry and calls `register(api)` exactly once.
 
+Enable, disable, install, update and remove are **refused while any beat is
+running** — a turn in any story, or an off-screen beat — with
+`extension_runtime.ExtensionBusy`, an `ExtensionError`. A turn is planned once,
+from the extensions live when it began, and each stage's handler is looked up
+when the stage runs: changing the set under it could stop it at a stage that is
+no longer registered.
+
 **Update** — `GET /api/extensions/updates` asks every git-sourced extension's
 remote whether it has moved (one `ls-remote` each, no download), and
 `POST /api/extensions/{id}/update` takes the newer commit. In the menu these
@@ -233,8 +240,14 @@ Three properties worth knowing:
   `id` is refused rather than updated into, since that would hand one
   extension's stored story state to another.
 
-The enabled set and everything under `world["ext:<id>"]` survive an update: it
-is the same extension, so a story played with it keeps going.
+Everything under `world["ext:<id>"]` survives an update: it is the same
+extension, so a story played with it keeps going. **Its enablement does not.** An
+update brings code you have not consented to — perhaps new capabilities, always
+new code — so an extension that was enabled comes back **disabled**, and the
+returned row says so with `disabled_for_consent: true`; enabling it again is the
+consent, at the dialog that lists what the new version asks for. An install
+arrives switched off the same way, even when its id was already in the enabled
+set.
 
 **Remove** — `DELETE /api/extensions/{id}`. Deletes the directory and **leaves
 `world["ext:<id>"]` alone**: removal takes the code, not the history, so
@@ -244,7 +257,8 @@ reinstalling picks a story back up rather than starting it over.
 
 Enable and disable are **live on the server**: `activate()` is called from every
 seam, so a stage joins the very next turn's plan and a disabled extension's
-handlers are gone immediately.
+handlers are gone immediately — never under a running turn, which refuses the
+change until it has finished.
 
 They are live in the browser too, with one caveat worth knowing. The page-load
 path is a single `<script>` tag and a script tag loads once, so the host cannot
@@ -393,7 +407,8 @@ is not persisted.
 ### `view` — what a stage receives
 
 `StepView` is a read-only slice of the running turn. Finished step output only —
-nothing still being assembled.
+nothing still being assembled — and every read is **your own copy**: editing
+`view.state_diff` edits nothing a later stage or the commit reads.
 
 | Member | Value |
 |---|---|
@@ -415,8 +430,9 @@ api.on_step("*", record_everything)
 ```
 
 Fired when a step's content becomes durable. Read-only by construction: you get
-the key and the content, never the context, so you cannot feed one stage's output
-into another's payload through this seam. A throwing observer is counted in
+the key and your own copy of the content, never the context, so you cannot feed
+one stage's output into another's payload through this seam, nor edit what the
+turn goes on reading. A throwing observer is counted in
 `observer_failures()` and logged; it never fails a turn.
 
 ### The committed-turn hook
@@ -628,7 +644,12 @@ Unrestricted — add, remove, rewrite. What the engine guarantees in exchange is
 **attribution**: every top-level key you change is recorded against your id and
 rides the turn's commit results under `extensions.routing`, so a mind that knows
 something it should not names you in one read instead of looking like an engine
-defect. A hook that throws leaves the payload exactly as assembled.
+defect. Each hook works on its own copy of the payload, adopted only when it
+returns — a dict, or `None` after editing that copy in place — so a hook that
+throws, or returns anything else, leaves the payload exactly as assembled, its
+half-made edit with it. The same holds for `on_narration_payload` and
+`on_director_payload`, and a throw is counted in `observer_failures()` at all
+three.
 
 Read §8 before using this one. It is the seam where the firewall guarantee stops
 describing Sonder's pipeline and starts being yours.
@@ -1148,6 +1169,8 @@ anchor := ("after" | "before") ":" <step-key>
 - `<step-key>` names a **core** step (`director_interpret`, `compile_world_context`,
   `perception_act`, `interaction_loop`, `director_resolve`, `background_react`,
   `perception_outcome`, `narrator`, `commit`, …). See [`PIPELINE.md`](PIPELINE.md).
+  A key no plan runs — a misspelling, a retired stage — is **refused** by
+  `api.add_stage`, the valid keys named in the error.
 - Any other mode (`beside:`, a bare key, an empty core) is **refused** by
   `api.add_stage` with an `ExtensionError` naming your extension.
 - `character:*` and `ext:*` are **reserved** and refused. They are the two
@@ -1689,8 +1712,8 @@ stopping you:
   between two minds *by accident*.
 - Per-turn writes are gated to the committed-turn hook — so you cannot survive a
   rollback *by accident*.
-- `on_step` gets content, not context — so a step observer cannot become a
-  payload channel *by accident*.
+- `on_step` gets a copy of the content, not the context — so a step observer
+  cannot become a payload channel, or edit the turn, *by accident*.
 
 Three surfaces are deliberately unrestricted rather than accident-proofed:
 `on_character_payload`, `on_narration_payload` and `on_director_payload` (§4).

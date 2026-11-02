@@ -23,6 +23,7 @@ hatch -- an extension that wants it has to say so.
 from __future__ import annotations
 
 import contextvars
+import copy
 import json
 import logging
 import re
@@ -1143,6 +1144,52 @@ class CharacterAccess:
 # ---------------------------------------------------------------- stage view
 
 
+def _private_copy(value):
+    """`value` as an object its reader owns: editing it edits nothing else.
+
+    Every read surface in this module hands a running turn's step content to
+    third-party code, and the pipeline goes on reading the SAME objects after
+    it -- perception, the narrator and the commit all read `ctx[key]`. Handing
+    out the live object let an `on_step` observer that tidied
+    `content["state_diff"]["positions"]` take a committed move out of the
+    world while the stored step, saved before the notification, still
+    recorded it, with no routing note naming the extension (audit
+    2026-11-01, web_routes_extensions F3, confirmed by snippet).
+    `DirectorResult` always copied; this is its rule, for every surface.
+
+    Step content is JSON by construction -- it is stored as a variant -- so
+    the JSON round trip is only the fallback for a stand-in context holding
+    something `deepcopy` refuses, and a value neither can copy is withheld
+    (None, which every reader here already answers for a missing step)
+    rather than handed out live.
+    """
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    try:
+        return copy.deepcopy(value)
+    except Exception:
+        pass
+    try:
+        return json.loads(json.dumps(value, default=str))
+    except Exception:
+        return None
+
+
+def _turn_step(ctx, key):
+    """One finished step's content from a running turn, as the reader's own
+    copy (`_private_copy`), or None. getattr tolerance throughout, because
+    `compute_step` and the hook seams are driven by stand-in contexts in
+    tests and by extensions."""
+    getter = getattr(ctx, "get", None)
+    if not callable(getter):
+        return None
+    try:
+        value = getter(key)
+    except Exception:
+        return None
+    return _private_copy(value)
+
+
 class StepView:
     """The read-only slice of a running turn an extension stage receives.
 
@@ -1151,10 +1198,18 @@ class StepView:
     payload; this object exposes finished step OUTPUT and nothing that is still
     being assembled.  Built with getattr tolerance throughout, because
     `compute_step` is driven by stand-in contexts in tests and by extensions.
+
+    Read-only by construction, as `DirectorResult` is: `step(key)` is the
+    stage's OWN copy of that content (`_private_copy`), so a stage that edits
+    `view.state_diff` edits nothing a later stage or the commit reads. Copied
+    once per key per view, so `resolve`, `state_diff` and `dialogue_log`
+    agree with one another and a stage reading them in a loop does not pay
+    for a copy per access.
     """
 
     def __init__(self, ctx):
         self._ctx = ctx
+        self._read = {}
         chat = getattr(ctx, "chat", None)
         turn = getattr(ctx, "turn", None)
         self.chat_id = getattr(chat, "id", None)
@@ -1163,13 +1218,13 @@ class StepView:
         self.frame_id = getattr(turn, "frame_id", None)
 
     def step(self, key):
-        getter = getattr(self._ctx, "get", None)
-        if not callable(getter):
-            return None
         try:
-            return getter(key)
-        except Exception:
-            return None
+            return self._read[key]
+        except KeyError:
+            value = self._read[key] = _turn_step(self._ctx, key)
+            return value
+        except TypeError:                      # an unhashable key: no memo
+            return _turn_step(self._ctx, key)
 
     @property
     def resolve(self):
@@ -1252,13 +1307,10 @@ class CommitView:
         return DocumentStore(self._api.id, self.chat_id, gated=False)
 
     def step_content(self, key):
-        getter = getattr(self._ctx, "get", None)
-        if not callable(getter):
-            return None
-        try:
-            return getter(key)
-        except Exception:
-            return None
+        """This turn's content of one step, as your own copy
+        (`_private_copy`): the transaction is still open and the commit
+        result still reads the turn after this domain returns."""
+        return _turn_step(self._ctx, key)
 
     def channel(self, name, *, stage="resolve"):
         """What the Director wrote this beat on one of YOUR channels
@@ -1293,13 +1345,8 @@ class PayloadContext:
         return self.names[0] if self.names else ""
 
     def step(self, key):
-        getter = getattr(self._ctx, "get", None)
-        if not callable(getter):
-            return None
-        try:
-            return getter(key)
-        except Exception:
-            return None
+        """A finished step's content this turn, as your own copy."""
+        return _turn_step(self._ctx, key)
 
 
 class NarrationContext:
@@ -1323,13 +1370,8 @@ class NarrationContext:
         self._ctx = ctx
 
     def step(self, key):
-        getter = getattr(self._ctx, "get", None)
-        if not callable(getter):
-            return None
-        try:
-            return getter(key)
-        except Exception:
-            return None
+        """A finished step's content this turn, as your own copy."""
+        return _turn_step(self._ctx, key)
 
     def __repr__(self):  # pragma: no cover - diagnostic only
         return f"<NarrationContext {self.scope} chat={self.chat_id}>"
@@ -1462,13 +1504,8 @@ class DirectorContext:
         self._ctx = ctx
 
     def step(self, key):
-        getter = getattr(self._ctx, "get", None)
-        if not callable(getter):
-            return None
-        try:
-            return getter(key)
-        except Exception:
-            return None
+        """A finished step's content this turn, as your own copy."""
+        return _turn_step(self._ctx, key)
 
     def __repr__(self):  # pragma: no cover - diagnostic only
         return f"<DirectorContext {self.phase} chat={self.chat_id}>"
@@ -1521,14 +1558,11 @@ class CommittedTurn:
             self.step_content(f"director_{stage}"), self._ext_id, name)
 
     def step_content(self, key):
-        getter = getattr(self._ctx, "get", None)
-        if callable(getter):
-            try:
-                value = getter(key)
-            except Exception:
-                value = None
-            if value is not None:
-                return value
+        # Your own copy (`_private_copy`): the turn object outlives this hook
+        # -- the commit's result and the out-of-band jobs it schedules read it.
+        value = _turn_step(self._ctx, key)
+        if value is not None:
+            return value
         if self.turn_id is None:
             return None
         try:
@@ -1555,6 +1589,21 @@ _ANCHOR_MODES = ("after", "before")
 #: of these used to register cleanly, appear in `registered_stages()`, and
 #: never run on any turn, with nothing anywhere saying so.
 _UNSPLICEABLE_ANCHOR_PREFIXES = ("character:", "ext:")
+
+
+def _core_step_keys() -> tuple:
+    """Every step key a plan can splice beside: the keys of
+    `agents.runtime.STEP_HANDLERS`, the one registry every planned step is
+    dispatched through, less the two namespaces above. Read when a stage
+    registers, so a fixed step `runtime.register_step` added is a valid
+    anchor too. Empty when the runtime cannot be imported, in which case the
+    planner's silent skip stays the only backstop, as it was."""
+    try:
+        from agents.runtime import STEP_HANDLERS
+    except Exception:
+        return ()
+    return tuple(sorted(str(key) for key in STEP_HANDLERS
+                        if not str(key).startswith(_UNSPLICEABLE_ANCHOR_PREFIXES)))
 
 
 class ChatAccess:
@@ -1777,6 +1826,18 @@ class SonderExtensionAPI:
                 f"names a step the plan cannot splice beside; "
                 f"{_UNSPLICEABLE_ANCHOR_PREFIXES} are reserved, so anchor on "
                 f"a core step key")
+        # A STEP NO PLAN RUNS IS REFUSED HERE, for the reason the reserved
+        # prefixes are: `after:director_resolv` and `after:mapping` (a stage
+        # retired 2026-09) both registered, listed in `registered_stages()`,
+        # and never ran on any turn, with nothing anywhere saying so (audit
+        # 2026-11-01, web_routes_extensions F15). A real step a turn does not
+        # run stays "not planned that turn" -- that is the planner's.
+        known = _core_step_keys()
+        if known and core.strip() not in known:
+            raise ExtensionError(
+                f"extension {self.id!r} stage {key!r}: anchor {anchor!r} "
+                f"names no step any plan runs; the core steps are "
+                f"{', '.join(known)}")
         if on_error not in ("warn", "fail"):
             raise ExtensionError(
                 f"extension {self.id!r} stage {key!r}: on_error must be "

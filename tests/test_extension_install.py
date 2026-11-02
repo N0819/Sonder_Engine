@@ -507,8 +507,13 @@ class TestGitSources:
         row = ext.update_extension("repo-ext")
         assert row["updated"] is False
 
-    def test_an_update_keeps_the_extension_enabled(self, tmp_path, monkeypatch,
-                                                   temp_db):
+    def test_an_update_waits_for_the_host_to_enable_it_again(
+            self, tmp_path, monkeypatch, temp_db):
+        """New code runs only after the Enable that discloses it. This test
+        pinned the opposite -- an enabled extension stayed enabled through an
+        update, so the new version's `register(api)` ran on the old one's
+        consent (audit 2026-11-01, frontend_lorebooks_editors F2, SECURITY);
+        tests/test_new_extension_code_waits_for_consent.py states the rule."""
         from core.db import set_setting
 
         root = tmp_path / "extensions"
@@ -521,9 +526,10 @@ class TestGitSources:
         ext.activate(refresh=True)
         self._commit_more(origin, git)
 
-        ext.update_extension("repo-ext")
+        row = ext.update_extension("repo-ext")
 
-        assert ext.is_enabled("repo-ext") is True
+        assert row["disabled_for_consent"] is True
+        assert ext.is_enabled("repo-ext") is False
 
     def test_an_update_that_would_not_load_leaves_the_old_one_standing(
             self, tmp_path, monkeypatch, temp_db):

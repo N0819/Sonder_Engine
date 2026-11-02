@@ -101,12 +101,15 @@ present, else a frame row of this chat, 404 otherwise -- the same contract
 Writes, each host-only and era-scoped exactly like the reads, each refused
 with 409 while any pipeline of the chat runs (the same guard `world_put`
 and the position route hold), each reading the scene through
-`story.scene.get_scene`, applying the change under the SAME normalisers the
+`story.scene.get_scene` INSIDE the transaction that writes it (`_editing`:
+two edits made at once serialise rather than the second erasing the
+first), applying the change under the SAME normalisers the
 commit path runs (`normalize_scene_barriers`, `normalize_scene_bearings`,
 `normalize_scene_stations` -- `world/spatial_merge.merge_scene_with_diff`'s
-tail), writing it through `wset` as `attire_put` does, and reconciling the
-`room_registry` projection through `persist.commit
-.sync_room_registry_with_scene` -- the rule every scene writer keeps
+tail), writing it through `wset` as `attire_put` does, and reconciling both
+projections -- `room_registry` through `persist.commit
+.sync_room_registry_with_scene` and `world_entities` through
+`sync_world_entities_with_scene` -- the rule every scene writer keeps
 (`AGENTS.md`):
 
 * ``PATCH /{room_id}`` with a body of ONLY the changed fields. ``name``,
@@ -206,9 +209,11 @@ write with the same guards, each refusal naming its reason
   stands somewhere or is the player's or a cast member's).
 * ``DELETE /api/chats/{cid}/bodies/{name}`` removes a presence (the player,
   the cast and a thing are refused); ``PUT /bodies/{name}/room`` ``{room}``
-  moves ANY body, dropping its station ``cell`` and a pose detail holding
-  another body on a change of room; ``PUT /bodies/{name}/pose`` writes the
-  six `_POSE_FIELDS` through `_clean_pose`.
+  moves ANY body, dropping on a change of room its station ``cell``, a pose
+  detail holding another body, its own pose detail and a support that did
+  not come with it (the merge's three invalidators);
+  ``PUT /bodies/{name}/pose`` writes the six `_POSE_FIELDS` through
+  `_clean_pose`.
 * The doorways router, ``/api/chats/{cid}/doorways``: ``POST`` ``{room, to,
   barrier?, dir?, offset?, name?, material?, width?}`` opens ONE doorway (a
   passage record, `scene.passages[id]`, and both edges naming it);
@@ -248,13 +253,16 @@ body's whole attire ledger -- and reaches no mind (`story/room_tools.py`).
 from __future__ import annotations
 
 import copy
+import hashlib
 import json
+import threading
+from collections import OrderedDict
 from contextlib import contextmanager
 
 from fastapi import APIRouter, Body, HTTPException
 
 from core import db
-from core.db import q, transaction, wset
+from core.db import q, qtx, transaction, wset
 from persist.commit import sync_room_registry_with_scene
 from story import room_slice as rooms
 from story.attire import (GARMENT_STATES, REGIONS as ATTIRE_REGIONS,
@@ -269,7 +277,8 @@ from world.spatial import (
     SOUND_LEVELS, STEADINESS, anchor_cells, body_cell,
     body_cell_source,
     effective_adjacent, effective_anchors, effective_facing,
-    effective_station, invalidate_moved_body_pose_details, is_window_barrier,
+    effective_station, invalidate_moved_body_place_details,
+    invalidate_moved_body_pose_details, is_window_barrier,
     layout_rooms,
     layout_warning, light_field, noise_word, normalize_barrier,
     normalize_bearing, normalize_cell, normalize_extent, normalize_offset,
@@ -280,7 +289,8 @@ from world.spatial import (
     opposite_bearing, opposite_vertical, part_box, passage_id_for, passage_of,
     quantise_hearing,
     room_field, room_grid, room_layout_lint, room_of, scene_passages,
-    size_from_extent, sound_field, sync_scene_passages, WINDOW_BARRIERS,
+    release_moved_body_supports, size_from_extent, sound_field,
+    sync_scene_passages, WINDOW_BARRIERS,
 )
 from world.weather import EXPOSURES
 # The townspeople (`world/charter_place.py`, DESIGN_CHARTER_PLACEMENT § the
@@ -336,6 +346,25 @@ WALLS = ("n", "e", "s", "w")
 #: The barrier that is asymmetric BY DESIGN and is never mirrored onto the far
 #: room's edge (`_mirror_symmetric_barriers` holds the same exception).
 _ASYMMETRIC_BARRIER = "one_way_window"
+
+
+@contextmanager
+def _editing(cid: int, frame_id):
+    """`_era`, with the route's READ, its change and its write inside ONE
+    `transaction()` -- BEGIN IMMEDIATE, so two edits made at once serialise
+    and the second reads what the first wrote.
+
+    Every write route read the scene outside any transaction and opened one
+    only around the write (audit 2026-11-01, web_routes_extensions F5): two
+    edits that read the same scene -- two tabs, the map's arrow keys firing a
+    write per keydown without awaiting the last, the threadpool running
+    routes side by side -- each wrote their own copy, the second erased the
+    first, and a room the first minted was in neither side of the second's
+    registry diff, so `room_registry` kept it LIVE while the scene no longer
+    held it. Routes whose writes go through a registry rather than the scene
+    (the regions, the townspeople) hold it for the same reason."""
+    with _era(cid, frame_id), transaction():
+        yield
 
 
 @contextmanager
@@ -410,12 +439,50 @@ def _is_body(scene, who):
     return scene_names_body(scene, str(who))
 
 
+#: How many distinct scenes' layout rows `_lint_rows` remembers. A cache
+#: bound, not a behaviour: a host edits one story at a time, and a write's
+#: response plus the client's index/grid/map refetch read one scene four
+#: times. Named so it is visible (the owner's rule: every cap named).
+LINT_MEMO_SIZE = 16
+_LINT_MEMO: "OrderedDict[str, list]" = OrderedDict()
+_LINT_MEMO_LOCK = threading.Lock()
+
+
+def _scene_digest(scene):
+    """A digest of the scene's CONTENT, or None when it cannot be taken."""
+    try:
+        text = json.dumps(scene, sort_keys=True, ensure_ascii=False, default=str)
+    except Exception:
+        return None
+    return hashlib.blake2b(text.encode("utf-8"), digest_size=16).hexdigest()
+
+
 def _lint_rows(scene):
     """Every standing layout row of the scene (`room_layout_lint` with no
     previous scene: the standing state, as the Room's `inspect_contradictions`
     reads it), each carrying the room ids it names under `rooms` so a caller
     can file it, the card field it concerns (`LINT_FIELDS`) and its sentence
-    (`layout_warning`)."""
+    (`layout_warning`).
+
+    ONCE PER DISTINCT SCENE. The lint is a pure function of the scene dict,
+    and every index, slice, grid and map read -- and every write's response
+    -- re-ran it: measured read-only 2026-11-01, 58 ms on chat 172 (22
+    rooms), 40 ms on chat 175, 22 ms on chat 63, against 0.4-0.8 ms to parse
+    the scene, and one map edit reads one scene four times (audit
+    web_routes_extensions, Efficiency 1). Keyed on the scene's CONTENT rather
+    than the row's read token, because `get_scene` lays the layout tier's
+    solved plans over the stored blob (`structure.apply_solved_plans`): the
+    scene linted can change while its row does not. The digest costs about
+    1 ms on those scenes. Each caller gets its own copy of the rows.
+    """
+    digest = _scene_digest(scene)
+    if digest is not None:
+        with _LINT_MEMO_LOCK:
+            remembered = _LINT_MEMO.get(digest)
+            if remembered is not None:
+                _LINT_MEMO.move_to_end(digest)
+        if remembered is not None:
+            return copy.deepcopy(remembered)
     out = []
     for row in room_layout_lint(scene, plan_rows=True):
         named = [str(r) for r in (row.get("rooms") or [])]
@@ -424,6 +491,12 @@ def _lint_rows(scene):
         out.append({**row, "rooms": named,
                     "field": LINT_FIELDS.get(row.get("kind")),
                     "text": layout_warning(row)})
+    if digest is not None:
+        with _LINT_MEMO_LOCK:
+            _LINT_MEMO[digest] = copy.deepcopy(out)
+            _LINT_MEMO.move_to_end(digest)
+            while len(_LINT_MEMO) > LINT_MEMO_SIZE:
+                _LINT_MEMO.popitem(last=False)
     return out
 
 
@@ -1720,10 +1793,62 @@ def _apply_parts(room, raw):
         room.pop("parts", None)
 
 
+def sync_world_entities_with_scene(cid, prev_scene, scene):
+    """Keep the `world_entities` projection in step with a scene write made
+    OUTSIDE the commit, the sibling of `persist.commit
+    .sync_room_registry_with_scene` (AGENTS.md Phase 3a: every scene writer
+    owes the pair). Call it inside the write's transaction.
+
+    The row is written FROM the blob, the direction `commit_world_entities`
+    projects: for every entity record this write ADDED or CHANGED the row
+    becomes that record (`kind`, `subtype`, `name`, `payload`); for every id
+    this write REMOVED the row goes, with the decommissioned
+    `world_placements` row the commit sweeps beside it. Nothing else is
+    touched: the table is chat-global while a scene is one era's, so a
+    record this write did not change may be another era's row -- the same
+    "the diff says WHICH, the blob says WHAT" split the commit keeps.
+
+    Audit 2026-11-01 (web_routes_extensions F4, persist_scene_entities F3,
+    both CONFIRMED): the World Browser's create, edit and delete reconciled
+    the registry and never this table, so a deleted thing's row survived
+    (paradox reads ROW PRESENCE for a fixed point), a created thing had
+    none, and an edited kind stayed on the old value; measured read-only on
+    the play database that day, 85 of 1,208 scene entities across 25 chats
+    had no row. The Raw JSON editor (`app.world_put`) has the same gap.
+    """
+    before = (prev_scene or {}).get("entities") if isinstance(prev_scene, dict) else None
+    after = (scene or {}).get("entities") if isinstance(scene, dict) else None
+    before = before if isinstance(before, dict) else {}
+    after = after if isinstance(after, dict) else {}
+    for entity_id, record in after.items():
+        if not isinstance(record, dict) or before.get(entity_id) == record:
+            continue
+        row = (str(record.get("kind") or "object"),
+               str(record.get("subtype") or ""),
+               str(record.get("name") or ""),
+               json.dumps(record, ensure_ascii=False))
+        if q("SELECT 1 FROM world_entities WHERE chat_id=? AND entity_id=?",
+             (cid, str(entity_id)), one=True):
+            qtx("UPDATE world_entities SET kind=?,subtype=?,name=?,payload=? "
+                "WHERE chat_id=? AND entity_id=?", row + (cid, str(entity_id)))
+        else:
+            qtx("INSERT INTO world_entities(entity_id,chat_id,kind,subtype,"
+                "name,payload) VALUES(?,?,?,?,?,?)",
+                (str(entity_id), cid) + row)
+    for entity_id in before:
+        if entity_id not in after:
+            qtx("DELETE FROM world_entities WHERE chat_id=? AND entity_id=?",
+                (cid, str(entity_id)))
+            qtx("DELETE FROM world_placements WHERE chat_id=? AND subject_id=?",
+                (cid, str(entity_id)))
+
+
 def _write_scene(cid, chat, before, scene):
     """The one way a route here lands a scene: normalised as the commit
-    path normalises, written through `wset` under the ambient era, the
-    registry projection reconciled against what the blob held before."""
+    path normalises, written through `wset` under the ambient era, both
+    projections -- the room registry and `world_entities` -- reconciled
+    against what the blob held before. Every route calls it inside the
+    transaction its read was made in (`_editing`)."""
     normalize_scene_barriers(scene)
     normalize_scene_bearings(scene)
     normalize_scene_anchor_cells(scene)
@@ -1744,6 +1869,7 @@ def _write_scene(cid, chat, before, scene):
     with transaction():
         wset(cid, "scene", scene)
         sync_room_registry_with_scene(cid, chat.get("lorebook_id"), before, scene)
+        sync_world_entities_with_scene(cid, before, scene)
 
 
 @router.patch("/{room_id}")
@@ -1753,7 +1879,7 @@ def room_patch(cid: int, room_id: str, body: dict = Body(...),
     _require_idle(cid)
     if not isinstance(body, dict):
         raise HTTPException(400, "Send an object of the changed fields")
-    with _era(cid, frame_id):
+    with _editing(cid, frame_id):
         scene = get_scene(cid, chat)
         before = copy.deepcopy(scene)
         room = _live_room_or_400(scene, room_id)
@@ -1824,7 +1950,7 @@ def room_entity_patch(cid: int, room_id: str, entity_id: str,
     _require_idle(cid)
     if not isinstance(body, dict):
         raise HTTPException(400, "Send an object of the changed fields")
-    with _era(cid, frame_id):
+    with _editing(cid, frame_id):
         scene = get_scene(cid, chat)
         before = copy.deepcopy(scene)
         _live_room_or_400(scene, room_id)
@@ -1952,7 +2078,7 @@ def region_patch(cid: int, region_id: str, body: dict = Body(...),
     name = body.get("name")
     if "name" in body and (not isinstance(name, str) or not name.strip()):
         raise HTTPException(400, "A region needs a name")
-    with _era(cid, frame_id):
+    with _editing(cid, frame_id):
         # A REGION IS ENTERED UNDER THE SPELLING IT WAS ASKED FOR. `rid` is
         # the id derived from that spelling, and the seam seeds a new entry's
         # display name from whatever it is handed -- so entering "the working
@@ -1994,7 +2120,7 @@ def body_station_put(cid: int, name: str, body: dict = Body(...),
     _require_idle(cid)
     if not isinstance(body, dict):
         raise HTTPException(400, "Send {at, near, cell}")
-    with _era(cid, frame_id):
+    with _editing(cid, frame_id):
         scene = get_scene(cid, chat)
         before = copy.deepcopy(scene)
         positions = scene.get("positions") or {}
@@ -2128,7 +2254,7 @@ def _ensure_passage(scene, a, b):
         spoken = ea if ea is not None and "barrier" in ea else eb
         record = {"rooms": [str(a), str(b)],
                   "barrier": normalize_barrier((spoken or {}).get("barrier") or "open")}
-        for field in ("name", "material"):
+        for field in ("name", "material", "desc"):
             value = (ea or {}).get(field) or (eb or {}).get(field)
             if value:
                 record[field] = value
@@ -2181,7 +2307,7 @@ def room_create(cid: int, body: dict = Body(...), frame_id: int | None = None):
     name = " ".join(str(body.get("name") or "").split())
     if not name:
         raise HTTPException(400, "A room needs a name")
-    with _era(cid, frame_id):
+    with _editing(cid, frame_id):
         scene = get_scene(cid, chat)
         before = copy.deepcopy(scene)
         rooms_ = scene.setdefault("rooms", {})
@@ -2239,7 +2365,7 @@ def room_delete(cid: int, room_id: str, frame_id: int | None = None):
     Returns ``{removed, retired}``."""
     chat = _chat_or_404(cid)
     _require_idle(cid)
-    with _era(cid, frame_id):
+    with _editing(cid, frame_id):
         scene = get_scene(cid, chat)
         before = copy.deepcopy(scene)
         _live_room_or_400(scene, room_id)
@@ -2282,7 +2408,7 @@ def room_entity_create(cid: int, room_id: str, body: dict = Body(...),
     name = " ".join(str(body.get("name") or "").split())
     if not name:
         raise HTTPException(400, "A thing needs a name")
-    with _era(cid, frame_id):
+    with _editing(cid, frame_id):
         scene = get_scene(cid, chat)
         before = copy.deepcopy(scene)
         _live_room_or_400(scene, room_id)
@@ -2313,7 +2439,7 @@ def room_entity_delete(cid: int, room_id: str, entity_id: str,
     from world.regions import scene_anchors
     chat = _chat_or_404(cid)
     _require_idle(cid)
-    with _era(cid, frame_id):
+    with _editing(cid, frame_id):
         scene = get_scene(cid, chat)
         before = copy.deepcopy(scene)
         _live_room_or_400(scene, room_id)
@@ -2364,7 +2490,7 @@ def room_presence_create(cid: int, room_id: str, body: dict = Body(...),
     name = " ".join(str(body.get("name") or "").split())
     if not name:
         raise HTTPException(400, "A presence needs a name")
-    with _era(cid, frame_id):
+    with _editing(cid, frame_id):
         scene = get_scene(cid, chat)
         before = copy.deepcopy(scene)
         _live_room_or_400(scene, room_id)
@@ -2397,7 +2523,7 @@ def body_presence_delete(cid: int, name: str, frame_id: int | None = None):
     state (`body_rows`). Returns ``{removed}``."""
     chat = _chat_or_404(cid)
     _require_idle(cid)
-    with _era(cid, frame_id):
+    with _editing(cid, frame_id):
         scene = get_scene(cid, chat)
         before = copy.deepcopy(scene)
         key = _position_key(scene, name)
@@ -2429,8 +2555,11 @@ def body_room_put(cid: int, name: str, body: dict = Body(...),
     member -- to a live room: ``{room}``. The route the cast editor lacked
     for the player and a presence (`chat_char_position_put` is by character
     id); the same invalidation follows a change of room: the station's
-    `cell` (a place in the OLD room's grid) is dropped, and a pose detail
-    holding another body is dropped by `invalidate_moved_body_pose_details`.
+    `cell` (a place in the OLD room's grid) is dropped, a pose detail
+    holding another body is dropped by `invalidate_moved_body_pose_details`,
+    the body's OWN pose detail by `invalidate_moved_body_place_details`, and
+    a support that did not come with it is released by
+    `release_moved_body_supports` -- the merge's three, in its order.
     Refused for an unknown room naming the known ones, and for a name the
     scene does not place (a presence is created through its room). Returns
     the body's row."""
@@ -2441,7 +2570,7 @@ def body_room_put(cid: int, name: str, body: dict = Body(...),
     target = str(body.get("room") or "").strip()
     if not target:
         raise HTTPException(400, "A body needs a room to move to")
-    with _era(cid, frame_id):
+    with _editing(cid, frame_id):
         scene = get_scene(cid, chat)
         before = copy.deepcopy(scene)
         _live_room_or_400(scene, target)
@@ -2464,7 +2593,18 @@ def body_room_put(cid: int, name: str, body: dict = Body(...),
             station = stations.get(key) if isinstance(stations, dict) else None
             if isinstance(station, dict):
                 station.pop("cell", None)
-            invalidate_moved_body_pose_details(scene, before.get("positions") or {})
+            moved_from = before.get("positions") or {}
+            invalidate_moved_body_pose_details(scene, moved_from)
+            # ...AND THE BODY'S OWN PLACE STAYS BEHIND. The merge runs these
+            # two after the one above, and both key on a move made inside ONE
+            # merge (`was != room`), so no later beat ever saw a move made
+            # here: Wren moved from the corridor to the parlour on the map
+            # kept "standing near the coat-stand, looking down toward the
+            # turn" and the coat-stand as her support through the next
+            # merge -- F49/PB7 re-entered through the editor (audit
+            # 2026-11-01, web_routes_extensions F10).
+            invalidate_moved_body_place_details(scene, moved_from)
+            release_moved_body_supports(scene, moved_from)
         _write_scene(cid, chat, before, scene)
         rows = body_rows(cid, chat, scene,
                          charter=charter_body_records(cid, frame_id, scene))
@@ -2489,7 +2629,7 @@ def body_pose_put(cid: int, name: str, body: dict = Body(...),
         raise HTTPException(
             400, f"a pose has the fields {', '.join(_POSE_FIELDS)} (got "
                  f"{', '.join(unknown)})")
-    with _era(cid, frame_id):
+    with _editing(cid, frame_id):
         scene = get_scene(cid, chat)
         before = copy.deepcopy(scene)
         key = _position_key(scene, name)
@@ -2559,7 +2699,12 @@ def _apply_doorway_fields(scene, room_id, to, record, ea, eb, body):
                 edge.pop("offset", None)
             else:
                 edge["offset"] = placed_at
-    for field in ("name", "material"):
+    # `desc` is the passage's field as `name` and `material` are
+    # (`spatial_barriers.PASSAGE_FIELDS`). It was accepted (DOORWAY_FIELDS,
+    # since 4e4d102e) and never written: a PATCH of {desc, material} saved
+    # the material and answered "Saved." (audit 2026-11-01,
+    # web_routes_extensions F14).
+    for field in ("name", "material", "desc"):
         if field in body:
             text = " ".join(str(body.get(field) or "").split())
             if text:
@@ -2635,7 +2780,7 @@ def doorway_create(cid: int, body: dict = Body(...), frame_id: int | None = None
         raise HTTPException(400, "A doorway joins two rooms: send room and to")
     if room_id == to:
         raise HTTPException(400, "a room cannot exit into itself")
-    with _era(cid, frame_id):
+    with _editing(cid, frame_id):
         scene = get_scene(cid, chat)
         before = copy.deepcopy(scene)
         here = _live_room_or_400(scene, room_id)
@@ -2674,7 +2819,7 @@ def doorway_patch(cid: int, room_id: str, to: str, body: dict = Body(...),
         raise HTTPException(
             400, f"a doorway has the fields {', '.join(DOORWAY_FIELDS)} "
                  f"(got {', '.join(unknown)})")
-    with _era(cid, frame_id):
+    with _editing(cid, frame_id):
         scene = get_scene(cid, chat)
         before = copy.deepcopy(scene)
         here = _live_room_or_400(scene, room_id)
@@ -2698,7 +2843,7 @@ def doorway_delete(cid: int, room_id: str, to: str, frame_id: int | None = None)
     plus the fresh slice of ``room_id`` as ``slice``."""
     chat = _chat_or_404(cid)
     _require_idle(cid)
-    with _era(cid, frame_id):
+    with _editing(cid, frame_id):
         scene = get_scene(cid, chat)
         before = copy.deepcopy(scene)
         here = _live_room_or_400(scene, room_id)
@@ -2740,7 +2885,7 @@ def region_create(cid: int, body: dict = Body(...), frame_id: int | None = None)
     rid = normalize_region_id(name)
     if not name or not rid:
         raise HTTPException(400, "A region needs a name")
-    with _era(cid, frame_id):
+    with _editing(cid, frame_id):
         ensure_regions(cid, frame_id, {rid: name})
         entry = region_registry(cid, frame_id).get(rid) or {"name": name, "brief": ""}
         scene = get_scene(cid, chat) or {}
@@ -2839,7 +2984,7 @@ def charter_body_station_put(cid: int, charter_key: str, body_key: str,
     room = str(body.get("room") or "").strip()
     if not room:
         raise HTTPException(400, "A body needs a room to stand in")
-    with _era(cid, frame_id):
+    with _editing(cid, frame_id):
         scene = get_scene(cid, chat)
         _live_room_or_400(scene, room)
         registry = registry_for_update(cid, frame_id)
@@ -2884,7 +3029,7 @@ def charter_body_station_delete(cid: int, charter_key: str, body_key: str,
     refusals as the PUT for the body and the pipeline. Returns the row."""
     chat = _chat_or_404(cid)
     _require_idle(cid)
-    with _era(cid, frame_id):
+    with _editing(cid, frame_id):
         scene = get_scene(cid, chat)
         registry = registry_for_update(cid, frame_id)
         _charter_body_or_refused(registry, charter_key, body_key)

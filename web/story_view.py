@@ -32,11 +32,12 @@ Provenance uses the vocabulary the engine already speaks --
 
 from __future__ import annotations
 
+import copy
 import hashlib
 import json
 import secrets
 
-from core.db import q, wget, wget_for_frame, wset
+from core.db import q, wget, wset
 from persist.steps import active_content
 from world.charter_runtime import REGISTRY_VERSION
 from world.living_world import OFFSCREEN_CEILING_KEY
@@ -379,14 +380,21 @@ def _living_world(chat_id, frame_id, scene, detail):
         "charters": [],
         "registry_warnings": [],
     }
-    # Gate on the RAW row, not on `items`: `normalize_registry` accepts a bare
-    # `{key: charter}` map as an authoring convenience, so an `items` test
-    # would drop a hand-authored registry. Frame-scoped, so read it for the
-    # era this view reports (`charters\x1efr<id>` on disk) rather than
-    # ambiently.
+    # THE SHARED PARSE. `registry_for` is the cached, normalized registry of
+    # the era this view reports (`charters\x1efr<id>` on disk), re-parsed
+    # only when the row was written. This read used to fetch and normalize
+    # the row itself on every call, on an argument that predated the cache:
+    # 76 ms a call on chat 175's 0.9 MB registry, 0.95-2.3 s on a 41.4 MB
+    # generated town (core/db.py's own measurement), and campaign-demo's
+    # `/campaign` route builds a whole story_view for one field (audit
+    # 2026-11-01, web_routes_extensions F24). Gated on the NORMALIZED
+    # registry, which has already folded a bare `{key: charter}` map into
+    # `items`, so a hand-authored registry still reads as one.
+    from world.charter_runtime import registry_for, registry_warnings
+
     full = str(detail or "").casefold() == "full"
-    raw = wget_for_frame(chat_id, "charters", frame_id, None)
-    if not raw:
+    registry = registry_for(chat_id, frame_id)
+    if not (registry.get("items") or registry.get("people")):
         # ONE SHAPE PER ARGUMENT VALUE. `full` promises the registry dict, so
         # an empty story must return an empty REGISTRY rather than the summary
         # form's list -- a consumer that indexes `["items"]` should not have to
@@ -394,14 +402,6 @@ def _living_world(chat_id, frame_id, scene, detail):
         if full:
             out["charters"] = {"version": REGISTRY_VERSION, "items": {}}
         return out
-
-    from world.charter_runtime import (normalize_registry, registry_warnings)
-
-    # Normalized ONCE. `registry_for` would re-read and re-parse the row this
-    # gate has already loaded, and `registry_warnings` normalizes defensively
-    # for its route callers -- three passes over every body, post and upkeep
-    # on a per-render read.
-    registry = normalize_registry(raw)
     # `scene` AND `cid`/`frame_id`: the frame-sensitive warning class starts
     # from the scene's rooms UNIONed with this structure's planted skeleton,
     # so passing the scene alone silently checks nothing for a
@@ -409,7 +409,10 @@ def _living_world(chat_id, frame_id, scene, detail):
     out["registry_warnings"] = list(registry_warnings(
         registry, scene=scene, cid=chat_id, frame_id=frame_id) or [])
     if full:
-        out["charters"] = registry
+        # The caller's OWN copy: `registry_for` hands every reader one shared
+        # object, and this view promises ordinary values with no mutation
+        # handle (`story_view`'s docstring).
+        out["charters"] = copy.deepcopy(registry)
         return out
 
     names = _structure_names(chat_id)

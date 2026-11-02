@@ -26,6 +26,7 @@ exist: ``docs/design/EXTENSIONS_DESIGN.md``.
 
 from __future__ import annotations
 
+import copy
 from dataclasses import dataclass, field
 import fnmatch
 import importlib.machinery
@@ -49,8 +50,8 @@ from .api import (
     DirectorBlock, DirectorContext, DocumentStore, ExtState,
     ExtensionError, HOST_CAPABILITIES, NarrationBlock, NarrationContext,
     PSYCHOLOGY_STATE_KEYS, PayloadContext, Request,
-    SonderExtensionAPI, StepView, document_path, enter_commit_scope,
-    in_commit_scope, leave_commit_scope,
+    SonderExtensionAPI, StepView, _private_copy, document_path,
+    enter_commit_scope, in_commit_scope, leave_commit_scope,
 )
 
 log = logging.getLogger("extension_runtime")
@@ -432,13 +433,67 @@ def _write_enabled(ids) -> list[str]:
     return ordered
 
 
+class ExtensionBusy(ExtensionError):
+    """A change to the LIVE extension set, refused because a beat is running.
+
+    An `ExtensionError`, so every caller that already handles one handles
+    this; its own class so a host route can answer it as the conflict it is
+    (409) rather than as a bad request -- it is the same refusal the chat
+    routes give a host who edits under a running turn.
+    """
+
+
+def _running_beats() -> list:
+    """One entry per beat running right now, in ANY chat: True where the slot
+    is an off-screen beat's. Read from `agents.runtime.ABORTS`, the run
+    registry both chat idle checks read (`web.app._require_chat_idle`,
+    `world_routes._require_idle`); every chat at once, because the
+    extension set is the whole process's."""
+    try:
+        from agents.runtime import ABORTS
+    except Exception:                             # pragma: no cover - defensive
+        return []
+    return [bool(getattr(event, "offscreen_beat", False))
+            for event in list(ABORTS.values())]
+
+
+def _refuse_while_a_beat_runs(verb: str) -> None:
+    """Raise `ExtensionBusy` when any beat is running.
+
+    A TURN RUNS AGAINST THE EXTENSIONS LIVE WHEN IT BEGAN. Its plan is spliced
+    once, at the start (`agents.runtime._extension_splices`), and each step's
+    handler is looked up when the step runs, so disabling an extension -- or
+    the `reload()` that installing, updating or removing ANY extension does,
+    which deregisters every one -- killed a turn that reached an `ext:` stage
+    in the gap with `unknown step ext:...`, although the stage was
+    `on_error="warn"` (audit 2026-11-01, web_routes_extensions F12). Enabling
+    is refused too: a turn half of whose payloads met a hook and half did
+    not is a turn run against two extension sets. Callers ask this while
+    holding `_lock`, the lock the turn's plan is built under, so a turn that
+    begins after the check is planned against the new set.
+    """
+    running = _running_beats()
+    if not running:
+        return
+    if all(running):
+        raise ExtensionBusy(
+            f"An off-screen beat is running; it finishes on its own -- "
+            f"{verb} again in a moment.")
+    raise ExtensionBusy(
+        f"A turn is running. It was planned with the extensions that were "
+        f"live when it began, and changing them under it can stop it at a "
+        f"stage that is no longer there -- {verb} again when it has "
+        f"finished, or abort it first.")
+
+
 def enable_extension(ext_id: str) -> dict:
     ext_id = str(ext_id or "")
     if ext_id not in installed_extensions():
         raise ExtensionError(f"no installed extension {ext_id!r}")
-    _write_enabled(_stored_enabled_ids() + [ext_id])
-    activate(refresh=True)
     with _lock:
+        _refuse_while_a_beat_runs("enable it")
+        _write_enabled(_stored_enabled_ids() + [ext_id])
+        activate(refresh=True)
         record = _registered.get(ext_id)
     return {"id": ext_id, "enabled": True,
             "error": record.error if record else None}
@@ -446,9 +501,11 @@ def enable_extension(ext_id: str) -> dict:
 
 def disable_extension(ext_id: str) -> dict:
     ext_id = str(ext_id or "")
-    _write_enabled([item for item in _stored_enabled_ids()
-                    if item != ext_id])
-    activate(refresh=True)
+    with _lock:
+        _refuse_while_a_beat_runs("disable it")
+        _write_enabled([item for item in _stored_enabled_ids()
+                        if item != ext_id])
+        activate(refresh=True)
     return {"id": ext_id, "enabled": False, "error": None}
 
 
@@ -890,11 +947,12 @@ def apply_plan_splices(plan, chat_id=None):
     * **Pure function of durable settings + manifests.**  `resume_key_for_turn`
       and every `from_key` path rebuild this plan from stored step content, so a
       splice that varied with anything else would break resume.
-    * **Silent when it cannot apply.**  An unknown anchor, or an anchor naming a
-      core step this particular turn does not run, means the extension stage is
-      simply not planned this turn -- not an error, and not a stage bolted onto
-      a different position, which would make the plan differ between the run and
-      the recompute.
+    * **Silent when it cannot apply.**  An anchor naming a core step this
+      particular turn does not run means the extension stage is simply not
+      planned this turn -- not an error, and not a stage bolted onto a
+      different position, which would make the plan differ between the run and
+      the recompute.  An anchor naming no core step at all is refused when the
+      stage registers (`api.add_stage`); the skip below is only its backstop.
     """
     try:
         activate()
@@ -941,10 +999,16 @@ def apply_plan_splices(plan, chat_id=None):
 def notify_step_saved(ctx, key, content) -> None:
     """Tell `on_step` observers a step's content just became durable.
 
-    Read-only by construction: the observer gets the saved key and content,
-    never the context, so it cannot feed one stage's output into another's
-    payload.  Every callback is individually contained -- a broken observer is
-    a counted, logged failure, never a failed turn.
+    Read-only by construction: the observer gets the saved key and ITS OWN
+    COPY of the content (`api._private_copy`), never the context, so it cannot
+    feed one stage's output into another's payload -- nor edit what the turn
+    goes on reading. The content handed here is the object `ctx[key]` holds
+    (`runtime._with_engine_notes` returns it as is when a step has no notes),
+    and an observer that tidied it took a committed move out of the world
+    (audit 2026-11-01, web_routes_extensions F3). One copy per observer, so
+    two observers cannot pass notes through it either.  Every callback is
+    individually contained -- a broken observer is a counted, logged failure,
+    never a failed turn.
     """
     try:
         activate()
@@ -959,7 +1023,7 @@ def notify_step_saved(ctx, key, content) -> None:
             try:
                 if not fnmatch.fnmatchcase(step_key, str(pattern)):
                     continue
-                fn(step_key, content)
+                fn(step_key, _private_copy(content))
             except Exception:
                 _observer_failures[ext_id] = _observer_failures.get(ext_id, 0) + 1
                 log.exception("extension %s on_step observer failed on %s",
@@ -1085,46 +1149,84 @@ def dispatch_character_payload(ctx, char_id, payload, names=()):
         log.exception("extension payload hooks could not be resolved")
         return payload
 
+    return _run_payload_hooks(
+        hooks, payload, "payload",
+        lambda api: PayloadContext(api, ctx, char_id, names),
+        lambda ext_id, changed: _note_routing(ctx, ext_id, char_id, changed))
+
+
+def _run_payload_hooks(hooks, payload, what, make_info, note):
+    """Run payload hooks in order, each on ITS OWN COPY of the payload.
+
+    The one loop behind the three payload seams (character, Director,
+    narrator), which had three near-copies with three behaviours on `None`,
+    on exceptions and on failure counting. The rules, stated once:
+
+    * a hook is handed a private deep copy, and the copy is adopted only
+      when the hook RETURNS: a dict replaces the payload, `None` keeps the
+      copy as the hook left it (an in-place edit is an edit);
+    * a hook that raises, or returns anything else, changes NOTHING -- its
+      copy is dropped with whatever it did to it -- and a raise is a counted
+      failure at every seam;
+    * whatever is adopted is compared to what the hook was handed, key by
+      top-level key, and every changed key is attributed to its extension.
+
+    Why a copy rather than the payload itself (audit 2026-11-01,
+    web_routes_extensions F9, confirmed by snippet): a hook handed the real
+    payload could edit it in place and then raise -- or, at the Director
+    seam, return the documented "leave it alone" `None` -- and the edit rode
+    to the model while the skip path dropped its routing note:
+    `{'perception': 'a hallway', 'forbidden_fact': 'the vault code is 4471'}`
+    with no note at all. Fingerprinting BEFORE the call stays, for the
+    reason it was added: comparing the returned object with the one passed
+    compares an in-place edit with itself and reports nothing.
+
+    A payload `deepcopy` refuses (no engine payload is one; a stand-in might
+    be) is handed over live as before, and a failure then attributes
+    whatever the hook left changed rather than letting it ride unnamed.
+    """
     current = payload
     for ext_id, fn in hooks:
         api = _apis.get(ext_id)
         if api is None:
             continue
-        before = current
-        # Fingerprint BEFORE the call. Comparing the returned object against
-        # the passed one is the obvious implementation and it does not work:
-        # a hook is handed the real payload, so the ordinary
-        #
-        #     def hook(payload, info):
-        #         payload["forbidden_fact"] = "..."
-        #         return payload
-        #
-        # mutates both sides of the comparison at once and the diff comes back
-        # EMPTY -- an extension altering what a mind knows with no attribution
-        # record, which is precisely the guarantee this seam exists to make.
-        # Returning `None` (leave it alone) after mutating in place is the same
-        # hole by a shorter route.
-        stamps = _payload_stamps(before)
+        stamps = _payload_stamps(current)
         try:
-            info = PayloadContext(api, ctx, char_id, names)
-            result = fn(before, info)
+            working, private = copy.deepcopy(current), True
+        except Exception:
+            working, private = current, False
+
+        def _leftover():
+            if not private:
+                left = _changed_keys(stamps, _payload_stamps(current))
+                if left:
+                    note(ext_id, left)
+
+        try:
+            result = fn(working, make_info(api))
         except Exception:
             _observer_failures[ext_id] = _observer_failures.get(ext_id, 0) + 1
-            log.exception("extension %s payload hook failed", ext_id)
+            log.exception("extension %s %s hook failed", ext_id, what)
+            _leftover()
             continue
         if result is None:
-            result = before
+            result = working
         if not isinstance(result, dict):
-            log.warning("extension %s payload hook returned %s; ignored",
-                        ext_id, type(result).__name__)
+            log.warning("extension %s %s hook returned %s; ignored",
+                        ext_id, what, type(result).__name__)
+            _leftover()
             continue
-        after = _payload_stamps(result)
-        changed = sorted({key for key in set(stamps) | set(after)
-                          if stamps.get(key) != after.get(key)})
+        changed = _changed_keys(stamps, _payload_stamps(result))
         if changed:
-            _note_routing(ctx, ext_id, char_id, changed)
-        current = result
+            note(ext_id, changed)
+            current = result
     return current
+
+
+def _changed_keys(stamps, after) -> list:
+    """The top-level keys whose stamp differs between two `_payload_stamps`."""
+    return sorted({key for key in set(stamps) | set(after)
+                   if stamps.get(key) != after.get(key)})
 
 
 def _live_ids() -> list[str]:
@@ -1338,29 +1440,11 @@ def dispatch_director_payload(ctx, payload, *, phase):
         log.exception("extension director hooks could not be resolved")
         return current
 
-    for ext_id, fn in hooks:
-        api = _apis.get(ext_id)
-        if api is None:
-            continue
-        before = current
-        # Fingerprint BEFORE the call, for the reason spelled out in
-        # `dispatch_character_payload`.
-        stamps = _payload_stamps(before)
-        try:
-            info = DirectorContext(api, ctx, phase=phase)
-            result = fn(before, info)
-        except Exception:
-            log.exception("extension %s director payload hook failed", ext_id)
-            continue
-        if not isinstance(result, dict):
-            continue
-        after = _payload_stamps(result)
-        changed = sorted({key for key in set(stamps) | set(after)
-                          if stamps.get(key) != after.get(key)})
-        if changed:
-            _note_narration_routing(ctx, ext_id, scope, changed)
-        current = result
-    return current
+    return _run_payload_hooks(
+        hooks, current, "director payload",
+        lambda api: DirectorContext(api, ctx, phase=phase),
+        lambda ext_id, changed: _note_narration_routing(ctx, ext_id, scope,
+                                                        changed))
 
 
 def dispatch_narration_payload(ctx, payload, *, scope="narrator", player=""):
@@ -1407,36 +1491,11 @@ def dispatch_narration_payload(ctx, payload, *, scope="narrator", player=""):
         log.exception("extension narration hooks could not be resolved")
         return current
 
-    for ext_id, fn in hooks:
-        api = _apis.get(ext_id)
-        if api is None:
-            continue
-        before = current
-        # Fingerprint BEFORE the call, for the reason spelled out in
-        # `dispatch_character_payload`: a hook handed the real payload can
-        # mutate both sides of a naive comparison at once and come back with an
-        # empty diff, which is an unattributed edit to what the reader is told.
-        stamps = _payload_stamps(before)
-        try:
-            info = NarrationContext(api, ctx, scope=scope, player=player)
-            result = fn(before, info)
-        except Exception:
-            _observer_failures[ext_id] = _observer_failures.get(ext_id, 0) + 1
-            log.exception("extension %s narration hook failed", ext_id)
-            continue
-        if result is None:
-            result = before
-        if not isinstance(result, dict):
-            log.warning("extension %s narration hook returned %s; ignored",
-                        ext_id, type(result).__name__)
-            continue
-        after = _payload_stamps(result)
-        changed = sorted({key for key in set(stamps) | set(after)
-                          if stamps.get(key) != after.get(key)})
-        if changed:
-            _note_narration_routing(ctx, ext_id, scope, changed)
-        current = result
-    return current
+    return _run_payload_hooks(
+        hooks, current, "narration",
+        lambda api: NarrationContext(api, ctx, scope=scope, player=player),
+        lambda ext_id, changed: _note_narration_routing(ctx, ext_id, scope,
+                                                        changed))
 
 
 def _note_narration_routing(ctx, ext_id, scope, changed) -> None:
@@ -1809,7 +1868,7 @@ __all__ = [
     "CharacterAccess", "CharacterHandle", "CommitView", "CommittedTurn",
     "DirectorBlock", "DirectorContext", "DocumentStore",
     "EXT_API_VERSION", "ENABLED_SETTING", "ExtState", "Extension",
-    "ExtensionError", "HOST_CAPABILITIES", "NarrationBlock",
+    "ExtensionBusy", "ExtensionError", "HOST_CAPABILITIES", "NarrationBlock",
     "NarrationContext",
     "PSYCHOLOGY_STATE_KEYS", "PayloadContext", "Request",
     "SonderExtensionAPI", "StepView", "TreeAudit", "activate",
@@ -2339,6 +2398,9 @@ def install_extension(source: str, *, provenance: str | None = None) -> dict:
     source = str(source or "").strip()
     if not source:
         raise ExtensionError("nothing to install")
+    # Asked before the download, so a host is not made to wait for a clone
+    # that would be refused, and again under `_lock` before the swap.
+    _refuse_while_a_beat_runs("install it")
     root = extension_root()
     root.mkdir(parents=True, exist_ok=True)
     digest = None
@@ -2436,9 +2498,21 @@ def install_extension(source: str, *, provenance: str | None = None) -> dict:
         manifest_path.write_text(
             json.dumps(manifest, ensure_ascii=False, indent=2) + "\n",
             encoding="utf-8")
-        os.replace(bundle, destination)
-
-    reload()
+        with _lock:
+            # Re-asked under the lock a turn's plan is built under: a turn
+            # that began during the download is refused here, before the
+            # swap, rather than having `reload()` pull its stages away.
+            _refuse_while_a_beat_runs("install it")
+            os.replace(bundle, destination)
+            # AN INSTALL ARRIVES SWITCHED OFF, whatever the enabled set says.
+            # An id left in it -- a directory deleted by hand, a restored
+            # settings row -- is not consent to whatever arrives under that
+            # id now; the Enable dialog that discloses the capability list
+            # is (`update_extension` keeps the same rule).
+            if candidate.id in _stored_enabled_ids():
+                _write_enabled([item for item in _stored_enabled_ids()
+                                if item != candidate.id])
+            reload()
     for row in listing():
         if row["id"] == candidate.id:
             # What the ceilings actually measured, carried on the install
@@ -2547,8 +2621,15 @@ def update_extension(extension_id: str) -> dict:
     with `os.replace` is the same atomicity install already has, and the same
     failure mode -- the old version, or the new one, never a mixture.
 
-    The enabled set and everything under `world["ext:<id>"]` survive: an update
-    is the same extension, so a story played with it keeps going.
+    Everything under `world["ext:<id>"]` survives: an update is the same
+    extension, so a story played with it keeps going. Its ENABLEMENT does not.
+    The host consented to the code they enabled, at the dialog that discloses
+    its capability list; an update brings new code, and new capabilities
+    perhaps, so an extension that was enabled comes back DISABLED
+    (`disabled_for_consent` on the returned row) until the host enables it
+    again. Update used to `activate()` the new version's `register(api)` in
+    this process on one click with no dialog (audit 2026-11-01,
+    frontend_lorebooks_editors F2, SECURITY).
     """
     ext = installed_extensions().get(str(extension_id or ""))
     if ext is None:
@@ -2557,8 +2638,12 @@ def update_extension(extension_id: str) -> dict:
         raise ExtensionError(
             f"{ext.id!r} was not installed from a repository, so there is "
             "nothing to update from")
+    _refuse_while_a_beat_runs("update it")
 
-    was_enabled = is_enabled(ext.id)
+    # The STORED set, not `is_enabled`: safe mode hides the enabled set
+    # without changing the host's choice, and an update made in safe mode
+    # must not leave the new code switched on for the next normal boot.
+    was_enabled = ext.id in _stored_enabled_ids()
     root = extension_root()
     source = ext.source_url + (f"#{ext.source_ref}" if ext.source_ref else "")
 
@@ -2602,26 +2687,27 @@ def update_extension(extension_id: str) -> dict:
             encoding="utf-8")
 
         previous = Path(tmp) / f"{ext.id}.previous"
-        os.replace(ext.path, previous)
-        try:
-            os.replace(staged, ext.path)
-        except Exception:
-            os.replace(previous, ext.path)        # put the old one back
-            raise
-
-    reload()
-    if was_enabled:
-        # `reload` cleared the live registrations; the enabled SET is durable,
-        # so this only re-imports what the host had already switched on.
-        try:
-            activate(refresh=True)
-        except Exception:
-            log.exception("extension %s did not re-activate after update",
-                          ext.id)
+        with _lock:
+            # Re-asked under the lock a turn's plan is built under (see
+            # `install_extension`): the clone above can take minutes.
+            _refuse_while_a_beat_runs("update it")
+            os.replace(ext.path, previous)
+            try:
+                os.replace(staged, ext.path)
+            except Exception:
+                os.replace(previous, ext.path)        # put the old one back
+                raise
+            if was_enabled:
+                _write_enabled([item for item in _stored_enabled_ids()
+                                if item != ext.id])
+            reload()
     for row in listing():
         if row["id"] == ext.id:
             row["updated"] = True
             row["previous_version"] = ext.version
+            # True when the host had it switched on: the new code waits for
+            # the Enable that discloses it.
+            row["disabled_for_consent"] = was_enabled
             row.update(audit.as_dict())
             return row
     raise ExtensionError(f"{ext.id!r} did not load after the update")
@@ -2645,10 +2731,14 @@ def remove_extension(extension_id: str) -> dict:
     directory = extension_root() / extension_id
     if not directory.is_dir():
         raise ExtensionError(f"{extension_id!r} is not installed")
-    try:
-        disable_extension(extension_id)
-    except Exception:
-        pass  # removing it is the point; a failed disable must not block that
-    shutil.rmtree(directory)
-    reload()
+    with _lock:
+        # Asked HERE, before the disable below: that one swallows its errors,
+        # so its own refusal would let the removal go ahead under a turn.
+        _refuse_while_a_beat_runs("remove it")
+        try:
+            disable_extension(extension_id)
+        except Exception:
+            pass  # removing it is the point; a failed disable must not block that
+        shutil.rmtree(directory)
+        reload()
     return {"id": extension_id, "removed": True}
