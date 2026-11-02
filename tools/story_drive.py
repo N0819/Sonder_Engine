@@ -10,9 +10,11 @@ stay at zero however many harnesses pass.
 
 This runs the ACTUAL pipeline. `agents.runtime.run_pipeline` executes every
 stage in order against a real turn row; the only thing replaced is
-`providers.chat_complete`, which returns authored payloads instead of calling
-a model. So the schemas validate for real, `commit_all` runs for real, and the
-commit results `tools/fire_rates.py` reads are the ones a played story writes.
+`llm.llm_quality.complete_validated_json` -- rebound in every module that
+imported it by name, as `main` below does -- which returns authored payloads
+instead of calling a model. So the schemas validate for real, `commit_all`
+runs for real, and the commit results `tools/fire_rates.py` reads are the ones
+a played story writes.
 
 WHAT THIS CAN AND CANNOT PROVE. It shows the mechanisms fire when a Director
 declares them, and it produces a corpus fire rates can measure. It CANNOT tell

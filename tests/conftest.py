@@ -6,7 +6,8 @@ import sys
 
 import pytest
 
-from tests.helpers import remove_scratch_db, scratch_db_path
+from tests.helpers import (engine_contextvars, install_network_guard,
+                           remove_scratch_db, scratch_db_path)
 
 # pytest imports this file itself, as the top-level module `conftest`. Nothing
 # else may import it under a second name: Python would build a second module
@@ -29,8 +30,9 @@ if _twins:
 def pytest_collection_modifyitems(items):
     """Mark database-backed tests ``slow``.
 
-    Kept for CI's matrix-breadth job (``make test-fast``), NOT as the tier a
-    developer should run before considering a change done -- see
+    Kept for ``make test-fast``, the manual escape hatch for a machine with no
+    usable /dev/shm -- no CI job runs it any more, and it is NOT the tier a
+    developer should run before considering a change done. See
     `tests/helpers.py`'s `fast_tmp_dir` for why that split no longer means what
     it used to.
     """
@@ -38,6 +40,19 @@ def pytest_collection_modifyitems(items):
     for item in items:
         if "temp_db" in item.fixturenames:
             item.add_marker(pytest.mark.slow)
+
+
+#: Whether a test's own call failed, so the network floor below does not
+#: report a second time a refusal the test already failed on.
+_CALL_FAILED = pytest.StashKey[bool]()
+
+
+@pytest.hookimpl(wrapper=True)
+def pytest_runtest_makereport(item, call):
+    report = yield
+    if report.when == "call":
+        item.stash[_CALL_FAILED] = report.failed
+    return report
 
 
 def _redirect_default_database():
@@ -289,8 +304,9 @@ def _no_learned_rate_limit_between_tests():
 
 
 @pytest.fixture(autouse=True)
-def _fresh_provider_context():
-    """Every provider ContextVar starts each test unset, and is put back after.
+def _fresh_engine_context():
+    """Every engine ContextVar starts each test at its default, and is put
+    back after.
 
     A ContextVar set on a test's thread outlives the test: pytest runs every
     test of a worker on the same thread, in the same context. The provider's
@@ -301,13 +317,24 @@ def _fresh_provider_context():
     leaves `last_reasoning == "private"`, and
     `test_parallel_group::test_each_worker_carries_its_own_reasoning_trace_out`
     failed whenever xdist ran it after that file on one worker -- adding two
-    unrelated test files was enough to deal them together. Every one of these
-    defaults to None, which is what "unset" reads as.
+    unrelated test files was enough to deal them together.
+
+    EVERY engine module's, not `llm.providers`' alone: the same leak applies
+    to the twelve others (the story language, the active frame, a Room
+    reply's citation set, a commit's registry session...), which this reset
+    did not reach until 2026-11-01. Each goes to the default it declares --
+    `contextvars.Context().run(var.get)` reads it in a context where nothing
+    was ever set -- so "unset" means what the module says it means.
     """
     import contextvars
-    from llm import providers
-    tokens = [(var, var.set(None)) for var in vars(providers).values()
-              if isinstance(var, contextvars.ContextVar)]
+
+    tokens = []
+    for var in engine_contextvars():
+        try:
+            default = contextvars.Context().run(var.get)
+        except LookupError:
+            continue        # no default to return to: leave it as it is
+        tokens.append((var, var.set(default)))
     yield
     for var, token in reversed(tokens):
         try:
@@ -316,3 +343,35 @@ def _fresh_provider_context():
             # Created in another context (a test that ran its body through
             # `Context.run`): nothing of ours to put back there.
             pass
+
+
+@pytest.fixture(autouse=True)
+def network_guard(request, monkeypatch):
+    """No test reaches a host that is not this machine.
+
+    The suite is documented as offline -- no network, no model -- and until
+    2026-11-01 it was offline by luck: a fresh scratch database holds no
+    provider row, so nothing configured a door to open. The door lists in
+    `tests/helpers.py` seal the doors they name; this is the floor that does
+    not depend on a list, refusing at the socket (`install_network_guard`).
+    Loopback and `AF_UNIX` pass.
+
+    A refusal raises inside the call AND fails the test afterwards, because
+    engine code that catches every exception would otherwise swallow it and
+    the test would go on to pass, degraded and silent. A test whose point is
+    the network says so with `@pytest.mark.network`, which stands this down;
+    one that provokes a refusal on purpose clears the list it is handed.
+    """
+    if request.node.get_closest_marker("network"):
+        yield None
+        return
+    attempts = install_network_guard(monkeypatch)
+    yield attempts
+    if attempts and not request.node.stash.get(_CALL_FAILED, False):
+        pytest.fail(
+            "the test reached for the network and was refused: %s. Stub the "
+            "call (tests.helpers.MODEL_DOORS names the doors), or mark the "
+            "test @pytest.mark.network if the network is its point."
+            % "; ".join("%s from %s" % (where, thread)
+                        for thread, where in attempts),
+            pytrace=False)

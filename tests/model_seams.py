@@ -17,68 +17,38 @@ from inside the call, naming which door -- which is a better failure than a
 missing substring, because it says what WAS called rather than what was not
 written.
 
-The doors are the provider surface plus the agent-side wrapper. A caller that
-bound the name at import time holds its own reference, so every module holding
-the SAME function object is patched too; identity is the test, never the name,
+The doors are `tests/helpers.py`'s `MODEL_DOORS`, the ONE list: this file kept
+a second one, and the two disagreed (three doors there, five here, neither
+naming the decision model's post that arrived after both). A caller that bound
+a door at import time holds its own reference, so every engine module holding
+the SAME function object is sealed too; identity is the test, never the name,
 or an unrelated module with a same-named attribute would be patched as well.
 
-Adding a provider entry point means adding it here, and forgetting to is the
-one way this can go quiet -- which is why `tests/test_model_seams.py` proves
-each door is really shut by opening it.
+Adding a provider entry point means adding it to `MODEL_DOORS`, and
+`tests/test_model_seams.py` proves each door is really shut by opening it. A
+door the list forgets is no longer a path to the network: `tests/conftest.py`
+refuses any connection off this machine whatever door opened it -- the list is
+what names the door.
 """
 
 from __future__ import annotations
 
-import importlib
-import sys
-
 import pytest
 
-#: `(defining module, attribute)` for every entry point that reaches a provider.
-MODEL_DOORS = (
-    ("llm.providers", "chat_complete"),
-    ("llm.providers", "embed_texts"),
-    ("llm.providers", "embed_texts_meta"),
-    ("llm.llm_quality", "complete_validated_json"),
-    ("agents.common_llm", "_agent_json"),
-)
+from tests.helpers import MODEL_DOORS, seal_doors
 
-#: Only engine packages are swept for import-time aliases. A test module or a
-#: third-party one holding the same object is not a path the engine can take.
-_ENGINE_ROOTS = frozenset(
-    {"agents", "world", "story", "mind", "persist", "web", "llm", "core"})
-
-
-def _aliases(original):
-    """Every engine module whose attribute IS `original`."""
-    for name, module in list(sys.modules.items()):
-        if module is None or name.split(".")[0] not in _ENGINE_ROOTS:
-            continue
-        for attr, value in list(vars(module).items()):
-            if value is original:
-                yield module, attr
+__all__ = ("MODEL_DOORS", "seal_model_seams", "sealed_model")
 
 
 def seal_model_seams(monkeypatch, *, doors=MODEL_DOORS):
     """Make every model door raise. Returns the names of the doors sealed."""
-    sealed = []
-    for module_path, attr in doors:
-        try:
-            module = importlib.import_module(module_path)
-        except Exception:
-            continue
-        original = getattr(module, attr, None)
-        if original is None:
-            continue
-        door = f"{module_path}.{attr}"
 
-        def refuse(*args, _door=door, **kwargs):
-            raise AssertionError(f"a model was reached through {_door}")
+    def refusal_for(door):
+        def refuse(*args, **kwargs):
+            raise AssertionError(f"a model was reached through {door}")
+        return refuse
 
-        for holder, held_as in list(_aliases(original)):
-            monkeypatch.setattr(holder, held_as, refuse)
-        monkeypatch.setattr(module, attr, refuse)
-        sealed.append(door)
+    _bindings, sealed = seal_doors(monkeypatch.setattr, refusal_for, doors)
     assert sealed, "no model door was found to seal"
     return sealed
 

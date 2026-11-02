@@ -55,8 +55,14 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# Equal to requirements-dev.txt, line for line: `pip install -e .[dev]` then
+# `pytest` failed on `-n` while this named pytest alone, because the addopts
+# below ask for xdist (tests/test_the_gate_runs_on_the_stack_players_run.py
+# holds the two spellings equal).
 dev = [
   "pytest>=8.4.1,<10",
+  "pytest-xdist>=3.8,<4",
+  "psutil>=5.9",
 ]
 browser = [
   "playwright>=1.50,<2",
@@ -79,10 +85,12 @@ pythonpath = ["."]
 # `make test JOBS=0` now pass explicitly.
 #
 # The one caller this would break is an interpreter without xdist, where `-n`
-# is an unrecognized argument -- `make test-full` detects that and strips the
-# flag with `-o addopts=...` rather than failing a developer who did nothing
-# wrong.
+# is an unrecognized argument -- `make test-full` and `make test-browser`
+# detect that and strip the flag with `-o addopts=...` (the Makefile's
+# SERIAL_ADDOPTS, held equal to this line less `-n auto`) rather than failing
+# a developer who did nothing wrong.
 addopts = "-ra --strict-markers -n auto"
 markers = [
-  "slow: database-backed tests (they request the temp_db fixture); deselected only by make test-fast, which is a CI matrix-breadth job",
+  "slow: database-backed tests (they request the temp_db fixture); deselected only by make test-fast, a manual escape hatch no CI job runs",
+  "network: a test whose point is the network; tests/conftest.py's network_guard, which refuses every connection off this machine, stands down for it",
 ]

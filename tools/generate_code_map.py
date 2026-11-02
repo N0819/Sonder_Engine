@@ -158,7 +158,9 @@ def md(text: object) -> str:
 
 
 def parse_module(path: Path, local_modules: set[str]) -> dict:
-    tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    # Read ONCE: the line count below used to read the file a second time.
+    source = path.read_text(encoding="utf-8")
+    tree = ast.parse(source, filename=str(path))
     local_roots = {name.split(".")[0] for name in local_modules}
     imports: set[str] = set()
     functions: list[tuple[str, int, int, bool]] = []
@@ -230,8 +232,11 @@ def parse_module(path: Path, local_modules: set[str]) -> dict:
 
     # Extracted service objects may register bound methods explicitly because
     # decorators cannot reference an instance that is injected later by the
-    # application assembly layer.
-    for node in ast.walk(tree):
+    # application assembly layer. Only a file that spells the call is walked
+    # (one engine file did, 2026-11-01): a whole-tree walk of every module
+    # for one method name was a third of the generator's time, and `make
+    # check` generates the map more than once.
+    for node in (ast.walk(tree) if "add_api_route" in source else ()):
         if not isinstance(node, ast.Call):
             continue
         if not (
@@ -272,7 +277,7 @@ def parse_module(path: Path, local_modules: set[str]) -> dict:
         "functions": functions,
         "classes": classes,
         "routes": routes,
-        "lines": len(path.read_text(encoding="utf-8").splitlines()),
+        "lines": len(source.splitlines()),
     }
 
 

@@ -243,9 +243,12 @@ def test_generated_journey_persists_ledger_then_ordered_memory_rows(
         ("Mara", json.dumps({"identity": {"name": "Mara"}}), "{}",
          time.time()))
     written = []
-    monkeypatch.setattr(
-        "mind.memory.add_memories_batch",
-        lambda rows: written.extend(rows) or list(range(len(rows))))
+    # Every module holding the writer, not the facade's re-export alone: the
+    # string-form patch left `mind/memory_snapshot.py`'s own binding live
+    # (project_check.check_facade_patch_targets, 2026-11-01).
+    from tests.helpers import patch_seam
+    patch_seam(monkeypatch, "mind.memory", "add_memories_batch",
+               lambda rows: written.extend(rows) or list(range(len(rows))))
 
     result = compile_journey_history(
         cid, char_id, {"identity": {"name": "Mara"}},
@@ -287,8 +290,9 @@ def _capture_compile(temp_db, monkeypatch, route, **kwargs):
     char_id = temp_db.qi(
         "INSERT INTO characters(name,sheet,source,created) VALUES(?,?,?,?)",
         ("Mara", json.dumps({"identity": {"name": "Mara"}}), "{}", time.time()))
-    monkeypatch.setattr("mind.memory.add_memories_batch",
-                        lambda rows: list(range(len(rows))))
+    from tests.helpers import patch_seam
+    patch_seam(monkeypatch, "mind.memory", "add_memories_batch",
+               lambda rows: list(range(len(rows))))
     seen = {}
 
     def model_call(payload):

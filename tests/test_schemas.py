@@ -317,6 +317,16 @@ def test_no_schema_model_is_declared_without_anything_reaching_it():
                              "fields",
         "Observation": "tests/test_schemas.py and "
                        "tests/test_schema_leniency.py validate through it",
+        # Two enums that only a test reads, each a SECOND spelling of a
+        # vocabulary `story.scene` holds (`PLAYER_AUTHORITY_MODES`,
+        # `OFFSCREEN_LIFE_LADDER`); the tests hold the two spellings equal.
+        # Kept so, until the owner chooses one spelling (2026-11-01: L13
+        # deleted `Engagement` and `BookOp`, which nothing read at all).
+        "PlayerAuthorityMode": "tests/test_player_authority_mode.py (the "
+                               "enum and the config name the same rungs)",
+        "BehaviorController": "tests/test_offscreen_resolution.py (the "
+                              "importance field is not the permission "
+                              "ladder)",
     }
     edges = {name: refs(node) - {name} for name, node in classes.items()}
     reached, stack = set(), list(seed | set(kept))

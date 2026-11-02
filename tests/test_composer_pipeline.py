@@ -328,9 +328,18 @@ def test_look_intent_rerenders_player_standing_state(temp_db):
     assert "You are in the Long Hall." in (out["views"]["player"] or "")
 
 
-def test_commit_mints_composed_episode_with_typed_entities(temp_db):
+def test_commit_mints_composed_episode_with_typed_entities(temp_db,
+                                                           monkeypatch):
+    from llm.providers import EmbeddingBatch
     from persist.commit import prepare_memory_commit
+    from tests.helpers import patch_provider_seam
 
+    # Preparing a memory EMBEDS it -- a model door the net above shuts since
+    # it learned the embedding doors (2026-11-01), so the commit half of this
+    # test says what it stands in for rather than reaching the provider.
+    patch_provider_seam(monkeypatch, "embed_texts_meta", lambda texts: (
+        EmbeddingBatch(vectors=[[0.0] * 8 for _ in texts], model_key="test",
+                       dimensions=8)))
     ctx, char_id = _make_ctx(temp_db)
     ctx.director_resolve = {"resolved_event": "", "dialogue_log": [],
                             "state_diff": {}, "summary": ""}

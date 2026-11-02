@@ -79,8 +79,20 @@ class TestAJobThatCannotStart:
     def test_submit_still_does_not_raise_into_the_turn(self, monkeypatch):
         """The module contract, and the reason production callers that already
         wrap this in a try are not what makes the behaviour correct."""
-        monkeypatch.setattr(threading.Thread, "start", _refuse_to_start)
-        jobs.submit(7, "unwrapped", lambda _job: None)   # must not raise
+        refused = []
+
+        def refuse(thread):
+            refused.append(thread)
+            _refuse_to_start(thread)
+
+        monkeypatch.setattr(threading.Thread, "start", refuse)
+        job = jobs.submit(7, "unwrapped", lambda _job: None)   # must not raise
+        # The positive control: the start really was refused, and the job
+        # says so -- not merely "nothing raised", which a submit that never
+        # tried to start a thread would satisfy too (test health,
+        # assert-by-absence, 2026-11-01).
+        assert refused, "submit never tried to start its thread"
+        assert job.state == "failed"
 
     def test_a_bootstrap_failure_inside_the_worker_files_the_job(self,
                                                                  monkeypatch):

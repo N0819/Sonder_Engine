@@ -67,6 +67,19 @@ def test_delivery_gate_callers_are_measured_not_claimed():
     assert len(sites["loops.py"]) == 2, sites["loops.py"]
 
 
+def test_the_pinned_module_is_the_one_that_defines_the_gate():
+    """The positive control for `DEFINING_MODULE not in sites` above, which a
+    file that no longer defines the gate satisfies too -- and did, the moment
+    `agents/common.py` became a facade over sixteen siblings (test health,
+    2026-11-01). The pin follows the definition or this fails."""
+    tree = ast.parse((AGENTS_DIR / DEFINING_MODULE).read_text(encoding="utf-8"))
+    defined = {node.name for node in tree.body
+               if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))}
+    assert "_delivery_ok" in defined, (
+        f"agents/{DEFINING_MODULE} no longer defines `_delivery_ok`; point "
+        "DEFINING_MODULE at the module that does")
+
+
 def test_delivery_gate_docstring_names_the_other_family():
     """The gate's docstring must scope itself while two families exist."""
     from agents.common import _delivery_ok

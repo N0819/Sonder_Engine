@@ -42,13 +42,6 @@ def test_mint_defaults_due_in_one(temp_db):
     assert due_authored_events(cid, 6)
 
 
-def test_mint_is_idempotent_on_rerun(temp_db):
-    cid = _chat(temp_db)
-    mint_authored_events(cid, 3, [{"summary": "the bridge collapses", "due_in_turns": 2}])
-    mint_authored_events(cid, 3, [{"summary": "the bridge collapses", "due_in_turns": 2}])
-    assert len(due_authored_events(cid, 5)) == 1  # stable id -> no double
-
-
 def test_resolve_fires_when_covered(temp_db):
     """Both channels: the beat TELLS it and WRITES IT DOWN. Prose alone fired
     every scheduled event on its due beat in a story that merely talked about

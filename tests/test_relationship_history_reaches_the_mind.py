@@ -167,8 +167,9 @@ class TestEveryWriterThatMovesAStanceSaysWhy:
             "VALUES(?,?,?,?)",
             ("Mara", json.dumps({"identity": {"name": "Mara"}}), "{}",
              time.time()))
-        monkeypatch.setattr("mind.memory.add_memories_batch",
-                            lambda rows: list(range(len(rows))))
+        from tests.helpers import patch_seam
+        patch_seam(monkeypatch, "mind.memory", "add_memories_batch",
+                   lambda rows: list(range(len(rows))))
         summary = "We crossed three worlds together and I owe her a map."
 
         compile_journey_history(
@@ -233,8 +234,9 @@ class TestEveryWriterThatMovesAStanceSaysWhy:
             "VALUES(?,?,?,?)",
             ("Mara", json.dumps({"identity": {"name": "Mara"}}), "{}",
              time.time()))
-        monkeypatch.setattr("mind.memory.add_memories_batch",
-                            lambda rows: list(range(len(rows))))
+        from tests.helpers import patch_seam
+        patch_seam(monkeypatch, "mind.memory", "add_memories_batch",
+                   lambda rows: list(range(len(rows))))
 
         def events(shared):
             return [

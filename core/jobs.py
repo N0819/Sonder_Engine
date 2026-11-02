@@ -225,6 +225,13 @@ def _clear_turn_scoped_context():
                                        current_warning_sink)
     from llm.providers import (call_ledger_sink, cancel_event,
                            generation_event_sink, reasoning_sink, token_sink)
+    # Added by the 2026-11-01 review (the contextvar check now scans every
+    # engine module): each names something that ends with the turn, reply,
+    # commit or job it was set for.
+    from story.room_citations import _rows_read
+    from world.charter_runtime import _REGISTRY_SESSION
+    from extension_runtime.api import _COMMIT_SCOPE
+    from world.layout_bridge import CANCELLED
 
     # `reasoning_sink` rides here for the same reason `token_sink` does: the
     # Writers' Room arms it for one streamed reply, and a job started from
@@ -233,7 +240,8 @@ def _clear_turn_scoped_context():
     for var in (token_sink, reasoning_sink, generation_event_sink,
                 call_ledger_sink, cancel_event, current_warning_sink,
                 current_step_key, current_decision_sink,
-                current_exchange_sink, beat_onset):
+                current_exchange_sink, beat_onset,
+                _rows_read, _REGISTRY_SESSION, _COMMIT_SCOPE, CANCELLED):
         var.set(None)
 
 

@@ -237,7 +237,10 @@ def test_recording_the_failure_never_replaces_it(temp_db, monkeypatch):
     from core import db as core_db
     from story import greetings
 
+    reached = []
+
     def boom(*a, **k):
+        reached.append(a)
         raise RuntimeError("the marker could not be written")
 
     monkeypatch.setattr(core_db, "wset", boom)
@@ -246,6 +249,11 @@ def test_recording_the_failure_never_replaces_it(temp_db, monkeypatch):
         999999, ValueError("the real failure"), char_id=1, persona_id=2,
         greeting_index=0, lorebook_id=None, already_known=True,
         language="en", lived_location=None)
+    # The positive control: the write really was attempted and really failed.
+    # Without it, a stub `_mark_failed_setup` never reached would pass this
+    # test exactly as the fix does (test health, assert-by-absence,
+    # 2026-11-01).
+    assert reached, "the failing write was never attempted"
 
 
 def test_no_stage_of_a_start_deletes_its_own_chat():

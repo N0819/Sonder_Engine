@@ -169,8 +169,7 @@ class TestResidueIsContactOnly:
         `chat_complete`. Those three spellings are three of many: `qi`,
         `qtx`, `transaction`, an import alias or any helper that wraps one
         satisfies the grep and writes anyway."""
-        import core.db as db
-        import llm.providers as providers
+        from tests.helpers import forbid_model_calls, seal_doors
 
         cid = _make_chat(temp_db)
 
@@ -179,12 +178,21 @@ class TestResidueIsContactOnly:
                 raise AssertionError("routines reached %s" % name)
             return _fail
 
-        for seam in ("wset", "wset_if_changed", "qi", "qtx", "transaction",
-                     "wset_for_frame"):
-            if hasattr(db, seam):
-                monkeypatch.setattr(db, seam, _refuse("db.%s" % seam))
-        monkeypatch.setattr(providers, "chat_complete",
-                            _refuse("providers.chat_complete"))
+        # EVERY binding of each seam, not the defining module's alone:
+        # `routines.residue_for` reaches `story.scene.style_guide`, and
+        # `story/scene.py` holds its own `qi` and `wset` from import -- a
+        # write routed through it passed the old net (test health,
+        # 2026-11-01). `seal_doors` rebinds wherever the object is held.
+        rebound, _sealed = seal_doors(
+            monkeypatch.setattr, _refuse,
+            [("core.db", seam) for seam in (
+                "wset", "wset_if_changed", "qi", "qtx", "transaction",
+                "wset_for_frame")])
+        forbid_model_calls(monkeypatch, reason="routines reached a model")
+        # The positive control: the net covers the module that holds its own
+        # binding, so the absence asserted below means something.
+        assert ("story.scene", "qi") in rebound
+        assert ("story.scene", "wset") in rebound
 
         routine_band("room:%s:tavern" % cid, 5000.0)
         occupancy_fact("room:%s:tavern" % cid, "The Boar Tavern", 0.0, 90000.0)

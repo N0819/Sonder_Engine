@@ -137,7 +137,21 @@ def test_the_blocking_twin_is_not_used_by_the_tail(temp_db, monkeypatch):
     from persist import commit_memory_write
     monkeypatch.setattr(commit_memory_write,
                         "_consolidate_committed_memories", blocking)
+    # The positive control: the tail REACHED the memory domain, and asked it
+    # not to consolidate. Without it, a commit that stopped before the domain
+    # would pass this test as well as the fix does (test health,
+    # assert-by-absence, 2026-11-01). `commit_all` reads the domain from its
+    # own module's globals.
+    asked = []
+    real = commit_module.commit_memories
+
+    def recording(ctx, nonce, **kwargs):
+        asked.append(kwargs.get("consolidate", True))
+        return real(ctx, nonce, **kwargs)
+
+    monkeypatch.setattr(commit_module, "commit_memories", recording)
     commit_module.commit_all(_context(temp_db), nonce=0)
+    assert asked == [False], asked
 
 
 def test_the_blocking_twin_fires_when_a_direct_caller_asks_for_it(

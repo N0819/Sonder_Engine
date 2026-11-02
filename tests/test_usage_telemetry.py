@@ -165,11 +165,18 @@ def test_log_usage_never_raises(monkeypatch):
     """Telemetry must never be able to fail a generation."""
     from core import logging_utils
 
+    reached = []
+
     def boom(*a, **kw):
+        reached.append(a)
         raise RuntimeError("logging backend down")
 
     monkeypatch.setattr(logging_utils, "log_llm_call", boom)
     providers._log_usage("narrator", "claude", 0.0, {"input_tokens": 1})
+    # The positive control: the failing backend was really called. A
+    # `_log_usage` that logged nothing would pass the line above as well
+    # (test health, assert-by-absence, 2026-11-01).
+    assert reached, "the logging backend was never asked"
 
 
 def test_every_streaming_path_can_report_usage():

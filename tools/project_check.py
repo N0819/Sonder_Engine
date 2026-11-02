@@ -17,6 +17,21 @@ from string import Formatter
 from generate_code_map import OUTPUT, ROOT, generate
 from extract_ui_catalog import UI_PATH, catalog as english_ui_catalog
 
+
+def _may_name(text: str, *tokens: str) -> bool:
+    """Whether `text` spells any of `tokens`: the cheap gate before a parse.
+
+    A check hunting one identifier or one string constant can fire only where
+    the file's text contains it, so a file that does not is skipped without
+    `ast.parse`. Measured 2026-11-01 on the five checks that hunt one token:
+    50.7 s -> 6.1 s together, every verdict the same. Exact for an identifier,
+    which Python has no other way to spell; a string constant could in
+    principle be written with an escape sequence or split across two adjacent
+    literals, and that -- never met here -- is the whole of the approximation.
+    """
+    return any(token in text for token in tokens)
+
+
 FORBIDDEN_PATCH_MARKERS = (
     "Replace the entire",
     "Insert this BEFORE",
@@ -124,23 +139,71 @@ def check_duplicate_python_symbols(errors: list[str]) -> None:
     to catch it. A property's setter/getter/deleter and `@overload` stubs are
     the one legitimate way to repeat a name in a body, and are exempt.
     """
-    for path in sorted(engine_python_paths()
-                       + list((ROOT / "tests").glob("test_*.py"))):
+    for path in _shape_paths():
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
-        rel = path.relative_to(ROOT).as_posix()
-        for name, lines in _redefinitions(tree.body).items():
-            errors.append(
-                f"{rel} defines top-level symbol {name!r} "
-                f"more than once at lines {lines}"
+        errors.extend(_redefinition_errors(tree, path.relative_to(ROOT)
+                                           .as_posix()))
+
+
+def _shape_paths() -> list[Path]:
+    """The files the per-file shape rules read: the engine, and the test
+    modules pytest collects."""
+    return sorted(engine_python_paths()
+                  + list((ROOT / "tests").glob("test_*.py")))
+
+
+def _redefinition_errors(tree: ast.AST, rel: str, classes=None) -> list[str]:
+    """`check_duplicate_python_symbols`' rule on one parsed file. `classes`,
+    when given, is the file's class nodes already collected."""
+    out = []
+    for name, lines in _redefinitions(tree.body).items():
+        out.append(
+            f"{rel} defines top-level symbol {name!r} "
+            f"more than once at lines {lines}"
+        )
+    if classes is None:
+        classes = [node for node in ast.walk(tree)
+                   if isinstance(node, ast.ClassDef)]
+    for node in classes:
+        for name, lines in _redefinitions(node.body).items():
+            out.append(
+                f"{rel} defines {node.name}.{name!r} more than once at "
+                f"lines {lines}; the second definition replaces the first"
             )
+    return out
+
+
+def python_shape_pass(symbol_errors: list[str], dict_errors: list[str],
+                      empty_errors: list[str]) -> None:
+    """`check_duplicate_python_symbols`, `check_duplicate_dict_keys` and
+    `check_empty_tests` in ONE parse and ONE walk of each file.
+
+    The three read the same files (the third a subset), and each parsed and
+    walked all of them: three whole-tree passes where one does, 50 s of a
+    loaded gate (2026-11-01). Each rule is the same function its own check
+    runs, so the three lists are exactly what the three checks would append,
+    in the same order; `main` places each where its check used to run. A file
+    that will not parse fails the first two rules loudly, as their checks
+    always have.
+    """
+    tests_dir = ROOT / "tests"
+    for path in _shape_paths():
+        text = path.read_text(encoding="utf-8")
+        tree = ast.parse(text, filename=str(path))
+        rel = path.relative_to(ROOT).as_posix()
+        classes, dicts, defs = [], [], []
         for node in ast.walk(tree):
-            if not isinstance(node, ast.ClassDef):
-                continue
-            for name, lines in _redefinitions(node.body).items():
-                errors.append(
-                    f"{rel} defines {node.name}.{name!r} more than once at "
-                    f"lines {lines}; the second definition replaces the first"
-                )
+            if isinstance(node, ast.ClassDef):
+                classes.append(node)
+                defs.append(node)
+            elif isinstance(node, ast.Dict):
+                dicts.append(node)
+            elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                defs.append(node)
+        symbol_errors.extend(_redefinition_errors(tree, rel, classes))
+        dict_errors.extend(_dict_key_errors(dicts, path.relative_to(ROOT)))
+        if path.parent == tests_dir:
+            empty_errors.extend(_empty_test_errors(text, tree, rel, defs))
 
 
 def _module_level_bodies(tree: ast.AST, source: str) -> dict:
@@ -254,30 +317,36 @@ def check_duplicate_dict_keys(errors: list[str]) -> None:
     check by eye. Tests are included: a duplicated key in a fixture is a case
     silently deleted from the fixture.
     """
-    for path in sorted(engine_python_paths()
-                       + list((ROOT / "tests").glob("test_*.py"))):
+    for path in _shape_paths():
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
-        for node in ast.walk(tree):
-            if not isinstance(node, ast.Dict):
+        errors.extend(_dict_key_errors(
+            [node for node in ast.walk(tree) if isinstance(node, ast.Dict)],
+            path.relative_to(ROOT)))
+
+
+def _dict_key_errors(dicts, rel) -> list[str]:
+    """`check_duplicate_dict_keys`' rule on one file's dict literals."""
+    out = []
+    for node in dicts:
+        seen: dict[tuple, int] = {}
+        for key in node.keys:
+            # `**spread` gives a None key, and a non-constant key cannot be
+            # compared without evaluating it. Both are skipped: this check
+            # reports only what is provably the same literal twice.
+            if not isinstance(key, ast.Constant):
                 continue
-            seen: dict[tuple, int] = {}
-            for key in node.keys:
-                # `**spread` gives a None key, and a non-constant key cannot be
-                # compared without evaluating it. Both are skipped: this check
-                # reports only what is provably the same literal twice.
-                if not isinstance(key, ast.Constant):
-                    continue
-                try:
-                    marker = (type(key.value).__name__, key.value)
-                    first = seen.get(marker)
-                except TypeError:
-                    continue
-                if first is not None:
-                    errors.append(
-                        f"{path.relative_to(ROOT)}:{key.lineno} binds dict key "
-                        f"{key.value!r} again; line {first} is dead")
-                else:
-                    seen[marker] = key.lineno
+            try:
+                marker = (type(key.value).__name__, key.value)
+                first = seen.get(marker)
+            except TypeError:
+                continue
+            if first is not None:
+                out.append(
+                    f"{rel}:{key.lineno} binds dict key "
+                    f"{key.value!r} again; line {first} is dead")
+            else:
+                seen[marker] = key.lineno
+    return out
 
 
 #: The one module allowed to derive the install root from `__file__`.
@@ -329,8 +398,16 @@ def check_install_root_derivations(errors: list[str]) -> None:
         if rel == INSTALL_ROOT_OWNER:
             continue
         try:
-            tree = ast.parse(path.read_text(encoding="utf-8"))
-        except (OSError, SyntaxError):
+            text = path.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        # The rule can fire only on a `__file__` Name, so a file whose text
+        # does not spell it is skipped unparsed (7.3 s -> 0.4 s, 2026-11-01).
+        if not _may_name(text, "__file__"):
+            continue
+        try:
+            tree = ast.parse(text)
+        except SyntaxError:
             continue
         for node in ast.walk(tree):
             if isinstance(node, ast.Name) and node.id == "__file__":
@@ -376,28 +453,38 @@ def check_empty_tests(errors: list[str]) -> None:
             tree = ast.parse(text, filename=str(path))
         except SyntaxError:
             continue
-        collected = []
-        for node in ast.walk(tree):
-            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) \
-                    and node.name.startswith("test"):
-                collected.append(node)
-            elif isinstance(node, ast.ClassDef) and node.name.startswith("Test"):
-                collected.append(node)
-        if not collected:
-            errors.append(
-                f"{rel} collects no test: nothing in it is named `test*` or "
-                f"`Test*`, so pytest runs none of it.")
-        for node in collected:
-            if isinstance(node, ast.ClassDef):
-                continue
-            body = [n for n in node.body
-                    if not (isinstance(n, ast.Expr)
-                            and isinstance(n.value, ast.Constant))]
-            if body and all(isinstance(n, (ast.Import, ast.ImportFrom))
-                            for n in body):
-                errors.append(
-                    f"{rel}:{node.lineno}: {node.name} does nothing but "
-                    f"import. It passes without exercising anything.")
+        errors.extend(_empty_test_errors(text, tree, rel))
+
+
+def _empty_test_errors(text: str, tree, rel: str, nodes=None) -> list[str]:
+    """`check_empty_tests`' rule on one parsed test module. `nodes`, when
+    given, is the file's function and class nodes already collected."""
+    if not text.strip():
+        return [f"{rel} is empty"]
+    collected = []
+    for node in (ast.walk(tree) if nodes is None else nodes):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) \
+                and node.name.startswith("test"):
+            collected.append(node)
+        elif isinstance(node, ast.ClassDef) and node.name.startswith("Test"):
+            collected.append(node)
+    out = []
+    if not collected:
+        out.append(
+            f"{rel} collects no test: nothing in it is named `test*` or "
+            f"`Test*`, so pytest runs none of it.")
+    for node in collected:
+        if isinstance(node, ast.ClassDef):
+            continue
+        body = [n for n in node.body
+                if not (isinstance(n, ast.Expr)
+                        and isinstance(n.value, ast.Constant))]
+        if body and all(isinstance(n, (ast.Import, ast.ImportFrom))
+                        for n in body):
+            out.append(
+                f"{rel}:{node.lineno}: {node.name} does nothing but "
+                f"import. It passes without exercising anything.")
+    return out
 
 
 #: An `_ops` name a prompt may mention without owning it. Kept explicit and
@@ -973,8 +1060,14 @@ def check_nsfw_overlay_roster(errors: list[str]) -> None:
         if path == ROOT / "llm" / "prompts.py":
             continue
         try:
-            tree = ast.parse(path.read_text(encoding="utf-8"))
-        except (OSError, SyntaxError):
+            text = path.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        if not _may_name(text, "nsfw_overlay", "nsfw_prompt_ids"):
+            continue
+        try:
+            tree = ast.parse(text)
+        except SyntaxError:
             continue
         named = sorted({node.value for node in ast.walk(tree)
                         if isinstance(node, ast.Constant)
@@ -1370,6 +1463,11 @@ _IMPLICIT_MODULE_NAMES = frozenset({
     "__loader__", "__builtins__", "__debug__",
 })
 
+#: `from x import *`, which Python permits only at module level -- so a line
+#: that opens with it is the whole of the question.
+_STAR_IMPORT = re.compile(r"^[ \t]*from[ \t]+[\w.]+[ \t]+import[ \t]*\*",
+                          re.MULTILINE)
+
 
 def check_undefined_names(errors: list[str]) -> None:
     """A name used inside a function that nothing anywhere binds.
@@ -1416,17 +1514,19 @@ def check_undefined_names(errors: list[str]) -> None:
             continue
         try:
             source = path.read_text(encoding="utf-8")
-            tree = ast.parse(source)
-        except (OSError, SyntaxError):
-            continue          # compileall owns syntax; this owns names
-        if any(isinstance(node, ast.ImportFrom)
-               and any(alias.name == "*" for alias in node.names)
-               for node in ast.walk(tree)):
+        except OSError:
+            continue
+        # A star import is legal only at module level, so a line regex finds
+        # every one; the whole-file `ast.parse` and walk that used to answer
+        # this cost 14 of the check's 21 s (2026-11-01). A line inside a
+        # string that merely LOOKS like one skips the module, which errs on
+        # the side this check already takes: say nothing it cannot know.
+        if _STAR_IMPORT.search(source):
             continue
         try:
             top = symtable.symtable(source, str(path), "exec")
         except (SyntaxError, ValueError):
-            continue
+            continue          # compileall owns syntax; this owns names
         scanned += 1
         known = ({symbol.get_name() for symbol in top.get_symbols()}
                  | set(dir(builtins)) | _IMPLICIT_MODULE_NAMES)
@@ -1617,8 +1717,91 @@ def _module_object_uses(tree: ast.AST) -> set[str]:
     return used
 
 
+def resolve_relative_import(module: str | None, level: int,
+                            target: str | None) -> str | None:
+    """The absolute name `from <level dots><target> import ...` means inside
+    `module`, the dotted name of the file the import is written in.
+
+    A package's `__init__` is named WITH its `__init__` part
+    (`agents.__init__`), so one rule serves both: the package an import is
+    relative to is the module's name minus its last part. None when the dots
+    climb past the top of the tree, or when there is no module to resolve
+    against -- a caller that names none keeps the absolute-only reading.
+    """
+    if not level:
+        return target
+    if not module:
+        return None
+    package = module.split(".")[:-1]
+    keep = len(package) - (level - 1)
+    if keep < 0:
+        return None
+    parts = package[:keep] + (target.split(".") if target else [])
+    return ".".join(parts) or None
+
+
+def _import_nodes(tree: ast.AST) -> list:
+    """Every `import` and `from ... import` in a tree, at any depth."""
+    return [node for node in ast.walk(tree)
+            if isinstance(node, (ast.Import, ast.ImportFrom))]
+
+
+def _facade_violations_in(nodes, *, pkg: str, stem: str, siblings,
+                          inside: bool, exempt, module: str | None):
+    """`facade_import_violations` over import nodes already collected, so a
+    file is walked once however many families it is checked against."""
+    facade_mod = "%s.%s" % (pkg, stem)
+    out = []
+
+    def record(node, target, local):
+        if target == facade_mod or target == stem:
+            if inside:
+                out.append((node.lineno, "inside-out", target))
+        elif not inside and not (local and local in exempt):
+            out.append((node.lineno, "outside-in", target))
+
+    for node in nodes:
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                head, _, tail = alias.name.rpartition(".")
+                if head not in (pkg, ""):
+                    continue
+                if tail in siblings or tail == stem:
+                    local = alias.asname or (alias.name if not head else None)
+                    record(node, "%s.%s" % (pkg, tail), local)
+            continue
+        if node.level:
+            # RELATIVE spellings name the same modules the absolute ones do,
+            # and were not read at all: `agents/character.py` reached
+            # `.director_floors` past the facade and the rule passed it --
+            # seven live sites on 2026-11-01, in the package the common,
+            # composer and perception splits were about to fill with them.
+            target = resolve_relative_import(module, node.level, node.module)
+            if target is None:
+                continue
+        else:
+            target = node.module or ""
+        if target == pkg:
+            for alias in node.names:
+                if alias.name in siblings or alias.name == stem:
+                    record(node, "%s.%s" % (pkg, alias.name),
+                           alias.asname or alias.name)
+        else:
+            head, _, tail = target.rpartition(".")
+            # A relative import resolves to the full dotted name, so only the
+            # package itself is the right head for one; the bare `tail`
+            # form is the pre-package-move spelling of an absolute import.
+            heads = (pkg,) if node.level else (pkg, "")
+            if head in heads and (tail in siblings or tail == stem):
+                # Names lifted OUT of the sibling: no module object is
+                # bound, so no patch or source read can be meant by it.
+                record(node, "%s.%s" % (pkg, tail), None)
+    return sorted(out)
+
+
 def facade_import_violations(source, *, pkg: str, stem: str, siblings,
-                             inside: bool = False, is_test: bool = False):
+                             inside: bool = False, is_test: bool = False,
+                             module: str | None = None):
     """Every facade-rule violation in one file: `(lineno, kind, module)`.
 
     `kind` is `"outside-in"` (a caller reached past the facade to a sibling)
@@ -1632,6 +1815,12 @@ def facade_import_violations(source, *, pkg: str, stem: str, siblings,
     Twelve sibling imports sat in `tests/` unseen; the rule held only where
     nobody was writing.
 
+    RELATIVE imports count too, resolved against `module` -- the dotted name
+    of the file being read (`agents.character`; a package's own file is
+    `agents.__init__`). Without it a relative import cannot be resolved and
+    is not judged, which is how seven of them reached past two facades
+    unseen until 2026-11-01.
+
     `is_test` carries the exception the split's own correctness requires. A
     monkeypatch must name the module that DEFINES the function it intercepts:
     a moved function resolves names in its own globals, so a patch on the
@@ -1642,41 +1831,10 @@ def facade_import_violations(source, *, pkg: str, stem: str, siblings,
     not name one it merely calls through.
     """
     tree = source if isinstance(source, ast.AST) else ast.parse(source)
-    siblings = set(siblings)
-    exempt = _module_object_uses(tree) if is_test else set()
-    facade_mod = "%s.%s" % (pkg, stem)
-    out = []
-
-    def record(node, module, local):
-        if module == facade_mod or module == stem:
-            if inside:
-                out.append((node.lineno, "inside-out", module))
-        elif not inside and not (local and local in exempt):
-            out.append((node.lineno, "outside-in", module))
-
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Import):
-            for alias in node.names:
-                head, _, tail = alias.name.rpartition(".")
-                if head not in (pkg, ""):
-                    continue
-                if tail in siblings or tail == stem:
-                    local = alias.asname or (alias.name if not head else None)
-                    record(node, "%s.%s" % (pkg, tail), local)
-        elif isinstance(node, ast.ImportFrom) and node.level == 0:
-            module = node.module or ""
-            if module == pkg:
-                for alias in node.names:
-                    if alias.name in siblings or alias.name == stem:
-                        record(node, "%s.%s" % (pkg, alias.name),
-                               alias.asname or alias.name)
-            else:
-                head, _, tail = module.rpartition(".")
-                if head in (pkg, "") and (tail in siblings or tail == stem):
-                    # Names lifted OUT of the sibling: no module object is
-                    # bound, so no patch or source read can be meant by it.
-                    record(node, "%s.%s" % (pkg, tail), None)
-    return sorted(out)
+    return _facade_violations_in(
+        _import_nodes(tree), pkg=pkg, stem=stem, siblings=set(siblings),
+        inside=inside, exempt=_module_object_uses(tree) if is_test else set(),
+        module=module)
 
 
 def facade_siblings(home: Path, stem: str) -> set:
@@ -1714,6 +1872,47 @@ def facade_siblings(home: Path, stem: str) -> set:
             if tail.startswith(prefix) and (home / (tail + ".py")).is_file():
                 found.add(tail)
     return found
+
+
+def facade_dependencies(home: Path, stem: str) -> set:
+    """`<stem>_*` modules the facade imports AS A MODULE, at module scope.
+
+    `agents/director.py` does `from . import director_prose`: it re-exports
+    none of `director_prose`'s names, so that module is no sibling and its
+    own callers import it directly -- but the facade imports it at module
+    scope, BEFORE `director_fanout` is bound, so it cannot import the facade
+    back at module scope either; that is the cycle the inside-out rule names.
+    It reaches the family's names through the siblings that define them,
+    exactly as a sibling does, and the outside-in rule does not apply to it.
+    Read off the facade's own module-scope statements, never a filename.
+    """
+    facade_path = home / (stem + ".py")
+    try:
+        tree = ast.parse(facade_path.read_text(encoding="utf-8"))
+    except (OSError, SyntaxError):
+        return set()
+    prefix = stem + "_"
+    pkg = home.name
+    found = set()
+    stack = list(tree.body)
+    while stack:
+        node = stack.pop()
+        if isinstance(node, (ast.If, ast.Try)):
+            for field in ("body", "orelse", "finalbody"):
+                stack.extend(getattr(node, field, []) or [])
+            for handler in getattr(node, "handlers", []) or []:
+                stack.extend(handler.body)
+            continue
+        if not isinstance(node, ast.ImportFrom):
+            continue
+        if not ((node.level == 1 and not node.module)
+                or (node.level == 0 and node.module == pkg)):
+            continue
+        for alias in node.names:
+            if (alias.name.startswith(prefix)
+                    and (home / (alias.name + ".py")).is_file()):
+                found.add(alias.name)
+    return found - facade_siblings(home, stem)
 
 
 #: Every facade family this rule covers, as `name -> (package dir, stem)`.
@@ -1764,42 +1963,70 @@ def check_facade_import_direction(errors: list[str]) -> None:
     unrelated import order changes.
 
     The rule is about CALLERS. `facade_import_violations` carries the one
-    exception, and why a test is not always a caller.
+    exception, and why a test is not always a caller; `facade_dependencies`
+    names the modules upstream of a facade, which are not callers of it.
+
+    Relative imports are judged like absolute ones (resolved against the
+    file's own dotted name). `tools/` is deliberately NOT scanned: its
+    drivers patch and introspect siblings as a matter of course, nothing
+    imports them, and 39 of their imports name siblings (2026-11-01) --
+    the rule is held where the engine and its tests are written.
+
+    Each file is parsed and walked ONCE for every family, not once per
+    family: with seven families that was 61 s of a 221 s gate, and each new
+    split added ~15 s more (2026-11-01: 95 s -> 20 s under load, the same
+    verdicts).
     """
     tests_dir = ROOT / "tests"
+    families = []
     for facade, (home, stem) in FACADE_FAMILIES.items():
         pkg = home.name
         siblings = facade_siblings(home, stem)
         if not siblings:
             continue
         facade_mod = facade if "." in facade else "%s.%s" % (pkg, facade)
-        for path in engine_python_paths() + sorted(tests_dir.glob("*.py")):
-            try:
-                tree = ast.parse(path.read_text(encoding="utf-8"))
-            except (OSError, SyntaxError):
+        families.append((facade, home, stem, pkg, siblings,
+                         facade_dependencies(home, stem), facade_mod))
+    if not families:
+        return
+    found: dict[str, list[str]] = {family[0]: [] for family in families}
+    for path in engine_python_paths() + sorted(tests_dir.glob("*.py")):
+        try:
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+        except (OSError, SyntaxError):
+            continue
+        rel = path.relative_to(ROOT).as_posix()
+        is_test = path.parent == tests_dir
+        nodes = _import_nodes(tree)
+        if not nodes:
+            continue
+        exempt = _module_object_uses(tree) if is_test else set()
+        module = ".".join(path.relative_to(ROOT).with_suffix("").parts)
+        for facade, home, stem, pkg, siblings, upstream, facade_mod in families:
+            if path.parent == home and path.stem in upstream:
                 continue
-            rel = path.relative_to(ROOT).as_posix()
             inside = path.parent == home and (
                 path.stem == stem or path.stem in siblings)
-            is_test = path.parent == tests_dir
-            for lineno, kind, module in facade_import_violations(
-                    tree, pkg=pkg, stem=stem, siblings=siblings,
-                    inside=inside, is_test=is_test):
+            for lineno, kind, target in _facade_violations_in(
+                    nodes, pkg=pkg, stem=stem, siblings=siblings,
+                    inside=inside, exempt=exempt, module=module):
                 if kind == "outside-in":
                     extra = ("" if not is_test else
                              " A test may name a sibling it PATCHES or reads"
                              " the source of — patching the facade's re-export"
                              " is inert — but not one it only calls through.")
-                    errors.append(
-                        f"{rel}:{lineno}: imports {module!r}, a sibling "
+                    found[facade].append(
+                        f"{rel}:{lineno}: imports {target!r}, a sibling "
                         f"behind the {facade_mod!r} facade. Import the "
                         f"facade instead — it re-exports every name.{extra}")
                 else:
-                    errors.append(
+                    found[facade].append(
                         f"{rel}:{lineno}: imports its own facade "
                         f"{facade_mod!r}. That is the import cycle the facade "
                         f"exists to prevent; import the sibling that defines "
                         f"the name, or move the name down.")
+    for facade, *_rest in families:
+        errors.extend(found[facade])
 
 
 def _engine_module_index() -> tuple[set[str], dict[str, list[str]]]:
@@ -1932,11 +2159,19 @@ def check_conftest_not_imported(errors: list[str]) -> None:
     delivers without an import.
     """
     for path in sorted((ROOT / "tests").rglob("*.py")) + engine_python_paths():
-        try:
-            tree = ast.parse(path.read_text(encoding="utf-8"))
-        except (OSError, SyntaxError):
-            continue
         if path.name == "conftest.py":
+            continue
+        try:
+            text = path.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        # An import of the module ends in the word, so a file that never
+        # spells it is skipped unparsed (17.5 s -> 0.5 s, 2026-11-01).
+        if not _may_name(text, "conftest"):
+            continue
+        try:
+            tree = ast.parse(text)
+        except SyntaxError:
             continue
         rel = path.relative_to(ROOT).as_posix()
         for node in ast.walk(tree):
@@ -1954,6 +2189,10 @@ def check_conftest_not_imported(errors: list[str]) -> None:
                         f"a second module object and runs its import-time side "
                         f"effects again. Move the shared helper into a plain "
                         f"module (tests/helpers.py) and import that.")
+
+
+#: The opening of an f-string literal, raw or not, in either case.
+_FSTRING_PREFIX = re.compile(r"(?<![\w])(?:[fF][rR]?|[rR][fF])['\"]")
 
 
 def check_minimum_python_syntax(errors: list[str]) -> None:
@@ -1981,8 +2220,15 @@ def check_minimum_python_syntax(errors: list[str]) -> None:
     for path in engine_python_paths() + sorted((ROOT / "tests").rglob("*.py")):
         try:
             src = path.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        # Both constructs live inside an f-string, so a file with no f-string
+        # prefix anywhere is not tokenized at all.
+        if not _FSTRING_PREFIX.search(src):
+            continue
+        try:
             toks = list(tokenize.generate_tokens(io.StringIO(src).readline))
-        except (OSError, SyntaxError, tokenize.TokenError):
+        except (SyntaxError, tokenize.TokenError):
             continue
         rel = path.relative_to(ROOT).as_posix()
         stack = []
@@ -2053,8 +2299,14 @@ def check_pydantic_major_reads_are_owned(errors: list[str]) -> None:
         if rel in _PYDANTIC_BRANCH_OWNERS:
             continue
         try:
-            tree = ast.parse(path.read_text(encoding="utf-8"))
-        except (OSError, SyntaxError):
+            text = path.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        if not _may_name(text, *_PYDANTIC_MAJOR_ATTRS):
+            continue
+        try:
+            tree = ast.parse(text)
+        except SyntaxError:
             continue
         for node in ast.walk(tree):
             attr = None
@@ -2108,8 +2360,16 @@ def check_tests_reach_pydantic_through_helpers(errors: list[str]) -> None:
         if rel == _TEST_PYDANTIC_BRANCH_OWNER:
             continue
         try:
-            tree = ast.parse(path.read_text(encoding="utf-8"))
-        except (OSError, SyntaxError):
+            text = path.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        # A file spelling none of the refused names is skipped unparsed
+        # (9.0 s -> 2.4 s, 2026-11-01).
+        if not _may_name(text, *_PYDANTIC_V2_ONLY_IN_TESTS):
+            continue
+        try:
+            tree = ast.parse(text)
+        except SyntaxError:
             continue
         for node in ast.walk(tree):
             if isinstance(node, ast.Attribute) and node.attr in _PYDANTIC_V2_ONLY_IN_TESTS:
@@ -2513,11 +2773,32 @@ def check_docs_imports_resolve(errors: list[str]) -> None:
 # Turn-scoped contextvars must be cleared before background work
 # ---------------------------------------------------------------------------
 
-#: Contextvars in the two turn-scoped modules that a background job may keep.
-#: Each needs a reason, because the default answer is "clear it": a job
-#: inherits a COPY of the commit step's context (`core/jobs.py::submit`), so a
-#: var nobody thought about rides into work that outlives the turn.
+#: Contextvars anywhere in the engine that a background job may keep. Each
+#: needs a reason, because the default answer is "clear it": a job inherits a
+#: COPY of the commit step's context (`core/jobs.py::submit`), so a var nobody
+#: thought about rides into work that outlives the turn. Keyed by the var's
+#: module-level name, which is unique across the engine (the check reports a
+#: name defined twice rather than letting one reason cover both).
 BACKGROUND_SAFE_CONTEXTVARS = {
+    "active_frame_id":
+        "the frame a turn is played in; every job producer that writes for a "
+        "frame sets its own and resets it in `finally` "
+        "(`persist/commit_memory_write.py`, `persist/commit_background.py`, "
+        "`world/offscreen.py`) -- the reasoning core/jobs.py's own audit of "
+        "2026-08-19 records",
+    "answered_by":
+        "an OUTPUT slot: `llm_quality._accepted` writes it on every validated "
+        "answer, and its one reader (`director_prose`'s encoder call) sets it "
+        "to '' before its call and resets it after, so an inherited value is "
+        "never read",
+    "current_language_id":
+        "inherited ON PURPOSE: the story language is what the context copy "
+        "exists to carry across the thread hop "
+        "(`tests/test_jobs_queue.py` pins it)",
+    "_room_scope":
+        "inherited ON PURPOSE (`persist/llm_capture.py`): a job the Writers' "
+        "Room started is the Room's own work, and filing its calls anywhere "
+        "else would split one session's record in two",
     "last_reasoning":
         "an OUTPUT slot: every call overwrites it before anything reads it, "
         "so an inherited value is unreachable rather than stale",
@@ -2543,13 +2824,17 @@ BACKGROUND_SAFE_CONTEXTVARS = {
         "wait longer before giving up on a silent provider",
 }
 
-_TURN_SCOPED_CONTEXTVAR_MODULES = ("llm/providers.py", "core/pipeline_context.py")
-
-
 def _contextvar_names(path: Path) -> set[str]:
+    """The module-level ContextVars one file defines, by name."""
     try:
-        tree = ast.parse(path.read_text(encoding="utf-8"))
-    except (OSError, SyntaxError):
+        text = path.read_text(encoding="utf-8")
+    except OSError:
+        return set()
+    if not _may_name(text, "ContextVar"):
+        return set()
+    try:
+        tree = ast.parse(text)
+    except SyntaxError:
         return set()
     out = set()
     for node in tree.body:
@@ -2573,16 +2858,22 @@ def _contextvar_names(path: Path) -> set[str]:
 
 
 def check_turn_scoped_contextvars_are_cleared(errors: list[str]) -> None:
-    """Every contextvar in the two turn-scoped modules is cleared, or named.
+    """Every contextvar in the engine is cleared for a job, or named safe.
 
     `core/jobs.py::submit` copies the WHOLE context so a job inherits the story
     language across the thread hop, and `_clear_turn_scoped_context` is the
     denylist that takes the turn's own things back out -- the live stream's
     `token_sink`, the abort `cancel_event`, sinks writing into a
     `PipelineContext` whose variants are already persisted. That function's own
-    docstring records the obligation this check enforces: a new contextvar in
-    `llm/providers.py` or `core/pipeline_context.py` must be added to the tuple
-    or it rides into background work by DEFAULT.
+    docstring records the obligation this check enforces: a new contextvar
+    that belongs to one turn's wall clock must be added to the tuple or it
+    rides into background work by DEFAULT.
+
+    EVERY engine module is read. Only `llm/providers.py` and
+    `core/pipeline_context.py` were, while seven contextvars lived in seven
+    other modules (2026-11-01) -- four of them added after the 2026-08-19
+    audit the denylist's docstring cites, among them a Room reply's mutable
+    citation set and a commit's private registry copy.
 
     A denylist with a standing obligation and no enforcement is a denylist that
     is one commit from being incomplete, and the symptom is a background
@@ -2607,10 +2898,20 @@ def check_turn_scoped_contextvars_are_cleared(errors: list[str]) -> None:
         errors.append("core/jobs.py has no `_clear_turn_scoped_context`; the "
                       "turn-scoped contextvar guard cannot run")
         return
-    for rel in _TURN_SCOPED_CONTEXTVAR_MODULES:
-        for name in sorted(_contextvar_names(ROOT / rel)):
-            if name in cleared or name in BACKGROUND_SAFE_CONTEXTVARS:
-                continue
+    defined_in: dict[str, list[str]] = defaultdict(list)
+    for path in engine_python_paths():
+        for name in _contextvar_names(path):
+            defined_in[name].append(path.relative_to(ROOT).as_posix())
+    for name, places in sorted(defined_in.items()):
+        if len(places) > 1:
+            errors.append(
+                f"the contextvar name {name!r} is defined in {len(places)} "
+                f"modules ({', '.join(places)}); this check and its "
+                f"BACKGROUND_SAFE_CONTEXTVARS key on the name, so one reason "
+                f"would cover both. Give one of them a name of its own.")
+        if name in cleared or name in BACKGROUND_SAFE_CONTEXTVARS:
+            continue
+        for rel in places:
             errors.append(
                 f"{rel} defines the contextvar {name!r}, which "
                 f"core/jobs.py::_clear_turn_scoped_context does not clear. A "
@@ -2636,17 +2937,95 @@ def _calls_and_imports(tree: ast.AST) -> tuple[set[str], set[str]]:
     return imported, called
 
 
+def _module_definitions(tree: ast.AST) -> set[str]:
+    """Names a module binds at its top level by `def`, `class` or assignment."""
+    out = set()
+    for node in getattr(tree, "body", []):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef,
+                             ast.ClassDef)):
+            out.add(node.name)
+        elif isinstance(node, ast.Assign):
+            out.update(t.id for t in node.targets if isinstance(t, ast.Name))
+        elif isinstance(node, ast.AnnAssign) and isinstance(node.target,
+                                                            ast.Name):
+            out.add(node.target.id)
+    return out
+
+
+def facade_patch_sites(tree: ast.AST):
+    """`(lineno, module, attr)` for every patch a test file makes whose target
+    can be read without running it. `module` is the local name the target
+    module is held under (`commit`) or, for a string target, its dotted path
+    (`persist.commit`).
+
+    Four spellings of one act, and the first was the only one read:
+
+      * `monkeypatch.setattr(commit, "name", ...)`;
+      * `monkeypatch.setattr("persist.commit.name", ...)` -- seven live, all
+        on the `mind.memory` facade, invisible until 2026-11-01;
+      * `mock.patch("persist.commit.name")`, as a call or a decorator;
+      * `mock.patch.object(commit, "name")`.
+
+    UNDECIDABLE, stated rather than hidden: an attribute held in a variable
+    (`monkeypatch.setattr(commit, name, ...)`, a loop over names) is a patch
+    whose target only running it can tell, and is not read.
+    """
+    out = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call) or not node.args:
+            continue
+        func = node.func
+        fname = (func.attr if isinstance(func, ast.Attribute)
+                 else func.id if isinstance(func, ast.Name) else "")
+        first = node.args[0]
+        if (isinstance(first, ast.Constant) and isinstance(first.value, str)
+                and "." in first.value
+                and ((fname == "setattr" and isinstance(func, ast.Attribute)
+                      and len(node.args) >= 2)
+                     or fname == "patch")):
+            module, _, attr = first.value.rpartition(".")
+            out.append((node.lineno, module, attr))
+            continue
+        is_object = (fname == "object" and isinstance(func, ast.Attribute)
+                     and ((isinstance(func.value, ast.Name)
+                           and func.value.id == "patch")
+                          or (isinstance(func.value, ast.Attribute)
+                              and func.value.attr == "patch")))
+        if not ((fname == "setattr" and isinstance(func, ast.Attribute))
+                or is_object) or len(node.args) < 2:
+            continue
+        attr = node.args[1]
+        if not (isinstance(attr, ast.Constant) and isinstance(attr.value, str)):
+            continue
+        if isinstance(first, ast.Name):
+            out.append((node.lineno, first.id, attr.value))
+        elif isinstance(first, ast.Attribute):
+            out.append((node.lineno, first.attr, attr.value))
+    return out
+
+
 def check_facade_patch_targets(errors: list[str]) -> None:
-    """A test may not patch a facade name a sibling calls through its own globals.
+    """A test may not patch a facade name a sibling reads from its own globals.
 
     The narrow, decidable half of a rule that is wrong in general. Patching
     where a name is USED is the ordinary idiom and 71 correct sites in this
     suite do it, so "patch the owner, not the re-export" is not the rule. What
     IS always broken is patching the facade of a SPLIT family when a sibling of
-    that family imported the name into its own globals and calls it there: the
+    that family holds the name in its own globals and calls it there: the
     sibling's call resolves in `persist/commit_memory.__dict__`, never in
     `persist/commit.__dict__`, so the patch is applied, the test passes, and
-    nothing was intercepted (`docs/experiments/AUDIT_COMMIT.md`).
+    that reader was never intercepted (`docs/experiments/AUDIT_COMMIT.md`).
+
+    Two ways a sibling holds a name: it IMPORTED it, or it DEFINES it -- the
+    second was not read, and `persist/commit_scene_state.py` defines
+    `_merge_overlays` and calls it three times while a test patched
+    `commit._merge_overlays`. Every patch spelling `facade_patch_sites` can
+    read is held to both.
+
+    What a flagged site does instead: patch the sibling whose reader the test
+    means, or -- where the path under test reads the name through the facade
+    as well, at call time -- `tests.helpers.patch_seam`, which rebinds every
+    module holding the object and so cannot miss either reader.
 
     Zero violations when written. It exists because the failure mode is a
     GREEN test that proves nothing, which is the only kind that survives.
@@ -2663,45 +3042,44 @@ def check_facade_patch_targets(errors: list[str]) -> None:
             except (OSError, SyntaxError):
                 continue
             imported, called = _calls_and_imports(tree)
-            shadowed = imported & called
-            if shadowed:
-                siblings[home.name + "/" + name + ".py"] = shadowed
-        families[stem] = (family, siblings)
+            held = {"imports": imported & called,
+                    "defines": _module_definitions(tree) & called}
+            if held["imports"] or held["defines"]:
+                siblings[home.name + "/" + name + ".py"] = held
+        entry = (family, siblings)
+        families[stem] = entry
+        families["%s.%s" % (home.name, stem)] = entry
 
     for path in sorted((ROOT / "tests").rglob("*.py")):
         try:
-            tree = ast.parse(path.read_text(encoding="utf-8"))
-        except (OSError, SyntaxError):
+            text = path.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        # Every patch spelling read here says `setattr` or `patch`.
+        if not _may_name(text, "setattr", "patch"):
+            continue
+        try:
+            tree = ast.parse(text)
+        except SyntaxError:
             continue
         rel = path.relative_to(ROOT).as_posix()
-        for node in ast.walk(tree):
-            if not (isinstance(node, ast.Call)
-                    and isinstance(node.func, ast.Attribute)
-                    and node.func.attr == "setattr"
-                    and len(node.args) >= 2):
-                continue
-            target, attr = node.args[0], node.args[1]
-            if not isinstance(attr, ast.Constant) or not isinstance(
-                    attr.value, str):
-                continue
-            if isinstance(target, ast.Name):
-                module = target.id
-            elif isinstance(target, ast.Attribute):
-                module = target.attr
-            else:
-                continue
+        for lineno, module, attr in facade_patch_sites(tree):
             if module not in families:
                 continue
             family, siblings = families[module]
-            for sibling, shadowed in sorted(siblings.items()):
-                if attr.value not in shadowed:
+            for sibling, held in sorted(siblings.items()):
+                how = ("imports that name into its own globals"
+                       if attr in held["imports"] else
+                       "defines that name" if attr in held["defines"] else None)
+                if how is None:
                     continue
                 owner = sibling[:-3].replace("/", ".")
                 errors.append(
-                    f"{rel}:{node.lineno} patches `{module}.{attr.value}` on "
-                    f"the {family} facade, but {sibling} imports that name "
-                    f"into its own globals and calls it there -- the patch is "
-                    f"applied and intercepts nothing. Patch {owner} instead.")
+                    f"{rel}:{lineno} patches `{module}.{attr}` on the "
+                    f"{family} facade, but {sibling} {how} and calls it there "
+                    f"-- the patch is applied and that call never sees it. "
+                    f"Patch {owner} instead, or use tests.helpers.patch_seam "
+                    f"where the facade is read too.")
 
 
 # ---------------------------------------------------------------------------
@@ -2744,7 +3122,11 @@ def _import_kind_edges(path: Path, pkg: str) -> list[tuple[str, str, str]]:
                         out.append((pkg, dst, kind))
             elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 walk(node.body, "deferred")
-            elif isinstance(node, ast.If) and kind != "deferred":
+            elif isinstance(node, ast.If):
+                # Inside a function too: `if kind != "deferred"` used to
+                # guard this branch, and `If` is in no other branch, so every
+                # import under an `if` in a function body went uncounted --
+                # deferred edges were short, cycles unaffected (2026-11-01).
                 test = node.test
                 names = {n.id for n in ast.walk(test) if isinstance(n, ast.Name)}
                 inner = "typing" if "TYPE_CHECKING" in names else kind
@@ -2964,8 +3346,18 @@ def check_memory_identity_writers(errors: list[str]) -> None:
             if rel == "mind/memory_write.py":
                 continue
             try:
-                tree = _ast.parse(path.read_text(encoding="utf-8"))
-            except (OSError, SyntaxError):
+                text = path.read_text(encoding="utf-8")
+            except OSError:
+                continue
+            # Both rules key on a call by one of these names, so a file that
+            # spells none of them is skipped unparsed (7.9 s -> 1.4 s,
+            # 2026-11-01).
+            if not _may_name(text, "add_memories_batch", "add_memory",
+                             "stable_event_key"):
+                continue
+            try:
+                tree = _ast.parse(text)
+            except SyntaxError:
                 continue
             writes = False
             for node in _ast.walk(tree):
@@ -3043,8 +3435,16 @@ def check_identity_fold_is_owned(errors: list[str]) -> None:
             if rel == IDENTITY_FOLD_OWNER or rel.startswith("tests/"):
                 continue
             try:
-                tree = _ast.parse(path.read_text(encoding="utf-8"))
-            except (OSError, SyntaxError):
+                text = path.read_text(encoding="utf-8")
+            except OSError:
+                continue
+            # The refused pattern is a literal, so a file that does not spell
+            # it is skipped unparsed (9.0 s -> 1.4 s, 2026-11-01).
+            if not _may_name(text, *folds):
+                continue
+            try:
+                tree = _ast.parse(text)
+            except SyntaxError:
                 continue
             for node in _ast.walk(tree):
                 if not isinstance(node, _ast.Call) or len(node.args) < 2:
@@ -3129,8 +3529,12 @@ def check_character_payload_names(errors: list[str]) -> None:
 # A pipeline side channel nobody declared
 # ---------------------------------------------------------------------------
 
-#: Where a stage may put something on the turn's context.
-_SIDE_CHANNEL_ROOTS = ("agents", "story")
+#: Where something may be put on the turn's context: every engine package.
+#: It was `agents/` and `story/` only, and `extension_runtime` writes
+#: `ctx["_extension_routing"]` -- the record of which extension rewrote what
+#: a mind was given -- which `persist/commit.py` reads at commit, and which
+#: no register named (2026-11-01).
+_SIDE_CHANNEL_ROOTS = ENGINE_PACKAGE_ROOTS
 
 
 def _pipeline_context_fields() -> set[str]:
@@ -3206,6 +3610,11 @@ def _pipeline_context_channel_writes(node, constants: dict[str, str]):
     A `setdefault` is a write: the first stage to call it CREATES the channel,
     and every later stage in the turn reads what it left. That the key never
     appears to the left of an `=` says nothing about whether a resume has it.
+
+    A FOURTH: `setattr(ctx, KEY, value)` leaves an attribute on the context
+    just as surely, and was read by nothing --
+    `persist/commit_common.mark_engine_notices_rewritten` stamps one
+    (2026-11-01).
     """
     holders = ("ctx", "ctx._extra")
 
@@ -3254,6 +3663,14 @@ def _pipeline_context_channel_writes(node, constants: dict[str, str]):
         key = key_of(node.args[0])
         if key is not None:
             yield key
+    if (isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id == "setattr"
+            and len(node.args) >= 2
+            and holder_of(node.args[0]) in holders):
+        key = key_of(node.args[1])
+        if key is not None:
+            yield key
 
 
 def check_pipeline_side_channels(errors: list[str]) -> None:
@@ -3275,10 +3692,11 @@ def check_pipeline_side_channels(errors: list[str]) -> None:
     memo, or in-stage only). Adding a writer means adding a line, which is
     the moment to ask the question.
 
-    Three write forms are walked -- plain assignment, an assignment into a
-    channel's contents, and `setdefault` -- because A31's own first guard knew
-    only the first and so walked past three live channels; see
-    `_pipeline_context_channel_writes`.
+    Four write forms are walked -- plain assignment, an assignment into a
+    channel's contents, `setdefault` and `setattr` -- because A31's own first
+    guard knew only the first and so walked past three live channels; see
+    `_pipeline_context_channel_writes`. Every engine package is walked
+    (`_SIDE_CHANNEL_ROOTS`), not only the two that hold stages.
 
     LIMIT, stated rather than hidden: a key that is a local variable at the
     write site cannot be resolved here, so the generic hydration loops in
@@ -3296,8 +3714,15 @@ def check_pipeline_side_channels(errors: list[str]) -> None:
             if "__pycache__" in path.parts:
                 continue
             try:
-                tree = ast.parse(path.read_text(encoding="utf-8"))
-            except (OSError, SyntaxError):
+                text = path.read_text(encoding="utf-8")
+            except OSError:
+                continue
+            # Every write form names its holder `ctx`.
+            if not _may_name(text, "ctx"):
+                continue
+            try:
+                tree = ast.parse(text)
+            except SyntaxError:
                 continue
             constants = _module_string_constants(tree)
             rel = path.relative_to(ROOT).as_posix()
@@ -3317,10 +3742,13 @@ def check_pipeline_side_channels(errors: list[str]) -> None:
 
 #: Language packs whose PROTOCOL parity with English is deliberately deferred.
 #:
-#: TEMPORARY, AND ONLY ON THE PROMPT-OPTIMIZATION BRANCH. The owner's mandate
-#: (2026-09-09): finish optimizing, testing and debugging the English pipeline
-#: before spending anything on Japanese, because a translation written against
-#: a prompt that is still moving is work done twice.
+#: EMPTY, and meant to stay so. It held `"ja"` under the owner's English-first
+#: mandate (2026-09-09: finish the English pipeline before spending anything
+#: on Japanese, because a translation written against a prompt that is still
+#: moving is work done twice); that mandate was retired on 2026-09-16 and
+#: parity has been enforced for every pack since. The mechanism stays so that
+#: a future deferral is a named list printed on every run, never a deleted
+#: guard.
 #:
 #: WHAT THIS SUSPENDS IS NOT TRANSLATION QUALITY. `canonical_language_tokens`
 #: is a protocol guard: every schema key and enum value in an English prompt
@@ -3376,7 +3804,102 @@ def _check_against_a_scratch_database() -> None:
     atexit.register(_remove)
 
 
-def main() -> int:
+#: Passed by `make check`, which has just written docs/CODE_MAP.md.
+SKIP_GENERATED_MAP_FLAG = "--skip-generated-map"
+
+
+# ---------------------------------------------------------------------------
+# Which stack a verdict is about
+# ---------------------------------------------------------------------------
+
+CONSTRAINTS = ROOT / "constraints.txt"
+
+#: `ALLOW_UNPINNED=1` lets `make stack` pass on an interpreter whose installed
+#: versions differ from `constraints.txt`. It still prints what it found: the
+#: point is that a verdict says which stack it is about, not that only one
+#: stack may be checked.
+ALLOW_UNPINNED_ENV = "ALLOW_UNPINNED"
+
+_PIN = re.compile(r"^\s*([A-Za-z0-9][A-Za-z0-9._-]*)\s*==\s*([^\s;#]+)")
+
+
+def constraint_pins(text: str) -> dict[str, str]:
+    """`{name: version}` for every `name==version` line of a constraints file."""
+    pins = {}
+    for line in text.splitlines():
+        match = _PIN.match(line)
+        if match:
+            pins[match.group(1)] = match.group(2)
+    return pins
+
+
+def installed_versions(names) -> dict:
+    """`{name: version or None}` as THIS interpreter has them installed."""
+    from importlib import metadata
+
+    out = {}
+    for name in names:
+        try:
+            out[name] = metadata.version(name)
+        except metadata.PackageNotFoundError:
+            out[name] = None
+    return out
+
+
+def stack_differences(pins: Mapping, installed: Mapping) -> list[str]:
+    """One line per pinned package INSTALLED at a version the pin is not.
+
+    A pin that is not installed at all is no difference: `constraints.txt`
+    pins Playwright, and only the browser environment installs it.
+    """
+    out = []
+    for name, want in sorted(pins.items()):
+        have = installed.get(name)
+        if have is not None and have != want:
+            out.append(f"{name} {have} (constraints.txt pins {want})")
+    return out
+
+
+def report_stack(environ: Mapping | None = None) -> int:
+    """Print the interpreter and its pinned packages; 1 when they drift.
+
+    `make check` ran whatever `python` resolved to, and on the owner's machine
+    that was Pydantic 1.10.14, NumPy 1.26.4 and pytest 9.1.1 with no xdist,
+    while `.venv` -- what both launchers build and every player runs -- held
+    the pinned 2.11.7 / 2.2.6 / 8.4.1 (2026-11-01). Two defects lived in that
+    gap at once with the suite green through both. The Makefile now prefers
+    `.venv`; this is the half that does not trust a path: the gate SAYS which
+    stack its verdict is about, and refuses a stack that is not the pinned one
+    unless told `ALLOW_UNPINNED=1`.
+    """
+    import os
+    import platform
+
+    environ = os.environ if environ is None else environ
+    pins = constraint_pins(CONSTRAINTS.read_text(encoding="utf-8"))
+    installed = installed_versions(pins)
+    print(f"interpreter: {sys.executable} (Python {platform.python_version()})")
+    for name in sorted(pins):
+        print(f"  {name:<18} {installed[name] or 'not installed':<14} "
+              f"pinned {pins[name]}")
+    drift = stack_differences(pins, installed)
+    if not drift:
+        print("The installed stack matches constraints.txt.")
+        return 0
+    print("This interpreter is not the pinned stack, so a verdict on it is no "
+          "evidence about the engine players run:")
+    for line in drift:
+        print(f"  - {line}")
+    if environ.get(ALLOW_UNPINNED_ENV) == "1":
+        print(f"{ALLOW_UNPINNED_ENV}=1: continuing on it anyway.")
+        return 0
+    print(f"Run the gate on .venv (what both launchers build), or set "
+          f"{ALLOW_UNPINNED_ENV}=1 to proceed knowingly.")
+    return 1
+
+
+def main(argv=None) -> int:
+    argv = sys.argv[1:] if argv is None else list(argv)
     _check_against_a_scratch_database()
     errors: list[str] = []
     check_undefined_names(errors)
@@ -3389,12 +3912,18 @@ def main() -> int:
     check_tests_reach_pydantic_through_helpers(errors)
     check_engine_imports_resolve(errors)
     check_asgi_targets(errors)
-    check_duplicate_python_symbols(errors)
-    check_duplicate_dict_keys(errors)
+    # The three per-file shape rules share ONE parse of each file
+    # (`python_shape_pass`); each list lands where its check ran.
+    symbol_errors: list[str] = []
+    dict_errors: list[str] = []
+    empty_errors: list[str] = []
+    python_shape_pass(symbol_errors, dict_errors, empty_errors)
+    errors.extend(symbol_errors)      # check_duplicate_python_symbols
+    errors.extend(dict_errors)        # check_duplicate_dict_keys
     check_install_root_derivations(errors)
     check_no_dead_prompts(errors)
     check_patch_debris(errors)
-    check_empty_tests(errors)
+    errors.extend(empty_errors)       # check_empty_tests
     check_cross_file_duplicate_definitions(errors)
     check_prompt_schema_ops(errors)
     check_prompt_shape_covers_prose(errors)
@@ -3414,7 +3943,11 @@ def main() -> int:
     check_character_payload_names(errors)
     check_identity_fold_is_owned(errors)
     check_pipeline_side_channels(errors)
-    check_generated_map(errors)
+    # `make check` regenerates the map one step earlier, so comparing it here
+    # is the same generation a second time (6 s); `check-fast` and CI still
+    # compare, which is the half that catches a map nobody regenerated.
+    if SKIP_GENERATED_MAP_FLAG not in argv:
+        check_generated_map(errors)
 
     if DEFERRED_PACK_PARITY:
         # Loud on every run, whether or not anything else is wrong: this is a
@@ -3442,6 +3975,10 @@ if __name__ == "__main__":
     if "--source-roots" in sys.argv[1:]:
         print("\n".join(ENGINE_SOURCE_ROOTS))
         sys.exit(0)
+    # `make stack`: which interpreter and which pinned versions a verdict is
+    # about. Runs no check.
+    if "--stack" in sys.argv[1:]:
+        sys.exit(report_stack())
     # The package-cycle baseline is GENERATED. Writing it by hand is how a
     # baseline comes to record what someone believed rather than what is there
     # -- which is what happened to the table in DESIGN_MODULE_LAYOUT.md.

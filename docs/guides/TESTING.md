@@ -9,15 +9,20 @@ deliberately different verification levels.
 make test-full     # every Python regression test, in parallel
 make test-lf       # last-failed first, then the rest -- the fix-verify loop
 make test-browser  # optional Chromium behavior tests
-make check-fast    # compile, structure/map freshness, then the full suite
-make check         # compile, code map, structure checks, then the full suite
-make test-fast     # CI matrix-breadth only -- see the warning below
+make stack         # which interpreter and pinned versions a verdict is about
+make check-fast    # stack, compile, structure/map freshness, then the full suite
+make check         # stack, compile, code map, structure checks, then the full suite
+make test-fast     # a manual escape hatch only -- see the warning below
 ```
 
 `make test` remains an alias for the full Python suite. **Both `check` and
 `check-fast` now run every test**; they differ only in that `check`
-regenerates `docs/CODE_MAP.md` while `check-fast` verifies the copy on disk is
-current.
+regenerates `docs/CODE_MAP.md` (and so skips comparing it a second time)
+while `check-fast` verifies the copy on disk is current. Every target runs
+the checkout's `.venv` interpreter when there is one -- see "A local green is
+not evidence about the shipped stack" below. `make` stops at the first gate
+that fails, so a structure failure hides the suite; `make -k check` runs
+every gate anyway, and CI runs each as its own step.
 
 ### The full tier runs in parallel, and the worker count is not `auto` by luck
 
@@ -50,11 +55,15 @@ collects a single test, and no worker can reach another's.
 **Reach for `JOBS=0` when a failure is confusing.** xdist interleaves workers,
 so the live log of the test that failed is not shown beside its traceback.
 
-When `pytest-xdist` is not installed for whatever `python` resolves to, the
-tier degrades to a serial run and says so, rather than failing on
-`unrecognized arguments: -n`. A PEP 668 system interpreter cannot be
-pip-installed into without `--break-system-packages`, and a developer who did
-nothing wrong should not meet a cryptic argument error.
+When `pytest-xdist` is not installed for the interpreter the Makefile runs,
+the tier degrades to a serial run and says so, rather than failing on
+`unrecognized arguments: -n`; `make test-browser` does the same for the
+browser environment, which was once found built without xdist and could not
+collect its suite. A PEP 668 system interpreter cannot be pip-installed into
+without `--break-system-packages`, and a developer who did nothing wrong
+should not meet a cryptic argument error. The serial run passes
+`-o addopts=...` with the Makefile's `SERIAL_ADDOPTS`, which a test holds
+equal to `pyproject.toml`'s addopts less `-n auto`.
 
 ### Why the fast tier is no longer a tier you should use
 
@@ -67,10 +76,10 @@ No count is written down here on purpose: the numbers in this document were
 re-synced twice and had drifted again within a day both times. `pytest -q`
 reports the total, and `pytest -q -m "not slow" --collect-only` reports what
 this tier skips; a literal in prose can only be wrong. **Nothing runs it any more.** It
-was kept for the CI matrix-breadth run, but that job now runs `make check-fast`
-— the whole suite — on both interpreters, so `test-fast` has no consumer left
-in `.github/workflows/ci.yml`. It survives only as a manual escape hatch for a
-machine with no usable `/dev/shm`.
+was kept for the CI matrix-breadth run, but that job now runs `make check-fast`'s
+gates — the whole suite among them — on all three interpreters, so `test-fast`
+has no consumer left in `.github/workflows/ci.yml`. It survives only as a
+manual escape hatch for a machine with no usable `/dev/shm`.
 
 That split was a real trade when it was written. `db.init()` is fsync-bound —
 `executescript(SCHEMA)` auto-commits ~117 DDL statements against a brand-new
@@ -188,13 +197,21 @@ the same reason.
 
 ### A local green is not evidence about the shipped stack
 
-**`make check` runs whatever `python` resolves to, and that is very unlikely to
+**`make check` ran whatever `python` resolved to, and that was very unlikely to
 be the pinned baseline.** Measured on the owner's own machine, 2026-08-18: the
-system interpreter that runs `make check` carried **Pydantic 1.10.14 and NumPy
+system interpreter that ran `make check` carried **Pydantic 1.10.14 and NumPy
 1.26.4**, while `.venv` — which is what both launchers build and what every
 player's engine serves from, and what `constraints.txt` pins — carried
-**Pydantic 2.11.7 and NumPy 2.2.6**. Two defects were live in that gap at once,
-and the suite was green through both:
+**Pydantic 2.11.7 and NumPy 2.2.6**. It was still true on 2026-11-01, with
+pytest 9.1.1 and no xdist besides, and `make run` served the engine through
+`/usr/bin/uvicorn` on FastAPI 0.101. Since then every target runs the
+checkout's `.venv` interpreter when there is one (`python` only where there is
+none, as in CI), `run` and `serve` start the server as `$(PYTHON) -m uvicorn`,
+and `check`/`check-fast` begin with `make stack`: it prints the interpreter and
+each pinned package's installed version, and refuses a stack that differs from
+`constraints.txt` unless `ALLOW_UNPINNED=1` -- a verdict now says which stack it
+is about instead of trusting a path. Two defects were live in that gap at
+once, and the suite was green through both:
 
 - `agents/director_scopes._schema_list_channels` read `field.outer_type_`,
   which exists only on Pydantic 1. On the shipped major it returned the empty
@@ -240,9 +257,10 @@ other way. `llm/schemas.py` lets an item model name its own subject slot
 on 1.x, an unhashable `ModelPrivateAttr` on 2.x, where the next line raises
 `TypeError`. The 1.x job was green, so the red 2.x test read as "the 1.x side
 is the special one" rather than "the pinned major is broken", and the feature
-never once ran in a default install. Both directions run everything now, which
-is affordable at ~40s. **Symmetry is the point: a job that covers one major
-more thoroughly than the other will mislead you about which one is wrong.**
+never once ran in a default install. Both directions run everything now (run
+41366860777: 4:21 for the 1.x job; 398-440 s of suite in each 2.x leg).
+**Symmetry is the point: a job that covers one major more thoroughly than the
+other will mislead you about which one is wrong.**
 
 Worth being exact about how the 1.x-only import above survived, because the
 lesson is not the one it looks like: **CI caught it immediately.** The next push
@@ -319,12 +337,15 @@ do not exist on 1.x; those are what to migrate first if the ceiling moves.
 
 GitHub Actions (`.github/workflows/ci.yml`) runs three jobs:
 
-1. `fast` — `make check-fast` on Python 3.11, 3.12 **and 3.13**. Named `fast`
-   for history, because it is a required check elsewhere; it has not been the
-   reduced tier since the databases moved to tmpfs, and compiles, runs the
-   structure/map checks, and runs **every** test on every interpreter. The
-   separate `full` job that used to follow it was a strict subset and was
-   deleted.
+1. `fast` — `make check-fast`'s gates on Python 3.11, 3.12 **and 3.13**: the
+   stack, compile, the structure/map checks and **every** test, each its own
+   step that runs even when the one before it failed. They were one
+   `make check-fast` step, and make stops at the first gate that fails: every
+   push from 2026-09-28 to 2026-10-05 stopped at `make structure` and ran no
+   test at all. Named `fast` for history, because it is a required check
+   elsewhere; it has not been the reduced tier since the databases moved to
+   tmpfs. The separate `full` job that used to follow it was a strict subset
+   and was deleted.
 
    3.13 was added 2026-08-19 and had never been run by any gate. It was inside
    `requires-python` (`>=3.11,<3.14`), inside both launchers' candidate lists,
@@ -340,10 +361,13 @@ GitHub Actions (`.github/workflows/ci.yml`) runs three jobs:
    It asserts the major it is actually running before testing.
 3. `browser` — the optional Chromium behavior suite once on Python 3.12.
 
-Jobs 2 and 3 need job 1, so a broken build fails once rather than three times.
-**Both majors run the whole suite**: the asymmetry — 1.x on the fast tier only
-— is exactly what hid `_subject_field`, and restoring it would hide the next
-one.
+The three jobs run side by side and none waits for another. Jobs 2 and 3
+used to `need` job 1, which was ordering and never a precondition: an
+`always()` guard had to be added so a failed matrix leg could not skip them,
+and with it the dependency bought only delay (run 41366860777: 14:52 against
+about 10:30 side by side). **Both majors run the whole suite**: the asymmetry
+— 1.x on the fast tier only — is exactly what hid `_subject_field`, and
+restoring it would hide the next one.
 
 
 ---
@@ -410,13 +434,27 @@ Three faults, and only the first is the one usually noticed.
 
 **Two instruments now exist, and the row is what remains after using them.**
 
-- `tests/model_seams.py` seals every provider door (`chat_complete`,
-  `embed_texts`, `embed_texts_meta`, `complete_validated_json`, `_agent_json`)
-  including the aliases callers bound at import time, and raises from inside
-  the call naming which door opened. A "makes no model call" claim is now
-  DRIVEN. `tests/test_model_seams.py` proves each door is really shut by
-  opening it, because a sealer that silently misses one turns a weak assertion
-  into a false one.
+- `tests/model_seams.py` (`seal_model_seams`, the `sealed_model` fixture) and
+  `tests/helpers.py` (`forbid_model_calls`) seal every door in ONE list,
+  `tests/helpers.py`'s `MODEL_DOORS` — the provider calls (`chat_complete`,
+  `chat_complete_async`, `embed_texts`, `embed_texts_meta`, `generate_image`,
+  `edit_image`, `list_models`), the decision model's post
+  (`llm.decisions._post`), the research fetches, `complete_validated_json`
+  and `_agent_json` — including every alias an engine module bound at import
+  time, and raise from inside the call naming which door opened. A "makes no
+  model call" claim is now DRIVEN. There were two lists until 2026-11-01, and
+  they disagreed: `forbid_model_calls` left both embedding doors open, and
+  neither named the decision model, which arrived after both.
+  `tests/test_model_seams.py` proves each door is really shut by opening it,
+  because a sealer that silently misses one turns a weak assertion into a
+  false one.
+- Under the list, a floor that does not depend on it: `tests/conftest.py`'s
+  autouse `network_guard` refuses every connection that would leave the
+  machine (loopback and `AF_UNIX` pass), at `socket.socket.connect` and
+  `socket.getaddrinfo`, and fails the test that made one even when the engine
+  swallowed the refusal. The suite used to be offline only because a fresh
+  scratch database holds no provider row. A test whose point is the network
+  says so with `@pytest.mark.network`.
 - Where the property genuinely is about the module rather than about a run,
   the assertion goes against the PARSED TREE — imported names including the
   original behind an `as`, called names, string constants, attribute access —

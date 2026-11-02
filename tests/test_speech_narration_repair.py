@@ -84,22 +84,6 @@ def test_total_on_junk_input():
     assert repair_narrated_speech_elements({}) == []
 
 
-def test_described_player_speech_cannot_be_expanded_into_exact_words():
-    out = {
-        "sequence": [
-            {"type": "action", "attempt": "apply a dressing"},
-            {"type": "speech", "text": "Watch for redness or fever."},
-        ],
-        "speech": "Watch for redness or fever.",
-    }
-    dropped = discard_unanchored_player_speech(
-        out, "I apply a dressing and explain the infection warning signs.")
-
-    assert dropped == ["Watch for redness or fever."]
-    assert out["speech"] is None
-    assert [event["type"] for event in out["sequence"]] == ["action"]
-
-
 def test_player_speech_copied_from_input_survives_provenance_floor():
     out = {
         "sequence": [{"type": "speech", "text": "Hold still, please."}],

@@ -1,3 +1,8 @@
+# The dev set -- pytest, pytest-xdist and psutil -- comes in through this first
+# line, and the browser suite needs it: pyproject.toml's addopts carry
+# `-n auto`. A `.venv-browser` built some other way, without xdist, could not
+# even collect the suite (2026-11-01); `make test-browser` now runs it serially
+# and says why instead.
 -r requirements-dev.txt
 playwright>=1.50,<2
 pytest-playwright>=0.7,<1

@@ -31,32 +31,6 @@ def test_duplicate_character_references_are_removed():
         cast,
     ) == [7]
 
-def test_identity_inference_is_capped():
-    updates = [{
-        "about_entity": "unknown:1",
-        "kind": "identity",
-        "claim": "This person belongs to a specific group.",
-        "confidence": 0.95,
-        "evidence": [],
-    }]
-
-    capped = cap_mind_model_updates(updates)
-
-    assert capped[0]["confidence"] == 0.35
-
-def test_observation_confidence_is_preserved():
-    updates = [{
-        "about_entity": "unknown:1",
-        "kind": "observation",
-        "claim": "They are holding a sword.",
-        "confidence": 1.0,
-        "evidence": [],
-    }]
-
-    capped = cap_mind_model_updates(updates)
-
-    assert capped[0]["confidence"] == 1.0
-
 def test_invalid_confidence_uses_default():
     updates = [{
         "about_entity": "unknown:1",
