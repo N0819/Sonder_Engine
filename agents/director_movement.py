@@ -642,13 +642,32 @@ def walkers_this_beat(out, player_name, cast=()):
     return walkers
 
 
+#: The typed pace that is a run (`MovementDecl.pace`; `spatial_walk.
+#: RUN_PACES_PER_SECOND`) -- the engine's own vocabulary, not a reading of
+#: words.
+RUN_PACE = "run"
+
+
 def _declares_rapid_movement(result):
-    """Whether an actor declared pace an ordinary follower cannot inherit."""
+    """Whether an actor declared pace an ordinary follower cannot inherit.
+
+    THE TYPED PACE FIRST: the declaration's own `movement.pace`, or an
+    action's `pace`, is the answer in every language. The free-text `verb`
+    against the pack's word list and the English pattern over `attempt` are
+    the fallback for a declaration that carries none (audit of 2026-11-01,
+    `agents_director_prose_movement_rooms` F10: a Japanese declaration with
+    an empty `verb` was a walk while its movement said `run`)."""
     if not isinstance(result, dict):
         return False
+    movement = result.get("movement")
+    if isinstance(movement, dict) and \
+            str(movement.get("pace") or "").strip().casefold() == RUN_PACE:
+        return True
     for event in result.get("sequence") or []:
         if not isinstance(event, dict) or event.get("type") != "action":
             continue
+        if str(event.get("pace") or "").strip().casefold() == RUN_PACE:
+            return True
         verb = str(event.get("verb") or "").strip().casefold()
         if verb in _ling("_RAPID_FOLLOW_VERBS"):
             return True
@@ -2763,8 +2782,16 @@ def walk_within_room(ctx, scene, sd, out, *, exclude=()):
         key = next((k for k in view["stations"] if str(k).strip().casefold() == folded), subject)
         view["stations"][key] = {**(view["stations"].get(key) or {}), **station}
 
+    # A BODY THIS BEAT HAS WALKED ALREADY is not walked again: a walk across
+    # its own room carried on by `_travel_continues` wrote its landing as
+    # its station, and a second walk from the beat's start to it is the
+    # same steps twice.
+    travel = out.get("travel") if isinstance(out, dict) else None
+    walked = {str(entry.get("subject")) for entry in
+              ((travel if isinstance(travel, dict) else {}).get("advanced") or ())
+              if isinstance(entry, dict)}
     for subject, station in list(stations.items()):
-        if subject in exclude or not isinstance(station, dict):
+        if subject in exclude or subject in walked or not isinstance(station, dict):
             continue
         room = room_of(view, subject)
         if not room or (positions.get(subject) and str(positions[subject]) != str(room)):
@@ -2868,6 +2895,66 @@ def walk_within_room(ctx, scene, sd, out, *, exclude=()):
             f"{list(landed['cell'])}; silence carries the walk on.")
 
 
+def _within_room_end(leg):
+    """`{to_cell, to_anchor}` -- the place IN its destination room a leg is
+    walking to, as the record names it -- or None for a walk to the room."""
+    end = {}
+    if leg.get("to_cell") is not None:
+        end["to_cell"] = leg["to_cell"]
+    if str(leg.get("to_anchor") or "").strip():
+        end["to_anchor"] = str(leg["to_anchor"]).strip()
+    return end or None
+
+
+def _anchor_name(room, anchor_id):
+    """A fixture as the story calls it: its own description, else ""."""
+    anchors = (room or {}).get("anchors") if isinstance(room, dict) else None
+    anchor = (anchors or {}).get(anchor_id) if anchor_id else None
+    return str((anchor or {}).get("desc") or "").strip() if isinstance(anchor, dict) else ""
+
+
+def _restationed(scene, sd, subject):
+    """Did this beat put `subject` somewhere in its room itself -- a station
+    naming a fixture, a body beside it, or a cell other than the one it
+    stands on? An echo of where it stands moves nobody."""
+    station = _ci_get((sd or {}).get("stations") or {}, subject)
+    if not isinstance(station, dict):
+        return False
+    if str(station.get("at") or "").strip() or station.get("near"):
+        return True
+    if station.get("cell") is None:
+        return False
+    try:
+        return tuple(int(c) for c in station["cell"]) != tuple(body_cell(scene, subject) or ())
+    except (TypeError, ValueError):
+        return False
+
+
+def _walk_within_on(ctx, record, route_scene, sd, subject, room, end):
+    """Carry a walk across its own room on by the beat's paces, toward the
+    cell or fixture it named (`_travel_continues`): arrived where the paces
+    reach it, else under way again where they run out."""
+    landed = walk(route_scene, subject, room, to_cell=end.get("to_cell"),
+                  to_anchor=end.get("to_anchor"), paces=paces_for(beat_seconds(ctx, sd)))
+    if landed is None:
+        record["held"].append({"subject": subject, "reason": "no passable route"})
+        return
+    sd.setdefault("stations", {}).setdefault(subject, {})["cell"] = list(landed["cell"])
+    if not landed["arrived"] and isinstance(sd.get("poses", {}), dict):
+        sd.setdefault("poses", {})[subject] = _on_the_way_pose()
+    record["advanced"].append({"subject": subject, "from": room, "to": room,
+                               "destination": room, **end, "paces": landed["paces"],
+                               "underway": not landed["arrived"]})
+    if landed["arrived"]:
+        record["arrived"].append(subject)
+    ctx.add_warning(
+        f"Travel continues: {subject} declared a walk across {room!r} and this "
+        f"beat did not stop it, so they walk {landed['paces']} paces"
+        + (" and arrive." if landed["arrived"] else f", to cell {list(landed['cell'])}.")
+        + " Silence continues a declared walk; an interruption is the "
+        "Director's to assert.")
+
+
 def _travel_in_flight_view(sc, interp, p_name):
     """What the Director is told about walks already under way.
 
@@ -2894,7 +2981,22 @@ def _travel_in_flight_view(sc, interp, p_name):
             continue
         destination = str(leg.get("to_room") or "").strip()
         here = room_of(sc, subject)
-        if not destination or not here or here == destination:
+        if not destination or not here:
+            continue
+        if here == destination:
+            # A WALK ACROSS ITS OWN ROOM is under way too, to the place in
+            # it the leg names (`_within_room_end`): told, so the account can
+            # carry it or stop it, as `_travel_continues` will walk it.
+            end = _within_room_end(leg)
+            if end:
+                room_name = str((rooms.get(here) or {}).get("name") or here)
+                view.append({
+                    "subject": subject, "destination": destination,
+                    "destination_name": _anchor_name(rooms.get(here), end.get("to_anchor"))
+                    or room_name,
+                    "from_room": here, "reaches_this_beat": here,
+                    "reaches_name": room_name, "final_leg": True,
+                    "within_room": True, **end})
             continue
         step = passable_route_next_step(sc, here, destination)
         if not step:
@@ -3010,7 +3112,18 @@ def _travel_continues(ctx, out, sc, sd, interp, p_name):
         if not destination:
             continue
         here = room_of(route_scene, subject)
-        if here and here == destination:
+        # IN ITS DESTINATION IS ARRIVED ONLY FOR A WALK TO A ROOM. A leg that
+        # names a place in the room -- a cell, a fixture -- is under way until
+        # the body stands there: `walk_within_room` leaves one under way
+        # (`from == to == destination`), and `walk_declared` does when the
+        # paces run out past the destination's door, short of its end. Read
+        # as arrived, the next beat retired it without a step walked and the
+        # body stood mid-room with its `at` and `near` cleared and an
+        # on-the-way pose, though the warning had said "silence carries the
+        # walk on" (audit of 2026-11-01, `agents_director_prose_movement_
+        # rooms` F3). Walked on below, judged like any leg.
+        end = _within_room_end(leg) if here and here == destination else None
+        if here and here == destination and not end:
             record["arrived"].append(subject)
             continue
         # A BEAT THAT MOVED THEM IS NOT A SILENCE (2026-10-12). `declared`
@@ -3024,7 +3137,7 @@ def _travel_continues(ctx, out, sc, sd, interp, p_name):
         # the office she was reading in. Where this beat leaves them is not
         # where it found them: the old walk ends, and says why.
         was = room_of(sc, subject)
-        if here and was and here != was:
+        if (here and was and here != was) or (end and _restationed(sc, sd, subject)):
             record["interrupted"].append(
                 {"subject": subject, "reason": "this beat moved them itself",
                  "source": "diff"})
@@ -3039,9 +3152,23 @@ def _travel_continues(ctx, out, sc, sd, interp, p_name):
         if (route_scene.get("contained") or {}).get(subject):
             record["held"].append({"subject": subject, "reason": "carried"})
             continue
+        # A WALKER THE WORLD PLACES IN NO ROOM HAS NO WALK TO CARRY ON. Held
+        # as "no passable route", the record never retired -- nothing ages
+        # one, and only an arrival or an interruption ends it -- and the beat
+        # the body was placed anywhere again it was walked, undeclared, and
+        # told to the resolve as a walk in flight (audit of 2026-11-01, F11).
+        # Ended, and said.
+        if not here or here not in rooms:
+            record["interrupted"].append(
+                {"subject": subject, "reason": "they are in no room the world holds",
+                 "source": "floor"})
+            continue
         if restraints and _restraint_blocked_moves(
                 {"positions": {subject: destination}}, sc, restraints, amap, holders):
             record["held"].append({"subject": subject, "reason": "restrained"})
+            continue
+        if end:
+            _walk_within_on(ctx, record, route_scene, sd, subject, here, end)
             continue
         step = passable_route_next_step(route_scene, here, destination)
         if not step:

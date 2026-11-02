@@ -1109,12 +1109,40 @@ def _declared_carried(job, answer):
 def _fuller(job, first, again):
     """The answer to keep of a job's two: the one carrying more of what it
     was declared to carry, then the one with more events, then the one that
-    said something -- a retry thinner than the first answer never wins."""
+    said something -- a retry thinner than the first answer never wins --
+    WITH every event of the other that carries a declared act the kept one
+    lacks, each set before the first kept event of a later declared act.
+
+    MERGED BY KEY, NEVER PICKED: a job that declared acts A and B, answered
+    A first and B on the retry, kept A alone -- weights (1, 2, True) against
+    (1, 1, True) -- and then warned "no event carries declared act(s)" for
+    the act the repair had produced (audit of 2026-11-01,
+    `agents_director_floors` F7). The lesson `merge_answers` holds for the
+    pieces of one answer, held for the two answers of one job."""
     def weight(answer):
         answer = answer or {}
         return (_declared_carried(job, answer), len(answer.get("events") or []),
                 _said_something(answer))
-    return again if weight(again) > weight(first) else first
+    kept, other = (again, first) if weight(again) > weight(first) else (first, again)
+    if not isinstance(kept, dict):
+        return other
+    rank = {act["event_id"]: i for i, act in enumerate(job.get("declared") or ())}
+
+    def act_of(event):
+        return str((event or {}).get("source_event_id") or "").strip() \
+            if isinstance(event, dict) else ""
+
+    events = [e for e in kept.get("events") or [] if isinstance(e, dict)]
+    lacking = set(rank) - {act_of(e) for e in events}
+    add = [e for e in (other or {}).get("events") or []
+           if isinstance(e, dict) and act_of(e) in lacking]
+    if not add:
+        return kept
+    for event in add:
+        at = next((i for i, e in enumerate(events)
+                   if rank.get(act_of(e), -1) > rank[act_of(event)]), len(events))
+        events.insert(at, event)
+    return dict(kept, events=events)
 
 
 def _repair_group(ctx, stage, sc, units, events, jobs, channels, parts, model_payload,
@@ -1124,11 +1152,27 @@ def _repair_group(ctx, stage, sc, units, events, jobs, channels, parts, model_pa
     held to its grant. Returns `{answers, notes, tools, retried, stray}`.
     Both calls continue `held`, the draft's own request, where they can
     (`continuation`)."""
+    from llm.providers import Aborted
     tools, tool_parts, routing = repair_tools(ctx, stage, units, jobs, model_payload,
                                               facts, channels, parts, scene=sc)
-    answers, notes = call_repair(ctx, sc, units, events, jobs, tools, tool_parts,
-                                 model_payload, view, extras, rooms_elsewhere, new_places,
-                                 base_payload, held=held, stage=stage)
+    # A CALL THAT FAILS LOSES ITS OWN ANSWERS AND NO OTHER'S. Every rung of
+    # `complete_validated_json` failing raises, and unhandled here it
+    # unwound the whole pass: the other group's recovered events, and this
+    # group's first answers when only the retry failed, went with it and the
+    # beat kept the unrepaired draft (audit of 2026-11-01,
+    # `agents_director_floors` F9). A failed call leaves its jobs unanswered
+    # -- asked once more, then reported as any unanswered job is -- and a
+    # user's Stop still stops.
+    failed = []
+    try:
+        answers, notes = call_repair(ctx, sc, units, events, jobs, tools, tool_parts,
+                                     model_payload, view, extras, rooms_elsewhere,
+                                     new_places, base_payload, held=held, stage=stage)
+    except Aborted:
+        raise
+    except Exception as exc:  # noqa: BLE001 -- the jobs stay unanswered, and said
+        answers, notes = [], []
+        failed.append(f"{type(exc).__name__}: {exc}"[:300])
     # THE REPAIR CALL STOPS SHORT AS THE ENCODER DOES: on its first runs it
     # answered a fix and skipped the sixteen-sentence event job beside it,
     # answered another with one event where the next run gave twenty-five,
@@ -1146,9 +1190,16 @@ def _repair_group(ctx, stage, sc, units, events, jobs, channels, parts, model_pa
                 or _declared_carried(job, answered[job["id"]]) < len(job.get("declared") or ())]
     retried = []
     if leftover:
-        again, more_notes = call_repair(ctx, sc, units, events, leftover, tools, tool_parts,
-                                        model_payload, view, extras, rooms_elsewhere,
-                                        new_places, base_payload, held=held, stage=stage)
+        try:
+            again, more_notes = call_repair(ctx, sc, units, events, leftover, tools,
+                                            tool_parts, model_payload, view, extras,
+                                            rooms_elsewhere, new_places, base_payload,
+                                            held=held, stage=stage)
+        except Aborted:
+            raise
+        except Exception as exc:  # noqa: BLE001 -- the first answers stand
+            again, more_notes = [], []
+            failed.append(f"{type(exc).__name__}: {exc}"[:300])
         retried = [job["id"] for job in leftover]
         by_id = {job["id"]: job for job in leftover}
         redo, extra = {}, []
@@ -1179,6 +1230,7 @@ def _repair_group(ctx, stage, sc, units, events, jobs, channels, parts, model_pa
                     stray.append(channel)
                     patch.pop(channel, None)
     return {"answers": answers, "notes": list(notes), "retried": retried, "stray": stray,
+            "failed": failed,
             "tools": {"channels": tools, "parts": tool_parts,
                       **({"routing": routing} if routing else {})}}
 
@@ -1414,7 +1466,17 @@ def apply_answers(events, units, jobs, answers, slots):
             transform = (events[target].get("transforms") or [None] * (job["index"] + 1))[job["index"]]
             if isinstance(transform, dict) and isinstance(transform.get("patch"), dict):
                 transform["patch"].pop(job["channel"], None)
-            if moves and job.get("write") is not None:
+            if moves and writes:
+                # A MOVE AND A CORRECTION, IN TWO PIECES: the move says where,
+                # the write says what. The card makes them alternatives, but
+                # an answer arrives in pieces (30 of 198 measured runs split
+                # one) and `merge_answers` joins them; this moved the FLAGGED
+                # value and dropped the correction -- the ship's transit
+                # `to: beach` moved to e2, `to: far_quay` lost (audit of
+                # 2026-11-01, `agents_director_floors` F8).
+                events[refs.index(move_to)].setdefault("transforms", []).extend(writes)
+                report.setdefault("moved_corrected", []).append(job["id"])
+            elif moves and job.get("write") is not None:
                 events[refs.index(move_to)].setdefault("transforms", []).append(
                     {"item": (transform or {}).get("item", ""),
                      "patch": {job["channel"]: job["write"]}})
@@ -1584,9 +1646,19 @@ def _check_and_repair(ctx, stage, sc, units, events, channels, parts, model_payl
                           [j for j in jobs if j["kind"] != "event"]) if g]
 
     def run_group(group):
-        return _repair_group(ctx, stage, sc, units, events, group, channels, parts,
-                             model_payload, view, extras, facts, rooms_elsewhere,
-                             new_places, base_payload, held=held)
+        # ONE GROUP FAILING KEEPS THE OTHER'S ANSWERS (F9): the two run in
+        # parallel, and a group that cannot run at all answers nothing,
+        # out loud, while a user's Stop still stops the pass.
+        from llm.providers import Aborted
+        try:
+            return _repair_group(ctx, stage, sc, units, events, group, channels, parts,
+                                 model_payload, view, extras, facts, rooms_elsewhere,
+                                 new_places, base_payload, held=held)
+        except Aborted:
+            raise
+        except Exception as exc:  # noqa: BLE001 -- its jobs stay unanswered, and said
+            return {"answers": [], "notes": [], "retried": [], "stray": [], "tools": {},
+                    "failed": [f"{type(exc).__name__}: {exc}"[:300]]}
 
     if len(groups) > 1:
         import contextvars
@@ -1610,6 +1682,11 @@ def _check_and_repair(ctx, stage, sc, units, events, channels, parts, model_payl
         if result["stray"]:
             record.setdefault("dropped_ungranted", [])
             record["dropped_ungranted"] = sorted(set(record["dropped_ungranted"]) | set(result["stray"]))
+        if result.get("failed"):
+            record.setdefault("repair_failed", []).extend(result["failed"])
+    for failure in record.get("repair_failed") or ():
+        ctx.add_warning(f"{stage}: an encoder repair call failed ({failure[:160]}); "
+                        "its jobs are left as the draft wrote them")
     if record.get("dropped_ungranted"):
         ctx.add_warning(f"{stage}: repair wrote ungranted {record['dropped_ungranted']}; dropped")
     answers_ = [dict(a, events=strip_markers(a.get("events") or []))

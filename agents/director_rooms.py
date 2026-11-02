@@ -187,13 +187,22 @@ def _merge_room(base, piece):
 
 
 def _merged(scene, draft):
+    """The town with the draft's rooms built into it, as a new scene.
+
+    ONE COPY, THE MERGE'S OWN. `merge_scene_with_diff` deep-copies both the
+    scene and the diff it is handed -- a merge is a correctness boundary --
+    so this copied the town and the draft a second time on every designer
+    merge: each `_Reading`, every refit and doorway search base, every step
+    of the between-turns job, in the beat's worker thread beside the encoder
+    (audit of 2026-11-01, `agents_director_prose_movement_rooms`,
+    Efficiency 2)."""
     from world.spatial import merge_scene_with_diff
     rooms = {rid: room for rid, room in (draft.get("rooms") or {}).items()}
-    diff = {"rooms": copy.deepcopy(rooms)} if rooms else {}
+    diff = {"rooms": rooms} if rooms else {}
     for key in ("remove_rooms", "remove_adjacent"):
         if draft.get(key):
-            diff[key] = copy.deepcopy(draft[key])
-    return merge_scene_with_diff(copy.deepcopy(scene or {}), diff) if diff else copy.deepcopy(scene or {})
+            diff[key] = draft[key]
+    return merge_scene_with_diff(scene or {}, diff) if diff else copy.deepcopy(scene or {})
 
 
 class _Reading:
@@ -2520,6 +2529,15 @@ def install_prepared_rooms(cid, scene, body=None, *, cast=None, frame_id=None):
         return scene, {}
     cache = wget(cid, PREPARED_KEY) or {}
     if not isinstance(cache, dict) or not cache:
+        return scene, {}
+    # NOTHING THE SCENE HOLDS, NO REACH READ. Every room in reach is one the
+    # scene holds (`structure.rooms_in_view_or_ahead`), so a cache of designs
+    # for none of them installs nothing -- and working out every actor's
+    # reach (an `active_cast` read, sight and heading per body) ran at the
+    # start of every interpret whose cache held anything at all (audit of
+    # 2026-11-01, `agents_director_prose_movement_rooms`, Efficiency 3).
+    held_rooms = (scene or {}).get("rooms") or {}
+    if not any(rid in held_rooms for rid in cache):
         return scene, {}
     bodies = [body] if body else []
     if cast is not None:

@@ -114,15 +114,19 @@ def _capture(ctx, monkeypatch):
 # ---- W1: obligation ledger ----
 
 def test_open_op_appends_ledger_and_dedupes(temp_db, prose_director, monkeypatch):
-    """Ported 2026-09-27: the ops arrive as the encoder's `obligations`
-    transforms.
+    """Ported 2026-09-27 as "the ops arrive as the encoder's `obligations`
+    transforms". Since the channel's retirement (2026-10-02) the prose path
+    STRIPS an `obligations` write and warns (2026-11-01 review, lane L7b), so
+    this test feeds `commit_obligations` its ops directly, as the discharge and
+    cap tests in this file do: what it pins is the ledger's open-and-dedupe
+    rule, not the Director's right to write the channel.
     """
     ctx = _make_ctx(temp_db, turn_idx=3)
     op = {"op": "open", "who": "Mara", "what": "deliver the diagnostic report",
           "kind": "demand"}
-    ctx.director_resolve = _prose(ctx, monkeypatch, {
+    ctx.director_resolve = {
         "resolved_event": "The Stranger demands the report from Mara.",
-        "state_diff": {"obligations": [op, dict(op)]}})
+        "obligations": [op, dict(op)]}
 
     result = commit.commit_obligations(ctx, nonce=0)
 

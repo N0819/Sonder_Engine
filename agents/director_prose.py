@@ -108,6 +108,25 @@ _RECORD_FACTS = {
 }
 
 
+#: ...AND OF THOSE, THE CHANNELS WHOSE OWN OP MAKES THE RECORD: `crowd_ops`
+#: raises a crowd (`set` with an empty `crowd_id`), `courier_ops` sends on a
+#: `claim` the sender makes up (or an empty caravan), `telling_ops` passes on
+#: a `claim` no event backs, `artifact_ops` posts an invented bill -- the
+#: engine's own cards say so (`encoder/<channel>.txt`). The gate keeps the
+#: decision model from being ASKED about one on a beat with no record (the
+#: chat 153 measurement stands), but never takes it out of the encoder's
+#: reach: it stays in `requestable_tools`, and a `missing_tools` naming it
+#: widens the encoder. Gated out of reach, a story's first crowd could never
+#: be raised, and an encoder that asked for `crowd_ops` had the request
+#: dropped without a record (audit of 2026-11-01,
+#: `agents_director_prose_movement_rooms` F4). A closed table of the engine's
+#: own channels; a channel whose every op names a record the world must
+#: already hold (a claim ratified or contradicted, a thing destroyed) is not
+#: here, and is gated whole.
+_MAKES_ITS_RECORD = frozenset({"crowd_ops", "courier_ops", "telling_ops",
+                               "artifact_ops"})
+
+
 def _fact(facts, key):
     try:
         return bool(facts[key])
@@ -156,11 +175,46 @@ def _extension_channels(stage=None):
 RETIRED_CHANNELS = frozenset({"obligations"})
 
 
-def candidate_channels(stage, facts=None):
+def without_retired_channels(events):
+    """`(events, retired)`: the events with every write on a channel in
+    `RETIRED_CHANNELS` taken out, and those channels' names, sorted.
+
+    RETIRED, NOT ONLY UNASKED. `candidate_channels` skips a retired channel,
+    so its chunk never ships; but an encoder that wrote one anyway was
+    dispatched to the channel's owner -- `obligations` is still the social
+    owner's -- and committed, without a word (audit of 2026-11-01,
+    `agents_director_prose_movement_rooms` F16). A write the prose Director
+    retired reaches no owner and is said, as one no owner holds is."""
+    retired, out = set(), []
+    for event in events or []:
+        if not isinstance(event, dict) or not event.get("transforms"):
+            out.append(event)
+            continue
+        transforms, changed = [], False
+        for transform in event["transforms"]:
+            patch = transform.get("patch") if isinstance(transform, dict) else None
+            gone = [c for c in patch if c in RETIRED_CHANNELS] if isinstance(patch, dict) else []
+            if not gone:
+                transforms.append(transform)
+                continue
+            changed = True
+            retired.update(gone)
+            kept = {c: v for c, v in patch.items() if c not in RETIRED_CHANNELS}
+            if kept:
+                transforms.append(dict(transform, patch=kept))
+        out.append(dict(event, transforms=transforms) if changed else event)
+    return out, sorted(retired)
+
+
+def candidate_channels(stage, facts=None, *, requestable=False):
     """Every engine channel this story keeps that this stage can carry, in
     canonical hand order. An extension's channel is not a candidate here: it
     has no chunk in the card, and is asked by its own question
-    (`select_channels`)."""
+    (`select_channels`).
+
+    `requestable` is the encoder's set rather than the decision model's: a
+    channel whose op makes its own record (`_MAKES_ITS_RECORD`) is in it
+    whatever records the world holds."""
     facts = facts if facts is not None else {}
     out = []
     for spec in SPECIALISTS.values():
@@ -174,7 +228,8 @@ def candidate_channels(stage, facts=None):
             if not facts.get(_STRUCTURAL_CHANNEL_FACTS.get(channel), True):
                 continue
             needs = _RECORD_FACTS.get(channel)
-            if needs and facts and not any(_fact(facts, key) for key in needs):
+            if needs and facts and not any(_fact(facts, key) for key in needs) \
+                    and not (requestable and channel in _MAKES_ITS_RECORD):
                 continue
             out.append(channel)
     return out
@@ -2069,23 +2124,137 @@ _CAST_KEY = re.compile(r"^character:\d+$")
 WORLD_AUTHORITY = frozenset({"world", "mechanical"})
 
 
-def _linked(scene, events, a, b):
+class _Spellings:
+    """WHO A SPELLING IS, for the agency floors: every spelling the world
+    keeps for a mind, read to its identity key.
+
+    The floors matched a mind by the identity index's exact spelling, its
+    name or its key, so the SAME undeclared move was refused under the full
+    name and let through under the scene record's id or alias -- measured by
+    the audit of 2026-11-01 (`agents_director_prose_movement_rooms` F2):
+    "Abel Coyle" refused, "Coyle" and "char_abel_coyle" passed. The encoder
+    does spell a body by its record's id (scratch story 166 turn 4598 filed
+    the pilot as `char_hester_gale`), and the commit's spelling policy then
+    lands the position on the mind: the floor must not depend on the model
+    spelling a name the one way it reads.
+
+    In order, never a guess: the index's own spellings (a key, a name --
+    exactly what the floors always read, and nothing below overrides them);
+    the scene's record of each body, the one entity its name names
+    unambiguously (`spatial._unique_entity_keyed`: its id, name and
+    aliases); the cast's one spelling policy (`spell`,
+    `common.cast_spelling_policy`: the sheet's uid, `character:<id>`,
+    aliases), handed in by the stage; and last `spatial.same_subject`, the
+    engine's one identity test, for a spelling that names some entity. A
+    spelling two minds answer to names neither."""
+
+    def __init__(self, identity_index, scene=None, spell=None):
+        from world.spatial import _unique_entity_keyed
+        self.names = {str(key): str(name or "").strip()
+                      for key, name in (identity_index or {}).items()}
+        self.scene = scene if isinstance(scene, dict) else {}
+        self.spell = spell if callable(spell) else None
+        exact = {_fold(name): key for key, name in self.names.items() if name}
+        exact.update({_fold(key): key for key in self.names})
+        exact.pop("", None)
+        self._exact = exact
+        claims = {}
+        if isinstance(self.scene.get("entities"), dict) and self.scene["entities"]:
+            for key, name in self.names.items():
+                if not name:
+                    continue
+                eid, entity = _unique_entity_keyed(self.scene, name)
+                if not eid:
+                    continue
+                for form in (eid, entity.get("name"), *(entity.get("aliases") or ())):
+                    folded = _fold(form)
+                    if not folded or folded in exact:
+                        continue
+                    claims[folded] = key if claims.get(folded, key) == key else None
+        self._records = claims
+        self._read = {}
+
+    def person(self, label):
+        """Any identity's key a spelling names -- a registered mind's or a
+        figure's -- or None."""
+        folded = _fold(label)
+        if not folded:
+            return None
+        if folded in self._exact:
+            return self._exact[folded]
+        if folded in self._records:
+            return self._records[folded]
+        if folded in self._read:
+            return self._read[folded]
+        key = None
+        if self.spell is not None:
+            try:
+                canon = self.spell(str(label).strip())
+            except Exception:  # noqa: BLE001 -- a policy that cannot answer names nobody
+                canon = None
+            if canon and _fold(canon) != folded:
+                key = self._exact.get(_fold(canon))
+        if key is None and self.scene.get("entities"):
+            from world.spatial import _entity_named, same_subject
+            if _entity_named(self.scene, str(label).strip()):
+                hits = {k for k, name in self.names.items()
+                        if name and same_subject(self.scene, str(label).strip(), name)}
+                key = next(iter(hits)) if len(hits) == 1 else None
+        self._read[folded] = key
+        return key
+
+    def mind(self, label):
+        """A registered mind's key (`persona:<id>`, `character:<id>`) a
+        spelling names, or None."""
+        key = self.person(label)
+        return key if key and _MIND_KEY.match(key) else None
+
+    def forms(self, key):
+        """Every folded spelling read to `key` so far: its key, its name, its
+        record's, and each the floors have resolved to it."""
+        out = {_fold(key), _fold(self.names.get(key) or key)}
+        for table in (self._exact, self._records, self._read):
+            out |= {form for form, owner in table.items() if owner == key}
+        out.discard("")
+        return out
+
+    def who(self, label):
+        """What a record's end is, for a comparison: the identity it names,
+        else its own folded spelling (a thing)."""
+        return self.person(label) or _fold(label)
+
+
+def _cast_spelling(ctx):
+    """The cast's one spelling policy (`common.cast_spelling_policy`), as the
+    floors read a spelling through it -- the function, or None when the
+    stage holds no cast or the policy cannot be read."""
+    try:
+        from .common import cast_spelling_policy
+        canonical, _forms = cast_spelling_policy(getattr(ctx, "cast", None) or [])
+    except Exception:  # noqa: BLE001 -- the floors read the index and the scene without it
+        return None
+    return canonical
+
+
+def _linked(scene, events, a, b, who=None):
     """Does a hold, a carry or an inside join bodies `a` and `b` -- standing
     before the beat, or written at it? Read off the engine's own records
-    (`contacts`, `contained`, `contact_ops`, `containment`), never prose."""
-    pair = {a.casefold(), b.casefold()}
+    (`contacts`, `contained`, `contact_ops`, `containment`), never prose.
+    `who` reads a record's end as the identity it names (`_Spellings.who`),
+    so a record keyed by a body's other spelling still joins it."""
+    who = who or (lambda label: str(label or "").strip().casefold())
+    pair = {who(a), who(b)}
 
     def joins(record):
         if not isinstance(record, dict):
             return False
-        ends = {str(record.get(k) or "").strip().casefold()
-                for k in ("actor", "target")}
+        ends = {who(record.get(k)) for k in ("actor", "target")}
         return ends == pair
 
     def holds(contained):
         for body, where in (contained or {}).items() if isinstance(contained, dict) else ():
             inside = str((where or {}).get("in") or "") if isinstance(where, dict) else str(where or "")
-            if {str(body).strip().casefold(), inside.strip().casefold()} == pair:
+            if {who(body), who(inside)} == pair:
                 return True
         return False
 
@@ -2105,7 +2274,7 @@ def _linked(scene, events, a, b):
 
 
 def a_walk_is_its_owners(events, event_inputs, identity_index, scene=None,
-                         warn=None, refusals=None):
+                         warn=None, refusals=None, spell=None):
     """A MIND GOES ONLY WHERE ITS OWN DECLARATION TAKES IT -- the player's
     included (owner ruling, 2026-10-07).
 
@@ -2132,6 +2301,28 @@ def a_walk_is_its_owners(events, event_inputs, identity_index, scene=None,
     An event recorded as the moved mind's OWN conduct is dropped whole --
     it is a step, and a decision, nobody declared; otherwise only that
     mind's position and station leave the event.
+
+    A BODY BORNE BY WHAT MOVES IS MOVED BY THE WORLD (2026-11-01). Where a
+    body walks is its own; where the world puts it is the world's -- the
+    encoder's own card says so (`encoder/positions.txt`). What bears a body
+    -- what it is inside or upon (`contained`, every holder up the chain), a
+    body or thing a contact joins it to, the fixture its pose rests on or
+    its station is at, the room it stands in and the thing that room is the
+    inside of -- moved by the same event to where the body goes, or taken
+    out of the world by it (`remove_entities`, `remove_rooms`,
+    `destruction`), puts the body there: it is no walk (`_borne_away`). A
+    registered mind this floor keeps in its room bears nobody. Audit of
+    2026-11-01 (`agents_director_prose_movement_rooms` F1), reproduced: the
+    passenger of the cart the player drives was refused, and the cart's own
+    move dropped with him (`kept: []`). A bearer's new STATE is a word, not
+    a place (`entities`), and moves no body.
+
+    AND THE FLOOR REFUSES ONLY THE SPAN IT JUDGES. An event is a mind's own
+    conduct, and goes whole, only when everything it writes is that mind's
+    (`_doer_alone`); one that also breaks the boards under him, or drives
+    the cart he sat in, keeps every write that is not his walk -- "The rotten
+    boards give way under Elias" lost the boards' breaking with his fall
+    (same audit).
 
     AND A FOLLOW IS ITS FOLLOWER'S (the owner's ruling, 2026-10-09, D1). A
     follow carries the follower wherever the one followed goes
@@ -2224,18 +2415,8 @@ def a_walk_is_its_owners(events, event_inputs, identity_index, scene=None,
                 owner[str(act["event_id"]).strip()] = who
                 if who:
                     declarers.add(who)
-    names = {str(key): str(name or "").strip()
-             for key, name in (identity_index or {}).items()}
-    key_of = {name.casefold(): key for key, name in names.items() if name}
-    key_of.update({key.casefold(): key for key in names})
-
-    def mind(label):
-        key = key_of.get(str(label or "").strip().casefold())
-        return key if key and _MIND_KEY.match(key) else None
-
-    def person(label):
-        """Any identity's key: a registered mind's or a figure's."""
-        return key_of.get(str(label or "").strip().casefold())
+    spellings = _Spellings(identity_index, scene, spell)
+    names, mind, person = spellings.names, spellings.mind, spellings.person
 
     # FIRST, across the whole stage, the minds a declaration not their own
     # walks and this floor keeps in their rooms: an act of such a mind the
@@ -2251,7 +2432,7 @@ def a_walk_is_its_owners(events, event_inputs, identity_index, scene=None,
             event, source or mind(event.get("source_entity_id")), mind)
         unfollowed.extend(names.get(k) or k for k in dropped)
         refused = _walks_refused(event, source, events, scene, declarers,
-                                 names, mind) if source else set()
+                                 spellings) if source else set()
         refused_all |= refused
         read.append((event, source, refused))
 
@@ -2279,7 +2460,7 @@ def a_walk_is_its_owners(events, event_inputs, identity_index, scene=None,
             continue
         movement = event.get("movement")
         kept_out.extend(sorted(names.get(k) or k for k in refused))
-        walks = {key: _walk_of(scene, event, _forms_of(key, names),
+        walks = {key: _walk_of(scene, event, spellings.forms(key),
                                names.get(key) or key) for key in refused}
         for key in sorted(refused):
             place, moves = walks[key]
@@ -2287,18 +2468,18 @@ def a_walk_is_its_owners(events, event_inputs, identity_index, scene=None,
                 words = _event_surface(event)
                 changes = not _restates_how_things_stand(scene, event)
             else:
-                words = (_posed_words(event, _forms_of(key, names))
+                words = (_posed_words(event, spellings.forms(key))
                          or _place_words(scene, place))
                 changes = moves
             rows.append(_refusal_row(key, names, words, place, changes))
         if doer in refused:
             continue
-        forms = {f.casefold() for k in refused for f in (k, names.get(k) or k)}
         # The pose a walk written into another's act gives the body at its
         # end goes with the walk -- where it was one: a room said again
-        # places the body nowhere new.
-        posed = {f.casefold() for k in refused if walks[k][1]
-                 for f in (k, names.get(k) or k)}
+        # places the body nowhere new. Every spelling of a refused mind is
+        # its own (`_Spellings`): a position keyed by its record's id leaves
+        # with the one keyed by its name.
+        posed = {k for k in refused if walks[k][1]}
         event = dict(event)
         if isinstance(movement, dict) and (mind(movement.get("mover")) in refused):
             event["movement"] = None
@@ -2308,10 +2489,10 @@ def a_walk_is_its_owners(events, event_inputs, identity_index, scene=None,
             if isinstance(patch, dict):
                 patch = dict(patch)
                 for channel in ("positions", "stations", "containment", "poses"):
-                    gone = posed if channel == "poses" else forms
+                    gone = posed if channel == "poses" else refused
                     if gone and isinstance(patch.get(channel), dict):
                         patch[channel] = {k: v for k, v in patch[channel].items()
-                                          if str(k).strip().casefold() not in gone}
+                                          if mind(k) not in gone}
                         if not patch[channel]:
                             patch.pop(channel)
                 if not patch:
@@ -2329,7 +2510,8 @@ def a_walk_is_its_owners(events, event_inputs, identity_index, scene=None,
                 said.add((row["mind"], row["event"]))
                 refusals.append(row)
     if refused_all and isinstance(scene, dict):
-        out = _near_the_kept(out, scene, {names.get(k) or k for k in refused_all})
+        out = _near_the_kept(out, scene, {names.get(k) or k for k in refused_all},
+                             spellings)
     if kept_out and warn:
         warn("a walk is its owner's: %s kept their room -- moved by another's "
              "declaration, with no hold, carry or declaration of their own"
@@ -2345,12 +2527,14 @@ def a_walk_is_its_owners(events, event_inputs, identity_index, scene=None,
     return out
 
 
-def _walks_refused(event, source, events, scene, declarers, names, mind):
+def _walks_refused(event, source, events, scene, declarers, spellings):
     """The registered minds `event` moves that `a_walk_is_its_owners` keeps
     in their rooms: moved -- a walk (`movement`), a room (`positions`) or a
     boarding (`containment`) -- in an event carried out from `source`'s
-    declaration, by no declaration of their own, and with no hold, carry or
-    inside joining them to `source` (`_linked`)."""
+    declaration, by no declaration of their own, with no hold, carry or
+    inside joining them to `source` (`_linked`), and borne there by nothing
+    that moves (`_borne_away`)."""
+    names, mind = spellings.names, spellings.mind
     moved = set()
     movement = event.get("movement")
     if isinstance(movement, dict) and str(movement.get("to_room") or "").strip():
@@ -2373,10 +2557,137 @@ def _walks_refused(event, source, events, scene, declarers, names, mind):
             moved.update(k for k, record in ((mind(n), r) for n, r
                                              in patch["containment"].items())
                          if k and isinstance(record, dict) and record.get("in"))
-    return {key for key in moved
-            if key != source and key not in declarers
-            and not _linked(scene, events, names.get(key) or key,
-                            names.get(source) or source)}
+    refused = {key for key in moved
+               if key != source and key not in declarers
+               and not _linked(scene, events, names.get(key) or key,
+                               names.get(source) or source, spellings.who)}
+    # A BODY BORNE BY WHAT MOVES IS MOVED BY THE WORLD: taken out of the
+    # refused minds until none is left that a moving bearer carries -- a
+    # mind kept here carries nobody, and one let go may carry another.
+    while refused:
+        borne = {key for key in refused
+                 if _borne_away(scene, events, event, key, spellings, refused)}
+        if not borne:
+            break
+        refused -= borne
+    return refused
+
+
+def _same(spellings, a, b):
+    """Do two spellings name one body or thing -- one identity
+    (`_Spellings`), else one subject of the scene (`spatial.same_subject`,
+    which never invents a match)?"""
+    if not str(a or "").strip() or not str(b or "").strip():
+        return False
+    if _fold(a) == _fold(b):
+        return True
+    one, other = spellings.person(a), spellings.person(b)
+    if one or other:
+        return one == other
+    from world.spatial import same_subject
+    return same_subject(spellings.scene, str(a).strip(), str(b).strip())
+
+
+def _put_in(event, label, spellings):
+    """The room `event` puts the body or thing `label` in -- by its
+    `movement`, then its `positions` (the last word) -- or None."""
+    room = None
+    movement = event.get("movement")
+    if isinstance(movement, dict) and str(movement.get("to_room") or "").strip():
+        mover = movement.get("mover") or event.get("source_entity_id")
+        if _same(spellings, mover, label):
+            room = str(movement["to_room"]).strip()
+    for transform in event.get("transforms") or []:
+        patch = transform.get("patch") if isinstance(transform, dict) else None
+        positions = patch.get("positions") if isinstance(patch, dict) else None
+        for who, where in positions.items() if isinstance(positions, dict) else ():
+            if str(where or "").strip() and _same(spellings, who, label):
+                room = str(where).strip()
+    return room
+
+
+def _bearers(scene, events, name, spellings):
+    """What bears the body `name` as the beat begins: everything it is
+    inside or upon (`contained`, every holder up the chain), each body or
+    thing a contact joins it to (standing, or written this beat and not
+    ended), the fixture its pose rests on and the anchor its station is at,
+    and the room it stands in with the thing that room is the inside of
+    (`parent_entity`). Read off the engine's records, never prose."""
+    from world.spatial import containment_record, room_of
+    out, seen = [], {_fold(name)}
+    record = containment_record(scene, name)
+    while isinstance(record, dict) and str(record.get("in") or "").strip():
+        holder = str(record["in"]).strip()
+        if _fold(holder) in seen:
+            break
+        seen.add(_fold(holder))
+        out.append(holder)
+        record = containment_record(scene, holder)
+    contacts = [c for c in scene.get("contacts") or () if isinstance(c, dict)]
+    for event in events or ():
+        for transform in (event.get("transforms") or ()) if isinstance(event, dict) else ():
+            patch = transform.get("patch") if isinstance(transform, dict) else None
+            ops = patch.get("contact_ops") if isinstance(patch, dict) else None
+            contacts += [op for op in ops or () if isinstance(op, dict)
+                         and _fold(op.get("op") or "add") not in ("remove", "clear")]
+    for contact in contacts:
+        ends = [str(contact.get(k) or "").strip() for k in ("actor", "target")]
+        for end, other in ((ends[0], ends[1]), (ends[1], ends[0])):
+            if end and other and _same(spellings, end, name):
+                out.append(other)
+    pose = _record_of(scene.get("poses"), name)
+    if isinstance(pose, dict) and str(pose.get("support") or "").strip():
+        out.append(str(pose["support"]).strip())
+    station = _record_of(scene.get("stations"), name)
+    if isinstance(station, dict) and str(station.get("at") or "").strip():
+        out.append(str(station["at"]).strip())
+    here = room_of(scene, name) if scene else None
+    if here:
+        out.append(here)
+        room = (scene.get("rooms") or {}).get(here)
+        parent = room.get("parent_entity") if isinstance(room, dict) else None
+        if str(parent or "").strip():
+            out.append(str(parent).strip())
+    return out
+
+
+def _gone(event, label, spellings):
+    """Does `event` take the thing or room `label` out of the world --
+    `remove_entities`, `remove_rooms`, or the root of a `destruction`?"""
+    for transform in event.get("transforms") or []:
+        patch = transform.get("patch") if isinstance(transform, dict) else None
+        if not isinstance(patch, dict):
+            continue
+        for channel in ("remove_entities", "remove_rooms"):
+            ids = patch.get(channel)
+            for gone in ids if isinstance(ids, list) else ():
+                if _same(spellings, gone, label):
+                    return True
+        destruction = patch.get("destruction")
+        if isinstance(destruction, dict) and _same(
+                spellings, destruction.get("target_id"), label):
+            return True
+    return False
+
+
+def _borne_away(scene, events, event, key, spellings, kept):
+    """Is the mind `key`, which `event` moves, BORNE there -- by a bearer
+    (`_bearers`) the same event moves to the room it puts the mind in, or
+    takes out of the world? A mind in `kept` -- one this floor keeps in its
+    room -- bears nobody. Only a move to a room is borne: a boarding by
+    another's declaration is still the floor's to refuse."""
+    sc = scene if isinstance(scene, dict) else {}
+    name = spellings.names.get(key) or key
+    to = _put_in(event, name, spellings)
+    if not to or not sc:
+        return False
+    for bearer in _bearers(sc, events, name, spellings):
+        mine = spellings.mind(bearer)
+        if mine is not None and (mine == key or mine in kept):
+            continue
+        if _gone(event, bearer, spellings) or _put_in(event, bearer, spellings) == to:
+            return True
+    return False
 
 
 #: The channels in which an event writes where a body is or how it holds
@@ -2384,6 +2695,50 @@ def _walks_refused(event, source, events, scene, declarers, names, mind):
 #: garment put on it or a state it undergoes is not here: each can be done TO
 #: a body, so none says who acted.
 _PLACING_CHANNELS = ("positions", "poses", "stations", "containment")
+#: WHAT AN EVENT MAY WRITE AND STILL BE ONE BODY'S OWN CONDUCT, read by the
+#: subject each write names -- the engine's own channel shapes, a closed
+#: table of them (`_writes_only_of`). A channel keyed by its subject...
+_OWN_KEYED = _PLACING_CHANNELS + ("attire", "vitals", "scales", "overlays", "entities")
+#: ...and the op channels whose rows name their subject in these fields (a
+#: row is the body's own where any of them names it). Every other channel
+#: -- a room, a removal, a destruction, a crowd, the time -- is the world's.
+_OWN_ROWS = {"following_ops": ("follower",),
+             "contact_ops": ("actor", "target"),
+             "contact_action_ops": ("actor", "target"),
+             "inventory_ops": ("from_id", "to_id"),
+             "sensory_events": ("source",)}
+
+
+def _writes_only_of(event, key, person):
+    """Does every write `event` makes name the body `key` -- its own place,
+    pose and record, the things its own hands take or set down, the sounds
+    it makes? A thing placed beside it (the cart it drives), another body's
+    record, a room, a removal or anything this table does not read says the
+    event is more than that body's conduct (`_OWN_KEYED`, `_OWN_ROWS`)."""
+    for transform in event.get("transforms") or []:
+        patch = transform.get("patch") if isinstance(transform, dict) else None
+        if not isinstance(patch, dict):
+            continue
+        for channel, value in patch.items():
+            if channel in _OWN_KEYED:
+                if not isinstance(value, dict) or any(person(k) != key for k in value):
+                    return False
+            elif channel in _OWN_ROWS:
+                rows = value if isinstance(value, list) else [value]
+                for row in rows:
+                    if not isinstance(row, dict) or not any(
+                            person(row.get(field)) == key for field in _OWN_ROWS[channel]):
+                        return False
+            elif channel == "conditions":
+                if not isinstance(value, dict):
+                    return False
+                for readings in value.values():
+                    for row in readings if isinstance(readings, list) else [readings]:
+                        if not isinstance(row, dict) or person(row.get("subject_id")) != key:
+                            return False
+            else:
+                return False
+    return True
 
 
 def _doer_alone(event, person):
@@ -2392,9 +2747,19 @@ def _doer_alone(event, person):
     poses, stations and boardings, a follow's follower, a contact's either
     end -- where that body is a registered mind, the event is not aimed at
     it (`targets`, `look`: whom a step is done to, which the encoder card
-    says is never the event's own source), and it is no line (a line is its
-    speaker's). None otherwise: an event that writes no body, or two, says
-    nothing of who did it, and stays where the encoder filed it.
+    says is never the event's own source), it is no line (a line is its
+    speaker's), and it writes nothing that is not that body's own
+    (`_writes_only_of`). None otherwise: an event that writes no body, or
+    two, says nothing of who did it, and stays where the encoder filed it.
+
+    NOTHING ELSE GOES WITH IT (2026-11-01). The event this returns a mind
+    for is dropped whole, and only an event that is all that mind's own may
+    be: "Rhona drives the cart onto the road, Elias riding" and "the rotten
+    boards give way under Elias" each read as his alone -- the cart a
+    thing, the boards' breaking no placing write -- and the cart's move and
+    the boards' breaking were dropped with his walk (audit of 2026-11-01,
+    `agents_director_prose_movement_rooms` F1). Such an event keeps every
+    write but his walk.
 
     `person` maps a spelling to an identity key, a figure's included, so a
     figure written beside the mind makes two bodies, not one."""
@@ -2438,7 +2803,9 @@ def _doer_alone(event, person):
         if isinstance(targets, (list, tuple)) else []
     aimed = {person(label) for label in targets + [event.get("look")]
              if str(label or "").strip()}
-    return None if key in aimed else key
+    if key in aimed or not _writes_only_of(event, key, person):
+        return None
+    return key
 
 
 #: The identity keys of a player (`the_account_places_its_own_body`): a
@@ -2453,7 +2820,7 @@ _DOORWAY_ANCHOR = "door:"
 
 
 def the_account_places_its_own_body(events, event_inputs, identity_index,
-                                    scene=None, warn=None):
+                                    scene=None, warn=None, spell=None):
     """A PLAYER'S OWN ACCOUNT PLACES THE PLAYER WHERE IT SAYS -- a walk is its
     owner's, the player's own included (owner ruling, 2026-10-07). At
     interpret, where the only declarations are the players'.
@@ -2508,13 +2875,9 @@ def the_account_places_its_own_body(events, event_inputs, identity_index,
     if not owner:
         return list(events or [])
     from world.spatial import _anchor_room_of, room_of
-    names = {str(key): str(name or "").strip()
-             for key, name in (identity_index or {}).items()}
-    key_of = {name.casefold(): key for key, name in names.items() if name}
-    key_of.update({key.casefold(): key for key in names})
-
-    def person(label):
-        return key_of.get(str(label or "").strip().casefold())
+    # Every spelling the world keeps for a body is that body (`_Spellings`).
+    spellings = _Spellings(identity_index, sc, spell)
+    names, person = spellings.names, spellings.person
 
     players = set(owner.values())
     here = {key: room_of(sc, names.get(key) or key) for key in players}
@@ -2541,7 +2904,7 @@ def the_account_places_its_own_body(events, event_inputs, identity_index,
             out.append(event)
             continue
         name = names.get(source) or source
-        fixtures = _fixtures_at(event, _forms_of(source, names),
+        fixtures = _fixtures_at(event, spellings.forms(source),
                                 hands=filed == source)
         # Only a fixture says where a body is: a person, a thing or the
         # floor it is at says nothing of which room.
@@ -2700,12 +3063,6 @@ def _follows_of_the_declarer(event, declarer, mind):
     return dict(event, transforms=transforms), refused
 
 
-def _forms_of(key, names):
-    """The folded spellings a refused mind goes by in an event: its key and
-    its name."""
-    return {_fold(key), _fold(names.get(key) or key)}
-
-
 def _event_surface(event):
     """An event's own outward surface: its `observable` -- the outward motion
     or change alone, without motive (the encoder card's own definition) --
@@ -2792,7 +3149,7 @@ def _refusal_row(key, names, words, place, changes):
             "to": str(place or "")}
 
 
-def _near_the_kept(events, scene, kept):
+def _near_the_kept(events, scene, kept, spellings=None):
     """The encoder wrote the beat for a world in which the refused minds
     moved, and its stations still say so: a body `near` one of them stands
     beside it in the room it never reached. Measured on scratch story 166,
@@ -2802,9 +3159,16 @@ def _near_the_kept(events, scene, kept):
     crossed back into the chapel, and the page invented the figure's walk
     in to match. A claim beside a kept mind survives only where the
     claimant ends the beat in the room that mind kept; anywhere else it was
-    written for the refused move and goes with it."""
+    written for the refused move and goes with it. A `near` naming a kept
+    mind by another spelling is that mind (`_Spellings`)."""
     from world.spatial import room_of
     kept_room = {name.casefold(): room_of(scene, name) for name in kept}
+    kept_key = {}
+    if spellings is not None:
+        for name in kept:
+            key = spellings.person(name)
+            if key:
+                kept_key[key] = kept_room[name.casefold()]
     ends = {}
     for event in events:
         if not isinstance(event, dict):
@@ -2825,6 +3189,8 @@ def _near_the_kept(events, scene, kept):
 
     def stale(claimant, other):
         room = kept_room.get(str(other).strip().casefold(), "missing")
+        if room == "missing" and kept_key:
+            room = kept_key.get(spellings.person(other), "missing")
         return room != "missing" and room and end_of(claimant) not in (None, room)
 
     out = []
@@ -2926,7 +3292,7 @@ def _restates_how_things_stand(scene, event):
 
 
 def conduct_is_its_owners(events, event_inputs, identity_index, scene=None,
-                          warn=None):
+                          warn=None, spell=None):
     """`(kept, refused)`: AT INTERPRET A MIND ACTS ONLY ON ITS OWN
     DECLARATION, and the only declarations there are the players'.
 
@@ -2976,14 +3342,14 @@ def conduct_is_its_owners(events, event_inputs, identity_index, scene=None,
         who = str(entry.get("entity_id") or "").strip()
         if who:
             declarers.add(who)
-    names = {str(key): str(name or "").strip()
-             for key, name in (identity_index or {}).items()}
-    key_of = {name.casefold(): key for key, name in names.items() if name}
-    key_of.update({key.casefold(): key for key in names})
+    # Every spelling the world keeps for a mind is that mind (`_Spellings`):
+    # an act filed under its record's id is its conduct, as under its name.
+    spellings = _Spellings(identity_index, scene, spell)
+    names = spellings.names
 
     def mind(label):
         text = str(label or "").strip()
-        key = key_of.get(text.casefold()) or (text if _MIND_KEY.match(text) else None)
+        key = spellings.person(text) or (text if _MIND_KEY.match(text) else None)
         return key if key and _MIND_KEY.match(key) else None
 
     kept, refused = [], []
@@ -3017,7 +3383,8 @@ def is_standing(event):
     return value is True or _fold(value) in ("true", "yes", "1")
 
 
-def standing_is_authorship(events, event_inputs, identity_index, warn=None):
+def standing_is_authorship(events, event_inputs, identity_index, warn=None,
+                           spell=None):
     """`(kept, refused)`: a standing event stands only where its source may
     author the world.
 
@@ -3044,17 +3411,14 @@ def standing_is_authorship(events, event_inputs, identity_index, warn=None):
         if isinstance(entry, dict) and str(entry.get("entity_id") or "").strip():
             mode_of[str(entry["entity_id"]).strip()] = normalize_player_authority(
                 entry.get("authority_mode"))
-    names = {str(key): str(name or "").strip()
-             for key, name in (identity_index or {}).items()}
-    key_of = {name.casefold(): key for key, name in names.items() if name}
-    key_of.update({key.casefold(): key for key in names})
+    spellings = _Spellings(identity_index, None, spell)
     kept, refused = [], []
     for event in events or []:
         if not isinstance(event, dict) or not is_standing(event):
             kept.append(event)
             continue
         source = str(event.get("source_entity_id") or "").strip()
-        key = key_of.get(source.casefold(), source)
+        key = spellings.person(source) or source
         mode = mode_of.get(key)
         if mode is not None and "world" in PLAYER_AUTHORITY_GRANTS[mode]:
             kept.append(event)
@@ -3683,7 +4047,66 @@ def _new_objects(events):
     return found
 
 
-def reconcile_rooms(ctx, rooms_answer, events, prose, scene=None):
+def _made_things_rooms(events, objects, scene, identity_index, authored):
+    """`{entity_id: room or None}`: where each thing in `objects` (made this
+    beat) stands once the beat's events are over, as far as they say -- its
+    own `positions`, an `inventory_ops` transfer to a room, to a fixture of
+    one, or to a body (where that body ends), else the room of the body whose
+    event made it (`mint_source_rooms`). None where they do not say: such a
+    thing is stood where the beat is (`director._mint_fallback_room`), which
+    may be a room being authored."""
+    sc = scene if isinstance(scene, dict) else {}
+    held_rooms = {str(rid): room for rid, room in (sc.get("rooms") or {}).items()}
+    all_rooms = {**held_rooms, **{str(rid): room for rid, room in (authored or {}).items()}}
+    anchor_room = {}
+    for rid, room in all_rooms.items():
+        for aid in ((room or {}).get("anchors") or {}) if isinstance(room, dict) else ():
+            anchor_room[str(aid)] = rid if anchor_room.get(str(aid), rid) == rid else None
+    index = {str(key): str(value) for key, value in (identity_index or {}).items() if value}
+    before = sc.get("positions") or {}
+    found = {eid: None for eid in objects}
+    found.update(mint_source_rooms(events, identity_index, before, list(objects),
+                                   set(all_rooms)))
+    spelling = {_fold(eid): eid for eid in objects}
+    spelling.update({_fold((record or {}).get("name")): eid for eid, record in objects.items()
+                     if _fold((record or {}).get("name")) not in spelling})
+    spelling.pop("", None)
+    where = {_fold(body): str(room).strip() for body, room in before.items()
+             if isinstance(room, str) and room.strip()}
+    holder = {}
+    for event in events or ():
+        for transform in (event.get("transforms") or ()) if isinstance(event, dict) else ():
+            patch = transform.get("patch") if isinstance(transform, dict) else None
+            if not isinstance(patch, dict):
+                continue
+            for who, room in (patch.get("positions") or {}).items() \
+                    if isinstance(patch.get("positions"), dict) else ():
+                if not (isinstance(room, str) and room.strip()):
+                    continue
+                where[_fold(who)] = room.strip()
+                if _fold(who) in spelling:
+                    found[spelling[_fold(who)]] = room.strip()
+                    holder.pop(spelling[_fold(who)], None)
+            for op in patch.get("inventory_ops") or () \
+                    if isinstance(patch.get("inventory_ops"), list) else ():
+                eid = spelling.get(_fold((op or {}).get("object_id"))) \
+                    if isinstance(op, dict) else None
+                to = str((op or {}).get("to_id") or "").strip() if eid else ""
+                if not to:
+                    continue
+                holder.pop(eid, None)
+                if to in all_rooms:
+                    found[eid] = to
+                elif to in anchor_room:
+                    found[eid] = anchor_room[to]
+                else:
+                    holder[eid] = to
+    for eid, body in holder.items():
+        found[eid] = where.get(_fold(index.get(body, body)))
+    return found
+
+
+def reconcile_rooms(ctx, rooms_answer, events, prose, scene=None, identity_index=None):
     """`(rooms_answer, record)`: the room author's own furnishings that are
     the same thing as an object the encoder made this beat, removed.
 
@@ -3706,6 +4129,19 @@ def reconcile_rooms(ctx, rooms_answer, events, prose, scene=None):
     objects = {eid: {"name": o.get("name"), "description": o.get("description")}
                for eid, o in _new_objects(events).items() if eid not in rooms and eid not in held}
     if not features or not objects:
+        return rooms_answer, record
+    # ONLY A THING THAT CAN STAND IN A ROOM THE AUTHOR FURNISHED CAN BE ONE OF
+    # ITS FIXTURES. The call was made whenever the author built anchored
+    # rooms and the encoder made any named object, wherever it stood -- a
+    # lantern picked up in the room the player stands in while the author
+    # builds the next one cost a whole model call (audit of 2026-11-01,
+    # `agents_director_prose_movement_rooms`, Efficiency 1). A thing the
+    # beat stands somewhere else is not asked about; one whose room it does
+    # not say still is (`_made_things_rooms`).
+    stands = _made_things_rooms(events, objects, scene, identity_index, rooms)
+    objects = {eid: o for eid, o in objects.items()
+               if stands.get(eid) is None or stands.get(eid) in features}
+    if not objects:
         return rooms_answer, record
     answer = _agent_json(
         "director_rooms", "director_rooms_reconcile", room_reconcile_prompt(ctx.language),
@@ -3974,10 +4410,13 @@ def encode(ctx, stage, sc, prose, model_payload, view, extras, channels, facts=N
     channels = list(channels)
     parts = (parts_of(channels, language) if parts is None
              else [part for part in parts if part_channel(part) in channels])
-    stage_channels = candidate_channels(stage, facts)
-    # EVERY ROOM CHANNEL STAYS REQUESTABLE under a room author: a doorway
-    # the prose opens is the encoder's to write whoever builds places
-    # (`sheet_channels`), so a beat whose grant missed it may ask for it.
+    # WHAT THE ENCODER MAY ASK FOR: every channel this stage carries, a
+    # channel whose op makes its record included whether or not the world
+    # holds one yet (`_MAKES_ITS_RECORD`) -- and every room channel under a
+    # room author: a doorway the prose opens is the encoder's to write
+    # whoever builds places (`sheet_channels`), so a beat whose grant missed
+    # it may ask for it.
+    stage_channels = candidate_channels(stage, facts, requestable=True)
     known = set(stage_channels)
     known_parts = set(parts_of([c for c in stage_channels if c in known], language))
 
@@ -4667,6 +5106,32 @@ def extension_channel_values(transforms, specs, stage, warn=None):
     return values
 
 
+def develop_as_planned_now(chat_id, develop, scene):
+    """`develop` (`{room: brief}`, the planned rooms a beat enters) with each
+    brief read again from the plan as it stands now
+    (`structure.planned_room_brief`); a room the plan no longer briefs keeps
+    the brief it came with.
+
+    THE BRIEF WAS READ WHEN THE STAGE'S PAYLOAD WAS BUILT
+    (`director_movement._planned_rooms_view`), and the rooms-in-view job
+    expands lots beside the turn (`director_lots.expand_lots_near`) -- the
+    one an actor is heading for first. A lot it expanded after that, or one
+    the beat's own expansion lost the race for, was then skipped by
+    `expand_entered_lots` and designed from the stale LOT brief: the whole
+    building's purpose in one room, the case `DESIGN_BUILDING_LOTS.md`'s
+    "never designed as one room" exists to prevent (audit of 2026-11-01,
+    `agents_director_prose_movement_rooms` F5). Read again, it is the
+    building's entry, as the beat's own expansion reads it."""
+    if not develop:
+        return develop
+    try:
+        from world.structure import planned_room_brief
+        fresh = planned_room_brief(chat_id, scene, list(develop)) or {}
+    except Exception:  # noqa: BLE001 -- the brief the stage was handed stands
+        return develop
+    return {rid: fresh.get(rid) or brief for rid, brief in develop.items()}
+
+
 def run(ctx, stage, sc, model_payload, view, extras, facts=None):
     """Author, select, encode, convert. Returns the stage's model output
     (`{"ledgers": rows}`) exactly where the causal Director's used to land,
@@ -4724,15 +5189,20 @@ def run(ctx, stage, sc, model_payload, view, extras, facts=None):
     # building in one room. One call in this beat; the building is then not
     # laid out by the tier, its entry being a room the story has seen.
     if develop:
+        chat = ctx.chat
+        chat_id = chat["id"] if isinstance(chat, dict) else chat.id
         try:
             from .director_lots import expand_entered_lots
-            chat = ctx.chat
             develop = expand_entered_lots(
-                chat["id"] if isinstance(chat, dict) else chat.id, develop, sc,
+                chat_id, develop, sc,
                 ctx.language, turn_idx=ctx.turn["idx"] if ctx.turn is not None else None,
                 frame_id=ctx.turn.get("frame_id") if ctx.turn is not None else None)
-        except Exception:  # noqa: BLE001 -- a lot never stops a beat
-            pass
+        except Exception as exc:  # noqa: BLE001 -- a lot never stops a beat
+            ctx.add_warning(f"{stage}: a lot this beat enters could not be "
+                            f"expanded into its building: {exc}")
+        # ...AND WHOEVER EXPANDED IT, THE BRIEF IS THE PLAN'S AS IT STANDS NOW
+        # (`develop_as_planned_now`).
+        develop = develop_as_planned_now(chat_id, develop, sc)
     # Designs prepared between turns for the planned rooms this beat enters.
     try:
         from .director_rooms import prepared_rooms
@@ -4876,8 +5346,9 @@ def run(ctx, stage, sc, model_payload, view, extras, facts=None):
         if rooms_answer and (rooms_answer.get("rooms") or {}):
             t2 = time.time()
             try:
-                rooms_answer, reconciled = reconcile_rooms(ctx, rooms_answer, events,
-                                                           prose, sc)
+                rooms_answer, reconciled = reconcile_rooms(
+                    ctx, rooms_answer, events, prose, sc,
+                    identity_index=identities_with_figures(model_payload, extras))
             except Exception as exc:
                 reconciled = {"failed": str(exc)}
             if reconciled:
@@ -4904,17 +5375,22 @@ def run(ctx, stage, sc, model_payload, view, extras, facts=None):
     events = bodies_stand_in_rooms(events, sc, ((rooms_answer or {}).get("rooms") or {}),
                                    warn=ctx.add_warning)
     identities = identities_with_figures(model_payload, extras)
+    # EVERY SPELLING OF A MIND IS THAT MIND to the agency floors below
+    # (`_Spellings`): the cast's one spelling policy, the one the commit
+    # folds a position by, beside the scene's records.
+    spell = _cast_spelling(ctx)
     # THE PLAYER'S OWN ACCOUNT PLACES THE PLAYER (`the_account_places_its_
     # own_body`), before the walk floor reads whose walk each one is: the
     # walk it writes is her own declaration's, and stands.
     if stage == "interpret":
         events = the_account_places_its_own_body(
             events, model_payload.get("event_inputs") or [], identities, sc,
-            warn=ctx.add_warning)
+            warn=ctx.add_warning, spell=spell)
     walks_refused = []
     events = a_walk_is_its_owners(
         events, model_payload.get("event_inputs") or [],
-        identities, sc, warn=ctx.add_warning, refusals=walks_refused)
+        identities, sc, warn=ctx.add_warning, refusals=walks_refused,
+        spell=spell)
     # A happening no body performs is re-filed under the world BEFORE the
     # interpret stage refuses another mind's acts: filed under a mind, a hen
     # clucking down the lane would otherwise be refused as that mind's
@@ -4933,7 +5409,7 @@ def run(ctx, stage, sc, model_payload, view, extras, facts=None):
     if stage == "interpret" and str(getattr(ctx, "input", "") or "").strip():
         events, conduct_refused = conduct_is_its_owners(
             events, model_payload.get("event_inputs") or [],
-            identities, sc, warn=ctx.add_warning)
+            identities, sc, warn=ctx.add_warning, spell=spell)
         # A WALK REFUSED IS CONDUCT REFUSED (`a_walk_is_its_owners`), and it
         # is recorded where the rest is: there `director.director_interpret`
         # hands its offer to the mind, and `already_happened` sees that the
@@ -4943,7 +5419,7 @@ def run(ctx, stage, sc, model_payload, view, extras, facts=None):
         conduct_refused = walks_refused + conduct_refused
         events, standing_refused = standing_is_authorship(
             events, model_payload.get("event_inputs") or [],
-            identities, warn=ctx.add_warning)
+            identities, warn=ctx.add_warning, spell=spell)
         events, time_refused = skip_is_authorship(
             events, model_payload.get("event_inputs") or [], warn=ctx.add_warning)
     # THE WRITER SET THIS BEAT'S TIME: at a resolve whose players' input
@@ -4977,6 +5453,12 @@ def run(ctx, stage, sc, model_payload, view, extras, facts=None):
     # resolve after everything the players' input moved it -- so a part of
     # the day the resolve names again is reached now, never skipped to twice.
     _start_hour, _day_length = stage_start_hour(ctx, stage)
+    # A CHANNEL THE PROSE DIRECTOR RETIRED IS DROPPED OUT LOUD
+    # (`RETIRED_CHANNELS`), before it is a row's category or a hand's scope.
+    events, retired = without_retired_channels(events)
+    if retired:
+        ctx.add_warning(f"{stage}: the encoder wrote {', '.join(retired)}, which "
+                        "the prose Director retired; dropped")
     rows, transforms = ledger_from_events(
         events, start_hour=_start_hour, day_length=_day_length)
     # A STRETCH NOTHING COULD PRICE IS SAID HERE, where the solve was tried:
@@ -5008,6 +5490,8 @@ def run(ctx, stage, sc, model_payload, view, extras, facts=None):
     }
     if repair_record is not None:
         record["repair"] = repair_record
+    if retired:
+        record["retired_channels"] = retired
     # What the interpretation wrote that the stage did not keep, on the
     # record the step stores: another mind's conduct (`conduct_is_its_owners`
     # and the walks `a_walk_is_its_owners` refused, whose offers
