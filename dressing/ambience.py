@@ -56,9 +56,11 @@ import re
 
 from core import outofband
 from dressing.backdrops import (_room_of_player, branch_lineage, place_desc,
-                       scene_after_turn, time_bucket)
+                       scene_after_turn, scene_time_bucket)
 from core.db import get_setting, wget, wset
 from core.paths import INSTALL_ROOT
+from language_runtime import HANGUL, HAN, KATAKANA, THAI, fold_text
+from world.spatial import effective_adjacent
 from world.weather import weather_for_room, weather_words
 
 # Fetched audio lives beside the backdrop cache and for the same reason:
@@ -281,18 +283,23 @@ def acoustic_fingerprint(scene, room_id, style=None):
         if value:
             state.append(value if isinstance(value, str)
                          else json.dumps(value, sort_keys=True, ensure_ascii=False))
+    # KEY TERMS IN THE ROOM'S OWN SCRIPT (`_key_terms`), byte-identical to
+    # the old `_keywords` for an English room so no stored bed is orphaned.
+    # Read in English alone, a Japanese room keyed name, desc and anchors as
+    # [] -- its hearth going cold kept its bed, and every two Japanese rooms
+    # scored 1.0 alike (dressing audit F10, 2026-11-01).
     return {
         "room": room_id,
-        "name": sorted(_keywords(room.get("name"), 4)),
+        "name": sorted(_key_terms(room.get("name"), 4)),
         # The people-stripped description, for the same reason backdrops hashes
         # the projected text: a room must not pay for a re-fetch because
         # someone was written into a sentence the query never sees.
-        "desc": sorted(_keywords(place_desc(room), 8)),
+        "desc": sorted(_key_terms(place_desc(room, scene), 8)),
         # The fixtures, which are what a room is usually heard through. A
         # hearth lit or gone cold is the sound of the place changing, and
         # without this the key could not tell those two rooms apart.
-        "anchors": sorted(_keywords(" ".join(_anchor_words(room)), 6)),
-        "time": time_bucket(scene.get("time_of_day")),
+        "anchors": sorted(_key_terms(" ".join(_anchor_words(room)), 6)),
+        "time": scene_time_bucket(scene),
         # The words, not the dict -- same reason as backdrops, with the
         # audible/visible split doing the work: an enclosed room's key moves
         # for rain it can hear and not for a sky it cannot see.
@@ -302,8 +309,8 @@ def acoustic_fingerprint(scene, room_id, style=None):
         # It was `genre` until that field left the guide (2026-09-04); the key
         # keeps its name so a story's existing beds are not orphaned by the
         # rename alone.
-        "genre": sorted(_keywords((style or {}).get("tone"), 2)),
-        "state": sorted(_keywords(" ".join(state), 6)),
+        "genre": sorted(_key_terms((style or {}).get("tone"), 2)),
+        "state": sorted(_key_terms(" ".join(state), 6)),
     }
 
 
@@ -582,7 +589,7 @@ def room_soundscape(scene, room_id):
     room = ((scene.get("rooms") or {}).get(room_id) or {})
     out = {k: room.get(k) for k in _PLACE_FIELDS if room.get(k)}
     if out.get("desc"):
-        out["desc"] = place_desc(room)
+        out["desc"] = place_desc(room, scene)
         if not out["desc"]:
             out.pop("desc")
     out["room"] = room_id
@@ -592,7 +599,7 @@ def room_soundscape(scene, room_id):
     anchors = _anchor_words(room)
     if anchors:
         out["anchors"] = anchors
-    bucket = time_bucket(scene.get("time_of_day"))
+    bucket = scene_time_bucket(scene)
     if bucket:
         out["time"] = bucket
     # Only what this room can hear of the sky. The reach is deliberately wider
@@ -613,9 +620,12 @@ def room_soundscape(scene, room_id):
     # Whether the room opens onto anywhere is audible in a way its exits'
     # bearings are not: an enclosed cell and a room open to a street are
     # different recordings. Only the count and the barrier kinds, never a
-    # destination.
+    # destination. Every doorway, declared from either side
+    # (`effective_adjacent`): read from `room["adjacent"]` alone, a cell open
+    # to a street only through the street's own edge was told it was sealed
+    # (dressing audit F3, 2026-11-01).
     barriers = sorted({str(edge.get("barrier") or "open")
-                       for edge in (room.get("adjacent") or [])
+                       for edge in effective_adjacent(scene, room_id)
                        if isinstance(edge, dict)})
     if barriers:
         out["openings"] = barriers
@@ -623,16 +633,39 @@ def room_soundscape(scene, room_id):
 
 
 def _keywords(text, limit=5):
-    words = [w for w in re.findall(r"[a-z][a-z'-]{2,}", str(text or "").casefold())
-             if w not in _STOPWORDS]
+    """Search words: English, because the libraries on the far end are indexed
+    in English (a Japanese term in a Freesound query finds nothing). The KEY
+    reads every script -- `_key_terms`."""
+    return _first_unique(
+        re.findall(r"[a-z][a-z'-]{2,}", str(text or "").casefold()), limit)
+
+
+def _first_unique(words, limit):
     seen, out = set(), []
     for word in words:
-        if word not in seen:
-            seen.add(word)
-            out.append(word)
+        if word in _STOPWORDS or word in seen:
+            continue
+        seen.add(word)
+        out.append(word)
         if len(out) >= limit:
             break
     return out
+
+
+#: A KEY term: the old `_keywords` word in a spaced script -- the same
+#: alternative first, so an English room's key is byte-identical -- or a run
+#: of one unspaced script: kanji (one character is already a word: 炉, 雨),
+#: or two or more katakana, Hangul or Thai. Hiragana runs are particles and
+#: inflection, the function words `_STOPWORDS` drops in English, so they are
+#: left out by script rather than by a list.
+_KEY_TERM = re.compile(r"[a-z][a-z'-]{2,}|[%s]+|[%s]{2,}|[%s]{2,}|[%s]{2,}"
+                       % (HAN, KATAKANA, HANGUL, THAI))
+
+
+def _key_terms(text, limit=5):
+    """The terms a room's acoustic KEY is made of, in any script, NFKC and
+    casefolded (`language_runtime.fold_text`)."""
+    return _first_unique(_KEY_TERM.findall(fold_text(text)), limit)
 
 
 def compose_query(place, style=None):
@@ -674,14 +707,22 @@ def compose_query(place, style=None):
             terms.extend(_keywords(style[key], 1))
     seen, out = set(), []
     for term in terms:
-        if term not in seen:
+        if term not in seen and term != "ambience":
             seen.add(term)
             out.append(term)
     # "ambience" and "room tone" are what the recordings on the other end are
     # actually tagged with; without them a query for "kitchen" returns knives
-    # and cupboard doors rather than the sound of a kitchen.
-    out.append("ambience")
-    return " ".join(out[:9])
+    # and cupboard doors rather than the sound of a kitchen. The anchor is
+    # appended AFTER the cap: capped with it, a room of nine or more terms
+    # lost it -- "waystation main hall crackling stone hearth warm modest
+    # evening" (dressing audit F8, 2026-11-01) -- and with no model that
+    # draft is the search, every rung of its ladder unanchored.
+    return " ".join(out[:QUERY_TERMS - 1] + ["ambience"])
+
+
+#: How many words a deterministic query holds, its "ambience" anchor
+#: included. Nine since the first draft; named so the cap is one number.
+QUERY_TERMS = 9
 
 
 # What rain SOUNDS LIKE is mostly what it is landing on: the same downpour is

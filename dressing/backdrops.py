@@ -33,21 +33,26 @@ walking back into a room you left is instant and free.
 
 from __future__ import annotations
 
+import functools
 import hashlib
 import json
 import os
 import re
+import threading
 
 from core import outofband
 from core.db import q, wget_for_frame
 from core.logging_utils import logger
+from language_runtime import (find_names, fold_words, installed_language_packs,
+                              join_sentences, linguistic, name_boundary_regex,
+                              script_of, split_sentences)
 from persist.steps import active_content
 from world.spatial import (
     _PASSABLE_BARRIERS, ROOM_SIZES, body_cell, effective_adjacent,
     effective_facing, effective_light, effective_room_size, light_at,
     normalize_barrier, normalize_bearing, normalize_footprint,
     normalize_height, normalize_light, normalize_vertical, opposite_bearing,
-    room_grid, room_of, room_of_record, PositionsIndex,
+    room_grid, room_of, room_of_record, scene_names_body, PositionsIndex,
 )
 from core.paths import INSTALL_ROOT
 from world.weather import room_exposure, weather_for_room, weather_words
@@ -141,7 +146,24 @@ def time_bucket(value):
     return ""
 
 
-def place_desc(room):
+def scene_time_bucket(scene):
+    """The coarse time of day a scene is in: its canonical `day_phase` when the
+    day cycle keeps one, else what `time_bucket` can read off the label.
+
+    ONE FACT, TWO SPELLINGS, AND THE READER PICKED THE ONE IT COULD NOT
+    PARSE (dressing audit F11, 2026-11-01): `day_phase` is written by the day
+    cycle on every beat of a clocked story, in the cycle's own closed
+    vocabulary, while `time_of_day` keeps whatever label the story wrote
+    unless that label READS as another phase. `time_bucket("夕方")`,
+    `time_bucket("Late in the third watch")` and `time_bucket("午後9時")` are
+    all '', so a Japanese story's backdrops and beds never carried the hour.
+    Both modules key on this, so a picture and a bed agree on the hour."""
+    phase = str((scene or {}).get("day_phase") or "").strip().casefold()
+    return _PHASE_BUCKETS.get(phase) or time_bucket(
+        (scene or {}).get("time_of_day"))
+
+
+def place_desc(room, scene=None):
     """A room's description with its occupants stripped out.
 
     The single definition of "what this place looks like", used by BOTH the
@@ -149,8 +171,12 @@ def place_desc(room):
     hashes text the prompt never sees would pay for regenerations the picture
     cannot show. Defined here, above its callers, because `visual_signature`
     is the first of them.
+
+    `scene`, when given, adds the scene's BODIES to what is stripped: a
+    sentence naming any of them goes, in any script (`_scene_bodies`).
     """
-    return to_visual_register(_setting_only((room or {}).get("desc") or ""))
+    return to_visual_register(_setting_only((room or {}).get("desc") or "",
+                                            _scene_bodies(scene)))
 
 
 def _room_of_player(scene, player_name):
@@ -232,8 +258,8 @@ def visual_signature(scene, room_id, style=None, viewer=None, *,
         # function of what actually reaches the image prompt. Hashing the raw
         # text would regenerate a room because someone was written into (or out
         # of) its description -- a change the picture cannot show.
-        "desc": place_desc(room),
-        "time": time_bucket(scene.get("time_of_day")),
+        "desc": place_desc(room, scene),
+        "time": scene_time_bucket(scene),
         "location": scene.get("location") or "",
         # Without this a room that goes dark keeps serving its lit backdrop --
         # the cache is keyed on what changes how the room LOOKS, and nothing
@@ -396,16 +422,193 @@ _PERSON_WORDS = re.compile(
     r"onlookers?|crowds?|people|figures?)\b",
     re.I)
 
-# Sentence boundaries, keeping the terminator with the sentence it ends.
-_SENTENCE_SPLIT = re.compile(r"(?<=[.!?])\s*")
+#: A quotation a description puts dialogue in: straight and curly double
+#: quotes and guillemets. The class used to repeat the ASCII quote where the
+#: curly ones were meant (dressing audit F22), so "“Get out of my office!”"
+#: survived into the prompt. Replaced by a sentence BREAK, see below.
+_QUOTED = re.compile('["\u201c\u201d\u00ab\u00bb][^"\u201c\u201d\u00ab\u00bb]*'
+                     '["\u201c\u201d\u00ab\u00bb]')
+#: A quotation in the corner brackets Japanese prose quotes speech with.
+#: Removed OUTRIGHT rather than turned into a break: Japanese carries its
+#: sentence on through the quote (ヒナミは「行こう」と言った), so the sentence
+#: has to be judged whole -- a break would leave "ヒナミは" and "と言った"
+#: as two halves, only one of them naming her.
+_QUOTED_CJK = re.compile("[\u300c\u300e][^\u300c\u300d\u300e\u300f]*[\u300d\u300f]")
 
 
-def _setting_only(text):
+def _scene_bodies(scene):
+    """Every spelling of every BODY the scene holds: the key it stands under,
+    its entity record's name and aliases, and the script-run parts of a name
+    written in an unspaced script (佐藤ヒナミ -> 佐藤, ヒナミ, which no
+    whitespace split finds). Who is a body is `scene_names_body`'s answer,
+    the one predicate -- a lamp in the room is part of the picture.
+
+    For the people strip: a sentence naming one of these is about that body,
+    whatever its verb (dressing audit F1: in Japanese the English verb and
+    pronoun tables saw nothing, and 'ヒナミがカウンターに寄りかかっている'
+    reached the image prompt). Every body the scene holds, never only those
+    standing in the room, so the cache key cannot move because someone walked
+    in (rule 3)."""
+    if not isinstance(scene, dict):
+        return ()
+    entities = scene.get("entities") if isinstance(scene.get("entities"), dict) else {}
+    tables = {source: scene.get(source) for source in ("positions",) + _BODY_LEDGERS}
+    # Order-free (frozensets, no sort): this runs on the backdrop and
+    # ambience polls, several times per request.
+    digest = (frozenset(str(k) for k in entities),
+              frozenset(
+                  (str(k), str(v.get("kind") or ""), str(v.get("name") or ""),
+                   tuple(str(a) for a in v.get("aliases"))
+                   if isinstance(v.get("aliases"), list) else ())
+                  for k, v in entities.items() if isinstance(v, dict)),
+              tuple((source, frozenset(str(k) for k in table))
+                    for source, table in tables.items()
+                    if isinstance(table, dict)))
+    with _BODIES_LOCK:
+        cached = _BODIES_CACHE.get(digest)
+    if cached is not None:
+        return cached
+    candidates = set(str(k) for k in entities)
+    for table in tables.values():
+        if isinstance(table, dict):
+            candidates.update(str(k) for k in table)
+    forms = set()
+    for key in candidates:
+        if not scene_names_body(scene, key):
+            continue
+        spellings = [key]
+        record = entities.get(key)
+        if isinstance(record, dict):
+            spellings.append(str(record.get("name") or ""))
+            aliases = record.get("aliases")
+            if isinstance(aliases, list):
+                spellings.extend(str(a or "") for a in aliases)
+        for spelling in spellings:
+            spelling = spelling.strip()
+            if not spelling:
+                continue
+            forms.add(spelling)
+            parts = fold_words(spelling)
+            if len(parts) > 1 and any(script_of(part) for part in parts):
+                forms.update(part for part in parts if len(part) >= 2)
+    result = tuple(sorted(forms))
+    with _BODIES_LOCK:
+        if len(_BODIES_CACHE) >= _BODIES_CACHE_SIZE:
+            _BODIES_CACHE.pop(next(iter(_BODIES_CACHE)))
+        _BODIES_CACHE[digest] = result
+    return result
+
+
+#: The ledgers that only a body holds a row in, read here as CANDIDATES for
+#: `scene_names_body` (which decides). A copy of
+#: `world.spatial_identity._BODY_LEDGERS`, which the `world.spatial` facade
+#: does not export; keep the two equal.
+_BODY_LEDGERS = ("attire", "scales", "vitals", "overlays")
+#: Body spellings by a digest of everything `scene_names_body` reads (entity
+#: ids, kinds, names, aliases; the positions and ledger keys), so the poll
+#: path pays the ladder once per cast, not once per sentence: 3.5 ms per call
+#: on chat 1's 53 candidates, measured 2026-11-01. Bounded; oldest out first.
+_BODIES_CACHE_SIZE = 64
+_BODIES_CACHE: dict = {}
+_BODIES_LOCK = threading.Lock()
+
+
+def _pack_person_patterns():
+    """Every installed story pack's pronoun recogniser for a person
+    (`agents.common._NPC_PRONOUN_RE`): the people strip reads the PACKS
+    beside its English tables (owner decision 2, UNBUILT_WORLD 1.65), and
+    all of them at once, because a description's language is not the
+    story's -- an English story imports a Japanese card's room text."""
+    ids = tuple(sorted(pid for pid, pack in installed_language_packs().items()
+                       if pack.story))
+    return _pack_person_patterns_for(ids)
+
+
+@functools.lru_cache(maxsize=8)
+def _pack_person_patterns_for(language_ids):
+    patterns = []
+    for language_id in language_ids:
+        pattern = linguistic("agents.common", "_NPC_PRONOUN_RE", language_id)
+        if pattern.pattern not in {p.pattern for p in patterns}:
+            patterns.append(pattern)
+    return tuple(patterns)
+
+
+#: A name followed by its possessive -- "Tamamo's shrine", "Moses' room" --
+#: names whose the place is, not who stands in it.
+_OWNER = re.compile(r"(?:['\u2019]s|(?<=[sS])['\u2019])(?![^\W_])")
+#: Where a clause opens, in a script that spaces its words: the start of the
+#: sentence, or after a comma, semicolon, colon, opening bracket or dash,
+#: with any opening quotes. A body named THERE is the clause's subject.
+_CLAUSE_OPENING = re.compile(
+    "(?:^|[,;:(\u2014\u2013]|\\s-\\s)[\\s\"'\u201c\u2018(\\[]*")
+#: Japanese says a name is the subject by its particle, not by its place in
+#: the sentence: は (topic), が (subject), も (also), after an optional
+#: honorific or plural suffix. A closed grammatical class.
+_JA_SUBJECT = re.compile(
+    "(?:%s)?[\u306f\u304c\u3082]" % "|".join(
+        ("さん", "さま", "様", "ちゃん", "くん", "君", "殿", "どの", "氏",
+         "たち", "達", "ら", "等")))
+
+
+def _is_subject(sentence, start, end):
+    """Is the name at `sentence[start:end]` the subject of its clause? Where
+    it runs straight on into an unspaced script, its particle says so; in a
+    spaced script, its place does: it opens the sentence or a clause."""
+    after = sentence[end:end + 1]
+    if after and script_of(after):
+        return bool(_JA_SUBJECT.match(sentence, end))
+    return any(m.end() == start for m in _CLAUSE_OPENING.finditer(sentence))
+
+
+def _names_a_person(sentence, bodies=()):
+    """Does a body of the scene, or a person by a pack's pronoun, stand as
+    the SUBJECT of this sentence or one of its clauses? A pronoun counts only
+    where it stands as a whole word in its own script (`name_boundary_regex`):
+    彼方, "yonder", is not 彼.
+
+    SUBJECT-LIMITED, BY MEASUREMENT (owner DB, 156 live scenes, 2026-11-01):
+    any-mention dropped 19 sentences on 156 live scenes, 15 wrongly;
+    subject-limited 4 to 1. The four are the sentences that put a person in
+    the picture ("Hinami lies unconscious on the floor, bleeding."; "Tamamo is
+    preparing a simple meal ... at the hearth"; two of "Subject Nine" in a
+    duct), the one is history ("Yusuf Kessler passed through this corridor on
+    the first day ..."). What any-mention also dropped names a body without
+    putting it there: a scent ("and Tamamo herself"), a fixture ("a VESPER
+    sensor blind spot"), a past ("where the night clerk had been resting").
+    A guard that fires on valid output is cut back once its rate is measured
+    (owner ruling); a person in a sentence the strip now keeps can still reach
+    the picture, and the "no people" instruction is then the only half left.
+
+    A body named in the English POSSESSIVE never counts ("Tamamo's shrine",
+    "the second to Hinami's room": whose the place is). In Japanese the
+    particle decides, so ヒナミの (whose) and ヒナミに (to whom) do not count
+    and ヒナミが / ヒナミは / ヒナミも do."""
+    for start, end, _form in (find_names(sentence, bodies, flags=0)
+                              if bodies else ()):
+        if not _OWNER.match(sentence, end) and _is_subject(sentence, start, end):
+            return True
+    for pattern in _pack_person_patterns():
+        for match in pattern.finditer(sentence):
+            if (name_boundary_regex(match.group(0)).match(sentence, match.start())
+                    and _is_subject(sentence, match.start(), match.end())):
+                return True
+    return False
+
+
+def _setting_only(text, bodies=()):
     """Drop sentences that are about people acting or speaking.
 
     Leaves architecture, light, weather, materials and sound. Conservative in
     the right direction: over-stripping yields a thinner prompt, whereas
     under-stripping puts a character in the picture.
+
+    A sentence goes when it names a person by the English tables below, by
+    any story pack's pronoun recogniser, or by name: `bodies` is every
+    spelling of every body the scene holds (`_scene_bodies`). Sentences are
+    the script's own (`language_runtime.split_sentences`), so a Japanese
+    description is judged one 。 at a time rather than as one sentence the
+    English tables never matched (dressing audit F1, 2026-11-01).
     """
     # Quotes FIRST. Removing person-clauses first strips the attribution
     # ("He says,") while leaving the quoted sentence behind as if it were
@@ -414,15 +617,18 @@ def _setting_only(text):
     # Replace a quote with a sentence BREAK, not a space: the closing period
     # usually sits inside the quotation marks, so substituting whitespace
     # welded "He says," onto the next sentence and the person-clause strip then
-    # ate the setting prose along with it.
-    stripped = re.sub(r'[""«»"][^""«»"]*[""«»"]', " . ", str(text or ""))
+    # ate the setting prose along with it. A corner-bracket quotation is cut
+    # out whole instead (`_QUOTED_CJK`).
+    stripped = _QUOTED_CJK.sub("", str(text or ""))
+    stripped = _QUOTED.sub(" . ", stripped)
     # Sentence at a time. Dropping a whole sentence is what the old
     # clause-spanning patterns did too -- they just paid quadratically for the
     # privilege of finding its edges. See `_PERSON_WORDS`.
-    stripped = " ".join(
-        sentence for sentence in _SENTENCE_SPLIT.split(stripped)
-        if sentence and not _PERSON_WORDS.search(sentence)
-        and not _BODY_WORDS.search(sentence))
+    stripped = join_sentences(
+        sentence for sentence in split_sentences(stripped)
+        if not _PERSON_WORDS.search(sentence)
+        and not _BODY_WORDS.search(sentence)
+        and not _names_a_person(sentence, bodies))
     # Fragments left by removing a quote mid-sentence.
     stripped = re.sub(r"(?<![.!?])\s*\.\.+", " ", stripped)
     # Collapse the runs of bare periods left where consecutive quotes were
@@ -592,6 +798,12 @@ def _light_sources_in(scene, room_id):
     for eid, entity in ((scene or {}).get("entities") or {}).items():
         if not isinstance(entity, dict) or not entity.get("light_source"):
             continue
+        # A BODY that gives light is never named here: "lit by Elowen the
+        # Lightbearer" put a person in the picture and moved its key when she
+        # walked in or out (dressing audit F4, 2026-11-01). What she gives
+        # still reaches the picture, through `_viewer_light`/`effective_light`.
+        if scene_names_body(scene, eid):
+            continue
         state = entity.get("state") if isinstance(entity.get("state"), dict) else {}
         if state.get("lit", True) in (False, 0, "off", "false", "no", "doused", "out"):
             continue
@@ -688,12 +900,14 @@ def _walls_of(scene, room_id):
     sentence is (`_setting_only`), because the picture is of an empty room."""
     room = ((scene or {}).get("rooms") or {}).get(room_id) or {}
     anchors = room.get("anchors") if isinstance(room.get("anchors"), dict) else {}
+    bodies = _scene_bodies(scene)
     out = {}
     for aid in sorted(anchors):
         anchor = anchors[aid]
         if not isinstance(anchor, dict) or anchor.get("implicit"):
             continue
-        desc = to_visual_register(_setting_only(str(anchor.get("desc") or aid)))
+        desc = to_visual_register(_setting_only(str(anchor.get("desc") or aid),
+                                                bodies))
         if not desc:
             continue
         rec = {"desc": desc}
@@ -715,13 +929,15 @@ def _openings_of(scene, room_id):
     room holds them: a window is the wall's, never furniture against it."""
     edges = [e for e in effective_adjacent(scene or {}, room_id)
              if isinstance(e, dict) and e.get("to")]
+    bodies = _scene_bodies(scene)
     out = {}
     for edge in sorted(edges, key=lambda e: str(e["to"])):
         barrier = normalize_barrier(edge.get("barrier"))
         if barrier == "wall":
             continue
         rec = {"barrier": barrier}
-        name = to_visual_register(_setting_only(str(edge.get("name") or "")))
+        name = to_visual_register(_setting_only(str(edge.get("name") or ""),
+                                                bodies))
         if name:
             rec["name"] = name
         vertical = normalize_vertical(edge.get("vertical"))
@@ -733,7 +949,7 @@ def _openings_of(scene, room_id):
     room = ((scene or {}).get("rooms") or {}).get(room_id) or {}
     for window in room_windows(room):
         rec = {"barrier": "window"}
-        name = to_visual_register(_setting_only(window["name"]))
+        name = to_visual_register(_setting_only(window["name"], bodies))
         if name:
             rec["name"] = name
         out.setdefault(window["dir"], []).append(rec)
@@ -844,7 +1060,7 @@ def _sky_of(scene, room_id, exposure):
     if exposure not in _EXPOSURE_PHRASE:
         return {}
     out = {"exposure": exposure}
-    bucket = time_bucket((scene or {}).get("time_of_day"))
+    bucket = scene_time_bucket(scene)
     if bucket:
         out["time"] = bucket
     words = weather_words(weather_for_room(scene or {}, room_id), "sight")
@@ -892,8 +1108,8 @@ def room_brief(scene, room_id, viewer=None, *, regions=None,
         region = room_region(scene, room_id)
         entry = regions.get(region) if region else None
         look = to_visual_register(_setting_only(
-            str((entry or {}).get("look") or ""))) if isinstance(entry, dict) \
-            else ""
+            str((entry or {}).get("look") or ""), _scene_bodies(scene))) \
+            if isinstance(entry, dict) else ""
         if look:
             out["look"] = look
     return out
@@ -931,7 +1147,7 @@ def room_projection(scene, room_id, viewer=None, *, regions=None,
     # No raw-text fallback when stripping empties it: a description made
     # entirely of occupants must yield NO description, not the occupants back.
     if out.get("desc"):
-        out["desc"] = place_desc(room)
+        out["desc"] = place_desc(room, scene)
         if not out["desc"]:
             out.pop("desc")
     if out.get("light"):
@@ -946,21 +1162,32 @@ def room_projection(scene, room_id, viewer=None, *, regions=None,
     # closet still reads "Back Alley, City". A wrong one-line location would
     # render a starship cupboard as a city alley, and the room description
     # already says "standard starship deck plating", so it earns nothing.
-    bucket = time_bucket(scene.get("time_of_day"))
+    bucket = scene_time_bucket(scene)
     if bucket:
         out["time"] = bucket
     # Adjacency as pure layout: which way the room opens, never who is through
-    # the door.
+    # the door. EVERY doorway, declared from either side: which rooms an edge
+    # joins has one answer, `effective_adjacent` (AGENTS.md), and this read
+    # `room["adjacent"]` alone -- so a doorway only the neighbour declared
+    # was missing, and an edge's raw name reached the prompt model with no
+    # people strip, the one copy `_openings_of` did not clean (dressing audit
+    # F3, 2026-11-01).
     exits = []
-    for edge in (room.get("adjacent") or []):
+    bodies = _scene_bodies(scene)
+    for edge in effective_adjacent(scene, room_id):
         if not isinstance(edge, dict):
             continue
         # `name` rides along because it is pure layout too, and it is the only
         # field that says what the way out IS. A backdrop drawn from
         # {barrier, vertical, dir} alone can put an opening in the north wall
         # and cannot know it is a staircase.
-        exits.append({k: edge[k] for k in ("barrier", "vertical", "dir", "name")
-                      if edge.get(k)})
+        exit_ = {k: edge[k] for k in ("barrier", "vertical", "dir")
+                 if edge.get(k)}
+        name = to_visual_register(_setting_only(str(edge.get("name") or ""),
+                                                bodies))
+        if name:
+            exit_["name"] = name
+        exits.append(exit_)
     if exits:
         out["exits"] = exits
     # Per-room visual overlays (smoke, darkness, wreckage) DO belong: they
@@ -1350,9 +1577,9 @@ def compose_prompt(place, style=None, flavour=""):
     if place.get("look"):
         parts.append("in the manner of the district: %s" % place["look"])
     if place.get("overlays"):
-        parts.append(", ".join(str(o) for o in place["overlays"]))
+        parts.append(_prompt_words(place["overlays"]))
     if place.get("weather"):
-        parts.append(", ".join(str(w) for w in place["weather"]))
+        parts.append(_prompt_words(place["weather"]))
     if place.get("time"):
         parts.append("time: %s" % place["time"])
     # Lighting, in words an image model acts on. Omitted at "lit", which is the
@@ -1401,7 +1628,27 @@ _REVISION_CLOSE = (
 # revision is allowed to talk about. `name`/`desc` are deliberately absent --
 # they are the fabric, they are already in the picture, and restating them is
 # how a revision turns back into a generation.
+#
+# `ground` MEANS TWO THINGS and only one of them is state. It is here for the
+# weather floor's text ("churned mud", "fresh snow"); but an OPEN room's brief
+# files its FIXTURES under `ground` too (`room_brief`, the open-air word for
+# `walls`), so the revision treated a hilltop's cairn as a change and printed
+# the brief's mapping with `%s`: "Change only what follows: ground: {'n':
+# [{'desc': 'a tumbled stone cairn'}]}" (dressing audit F9, 2026-11-01).
+# Fixtures are fabric, as walls are: a mapping-shaped `ground` is skipped
+# (`compose_revision`), and no value reaches the prompt as a repr
+# (`_prompt_words`).
 _REVISION_STATE_KEYS = ("overlays", "weather", "ground")
+
+
+def _prompt_words(value):
+    """A prompt value as words: a list's items and a mapping's values, joined
+    -- never a Python repr, which an image model reads as text to draw."""
+    if isinstance(value, dict):
+        return ", ".join(w for w in (_prompt_words(v) for v in value.values()) if w)
+    if isinstance(value, (list, tuple)):
+        return ", ".join(w for w in (_prompt_words(v) for v in value) if w)
+    return str(value if value is not None else "").strip()
 
 
 def compose_revision(place, style=None, previous=None):
@@ -1417,11 +1664,11 @@ def compose_revision(place, style=None, previous=None):
         value = place.get(key)
         if not value:
             continue
+        if key == "ground" and isinstance(value, dict):
+            continue          # an open room's fixtures: fabric, see above
         if (previous or {}).get(key) == value:
             continue          # already true of the image; saying so risks a redraw
-        if isinstance(value, (list, tuple)):
-            value = ", ".join(str(v) for v in value)
-        changes.append("%s: %s" % (key, value))
+        changes.append("%s: %s" % (key, _prompt_words(value)))
     lighting = _LIGHT_PROMPT.get(normalize_light(place.get("light")))
     if lighting and (previous or {}).get("light") != place.get("light"):
         changes.append(lighting)

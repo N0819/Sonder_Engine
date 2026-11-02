@@ -1813,27 +1813,16 @@ _UNSPACED_SCRIPT = re.compile(
 def name_boundary_pattern(form: str) -> str:
     """Match `form` as a whole name, in whatever script the name is written.
 
-    `\\b` and `(?<!\\w)` assert a transition between word and non-word
-    characters, which only describes scripts that put spaces between words.
-    Japanese particles are word characters, so `ヒナミに` never matched `ヒナミ`
-    and every name-keyed guard silently stopped firing -- identity scrubbing,
-    concealment redaction and name fidelity alike, each failing OPEN with no
-    warning because "no match" and "nothing to redact" are the same answer.
-
-    The decision is per-NAME, not per-language: a Japanese story carries Latin
-    names through code-switching and imported cards, and an English story
-    carries Japanese ones. Each end of the form is judged by its own script.
-
-    The boundary that IS applied excludes only spaced-script letters, so a
-    Latin name still refuses to match inside `Hinamis` while matching in
-    `彼はHinamiに`, where the neighbours are Japanese.
+    A DELEGATE: the rule is `language_runtime.name_boundary_pattern`'s, which
+    states it per script (kana and kanji included) and is where a change to
+    it belongs. Kept under this name because forty call sites import it from
+    here. `\\b` and `(?<!\\w)` describe scripts that space their words, and
+    the old rule here put no assertion at all on a kana or kanji edge -- so
+    ヒナミ matched inside ヒナミコ and レイ inside プレイヤー (dressing audit
+    F7, 2026-11-01).
     """
-    text = str(form or "")
-    if not text:
-        return r"(?!)"  # never matches, rather than matching everywhere
-    lead = "" if _UNSPACED_SCRIPT.match(text[0]) else f"(?<![{_SPACED_WORD_CHARS}])"
-    tail = "" if _UNSPACED_SCRIPT.match(text[-1]) else f"(?![{_SPACED_WORD_CHARS}])"
-    return lead + re.escape(text) + tail
+    from language_runtime import name_boundary_pattern as _script_aware
+    return _script_aware(form)
 
 
 def name_boundary_regex(form: str, flags: int = 0):

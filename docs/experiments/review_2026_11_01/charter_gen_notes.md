@@ -1,0 +1,48 @@
+# working notes (world charter gen/run audit)
+- PREMISE: commits f9ba52ae 4d398090 8e3c60f2 17a2b3cb 1342bbde do NOT touch world/charter_skip.py (they touch agents/skip_stage.py, agents/skip_work.py, world/skip_itinerary.py, llm/llm_quality.py). charter_skip history: dbbe5532, 8557e755, cb69070e.
+- READ charter_skip.py 1-1096 full; charter_run.py 1-1640 full.
+- skip: seeds deterministic (stable_event_key); run() seed+index from 0, skip live loop seed+index-1 from index 1 -> same. advance_snapshot time_skip windows = skip_windows(previous_elapsed..). charter_skip grid_from=min(span_from, mind's charter last) -> other charters with different last: windows differ (doc says only "further behind" case). _catch_up uses run(seed=held seed) then live loop restarts seed+0 -> seeds reused; advance never catch-ups that way.
+- CAND skip _stretch_row: no windows (stretch < window midpoint) -> not_known unless asleep; vs skip_itinerary executor? check stretch_outcome & skip_work's treatment (not_known -> no work applied). executor asymmetry.
+- CAND skip _stretch_row no-windows: room=stretch room although body never moved; far_end from body.
+- CAND _seen sort ties on equal stranger labels -> set iteration order (salted) decides order + cap cut. determinism.
+- charter_run: step's `asleep` set used only for figs_in_focus (active mode). check needs (rest) ignore asleep directive? -> a declared sleep in skip doesn't restore rest? needs: advance_needs(owned_needs, owned_bodies, movable_watch...) - check if lifted body sleeping restores rest.
+- PERF _remember_experience: list copy + full sort per append, fold scan up to EXPERIENCE_CAP=4000.
+- PERF encounter loop: post_of dict rebuilt per encounter (inside loop).
+- encounters loop O(company^2) per place up to CO_PRESENCE_WIDTH=64 (owner-named? check) + served_beside O(company^2).
+- F-CONFIRMED (probe charter_audit/skip_short_end.py): charter skip _directive picks stretch at window MIDPOINT; a final stretch (at_the_end = 1800 s, AT_THE_END_SECONDS) with no window midpoint is never walked; far_end() = body place = penultimate room (tavern) while log last row says house_a, not_known. Own executor far_end_of = last row room. Offers are taken up in at_the_end (skip_block doc) -> charter stories lose the offer's placement. windows printed [0,2,3,5,5.5,7.5,9.5,10,11.5,13].
+- F: windowless / budget-cut stretches -> not_known -> memory "set about it, and the rest was out of X's hands" (compositor skip_record_not_known) + skip_work tags "[own part]" (false reason). Same class as 4d398090 (away).
+- PERF/STALE-DOC: live_in_charter called sequentially per mind in skip_stage.skip_lives loop (line ~754); each gets its own 60 s deadline -> N x 60 s inline before perception; doc says "bounded by the time-skip budget"; each mind deep-copies whole registry & re-sims same town.
+- 8e3c60f2: reasoning_effort reaches all chat_complete calls in complete_validated_json (1285,1305,1768,1863). payload unchanged.
+- READ charter_generate.py 1-1949 full.
+- F-CONFIRMED lang: charter_generate._words [a-z0-9]+ (1000) + spatial_identity.room_name_words ascii; _featured_assignments omission repair (1085-1108): ja resident -> first post ('brewer') vs en -> harbour_master. snippet run.
+- unbounded: narrate_actual_history payload chronicle = ALL presim events (1811) uncapped input; output budget only. caller charter_runtime 2451.
+- event_chronicle id includes index (1677) -> positional id; stable only within one call.
+- _call_historian TypeError 'positional' test-double shim in prod (1844).
+- prompts: _CAST_SYSTEM list marked "not exhaustive" (ok); _PLAN_SYSTEM examples w/ class stated (ok).
+- populations share one `competence` dict object across bodies (1305) - harmless after JSON roundtrip? note only.
+- READ charter_history.py 1-897 full.
+- F-CONFIRMED CRASH(ja): ground_recent_history thin_memory len(memory.split())<45 (575-578) -> ja (no spaces) all dropped -> ValueError floor 10 (650-654). Under story_language_scope (web/app.py:6174 charters_generate; prelude.py:183) prompt policy common suffix makes the model write Japanese. snippet: 159 chars -> 1 word -> 0 usable. Sibling: story/journey_history.py:227 same split gate (generated mode).
+- lang: _public_words [a-z0-9]+ + English suffixes/stopwords (95-105) -> featured_resident_seed drops ALL abilities for ja cards (122-125).
+- lang/word-list: featured_resident_private_habits regex (private|alone|off-clock|locked|comfort|bake|sweet|doodle|plush|hobby|ritual) (154-156) over free card prose; single-character vocabulary; ja -> none. live via charter_runtime 1207/1234, greetings 1021.
+- lang: _first_person English regex (213-229), _named_surface English templates "I made private time", "I {past} X", "{actor} {past} me" (232-256), career "I worked as ... then ... in" (431-436), recent prefix ", in", ", with", " What remained afterward:" (614-622), shared "I shared ... with ..." (691-694) -> English text in pre-story memories of ja stories. (charter_promote.remembered English too, out of scope).
+- READ charter_trigger.py 1-881 full. Deterministic: sha256 draws; change_key stable (no salt). prune_trigger_last called from charter_model.normalize_charter 645 (bounded). pending_changes replaced each window -> no double fire across advance; deadline stop persists frame.
+- F-CONFIRMED SILENT: _normalize_rule then[:TRIGGER_THEN_CAP] (360) drops 4th op w/o refusal; normalize_triggers [:TRIGGER_CAP] sorted by id (455) evicts default blame_opens_a_quarrel when 32 authored ids sort before it; trigger_warnings empty. snippet.
+- institution intervene id "trigger:rule:at" (824) same for two changes same window - apply_due doesn't dedupe; diag only.
+- READ charter_social.py 1-865 full. No RNG. update_ties dirty-set O(company^2) per place (<=64 width) only for holders with stances.
+- PERF: normalize_judgments full rebuild 3x/window (normalize_charter 595 + update_judgments_from_minds 430,475), each copies seen lists (SEEN_CAP 128) for every stance; seen membership list scan; judgment_of/judgment_view normalize whole store to read one holder (479,485).
+- PLAUSIBLE low: seen idempotence guard capped at SEEN_CAP=128 per stance while claims (RECALL_CAP 48/head) can outlive eviction -> re-application. improbable; skip or note.
+- update_ties docstring "judgments never DECAY" but JUDGMENT_CAP eviction exists; covered by normalize_ties at normalize_charter. ok.
+- READ charter_practice.py 1-1203 full. crc32 _roll deterministic.
+- F-CONFIRMED DEAD: close_stale(IDLE_CLOSE_HOURS=2.0) at window END vs last_effect_at=prev window end -> at windows >=2h no practice survives into next window (probe quarrel_life2.py: w=2.0/4.0 zero acts); spawned practices (greet->converse, accuse->quarrel) dead on arrival offscreen; _afford_reconcile 12h age gate unreachable (w=0.25: 6 accuse, closed at 3.5h; w=1.0: closed at 8h). Only reachable w in [1.72,2.0). apology signal/event effectively never. NEUTRAL_REGARD=1.0 -> 6 accusations (charter_run _ACT_EVENTS comment says "roughly two" -> stale).
+- STALE: charter_run step coarse-branch comment (~1080-1096) "COARSE_PRACTICES is the subset ... Gossip stays on screen" but COARSE_PRACTICES=None (every kind, owner 2026-08-27). charter_trigger DEFAULT_TRIGGERS doc "quarrel is not in COARSE_PRACTICES" stale.
+- STALE: PRACTICE_CAP doc "Past this the oldest is dropped" but [:PRACTICE_CAP] keeps first-inserted (oldest), ignores newest; nothing dropped from store.
+- CAND: opportunities pairs able_here[index+1:index+3] -> in a static room greeting only between key-adjacent bodies. verify co_present order.
+- greet/tend/accuse lines English f-strings with body keys (diagnostic `line`; stored in experiences "line" [:500]).
+- READ charter_predation.py 1-1063 full. Deterministic sha256 draws. predation_round seed = run_registry `seed` (default 0, advance_snapshot passes only seeds=) + index -> per-epoch seed not used for the round (deterministic, but every advance draws the same index-seed; draws vary by at_hours/place only).
+- F-CONFIRMED (probe leased_prey.py): leased (on-screen) charter bodies are harmed by predation round: 30/40 seeds dead; _company/_attack/apply_harm have no lease check; walk() honours leases (charter_move 572) -> figure branch respects Director but leased bodies not. Boundary violation of owner 2026-09-14 lease ruling.
+- F-CONFIRMED (probe registry_graph.py): run_registry _Caches uses passable_neighbors + reach_map w/o neighbors (961-972) vs charter_run.run people_neighbors (Aldermill fix 2026-09-19) -> closed door: smith_shift out_of_reach under run_registry, filled under run; docstring+test claim byte-identical (small_town has no closed door).
+- run_registry has no deadline (acknowledged in advance_snapshot comment).
+- READ charter_author.py 1-813 full. No prompts, no json. F good_named ASCII (ja '' vs en 'bread') snippet. opportunities key-adjacent pairing snippet (a never meets d,e,f).
+- DEAD: _PERSONAL_HISTORY_SYSTEM never referenced since 7c756260; ground_personal_history only tests + self.
+- STALE docs: AGENTS.md:442 `_window_edges` (no such fn; skip_windows); AGENTS.md:459 byte-identical; AGENTS.md:490 not_known incl away (4d398090); AGENTS.md:491 told rows only done (1342bbde); Design.md:347/348 same; DESIGN skip §4.4 Things.
+- WRITING REPORT NOW.

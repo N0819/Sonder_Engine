@@ -14,7 +14,10 @@ own cards carried the same class: "the lean", "the tall", "the sharp gaze",
 
 The engine has no dictionary and wants none. What it owns is STRUCTURE and
 the pack's own closed tables, and those are enough to know where a body
-noun is and where there is none:
+noun is and where there is none. (Two English facts still live in this file
+rather than in the pack -- the coordinators `_COORDINATORS` and the plural
+fold in `_numeric_piece` -- and a third spaced pack would inherit them;
+dressing audit F21.)
 
 * In a language with articles (``compositor.articles`` non-empty, English),
   a clause that OPENS with an article promises a noun. The noun phrase runs
@@ -67,12 +70,33 @@ import re
 import unicodedata
 from collections.abc import Mapping
 from dataclasses import dataclass, field
+from functools import lru_cache
 
-from language_runtime import compositor_value, linguistic
+from language_runtime import (compositor_value, current_language_id,
+                              language_pack, linguistic, on_packs_reloaded,
+                              split_sentences)
 
-#: Where a description's first sentence ends: a stop after three lowercase
-#: letters (so "Dr." and "Mrs." never end one), or a full-width stop.
-SENTENCE_END = re.compile(r"(?<=[a-z]{3}[.!?])\s+|(?<=[。！？])")
+
+class _SentenceSplitter:
+    """Where a description's sentences end: `language_runtime.split_sentences`
+    under the name and the `split(text, maxsplit)` call this module's readers
+    (and `agents.common_names._SENTENCE_END`) already make.
+
+    It was `(?<=[a-z]{3}[.!?])\\s+|(?<=[。！？])`, which split after any
+    abbreviation of four letters or more and never after a digit, an acronym
+    or a non-ASCII letter -- measured (dressing audit F6, 2026-11-01): "A
+    grizzled former Capt. of the harbour guard" was cut at the title, and "A
+    stocky dwarf in his 300s. He wears chainmail." ran on into a ladder step
+    reading "the stocky dwarf in his 300s. he wears chainmail"."""
+
+    def split(self, text, maxsplit=0):
+        return split_sentences(text, maxsplit)
+
+    def __repr__(self):
+        return "<referring.SENTENCE_END: language_runtime.split_sentences>"
+
+
+SENTENCE_END = _SentenceSplitter()
 
 #: A clause boundary inside a sentence: the comma, semicolon and colon of a
 #: spaced script, their full-width forms, and a spaced dash.
@@ -96,20 +120,89 @@ def _fold(word):
     return re.sub(r"[^\w]", "", str(word or "")).casefold()
 
 
-def _values(name):
-    try:
-        value = compositor_value(name)
-    except Exception:
-        return ()
+def _values(name, language_id):
+    # No `except`: a missing key is `LanguagePackError`, the loud failure the
+    # loader designed. Swallowed, a renamed `articles` key made `articles()`
+    # empty and switched English labels to the head-final rule with no word
+    # anywhere (dressing audit F13).
+    value = compositor_value(name, language_id)
     # `compositor_value` hands back a read-only mapping proxy, not a dict.
     if isinstance(value, Mapping):
         return tuple(str(v) for v in value.values())
     return tuple(str(v) for v in (value or ()))
 
 
+#: The two conjunctions that join LIKE with LIKE inside one noun phrase
+#: ("tall and powerful", "red or black") rather than opening a new one.
+_COORDINATORS = frozenset({"and", "or"})
+
+
+@dataclass(frozen=True)
+class _Tables:
+    """Every pack table the grammar reads, for one language."""
+    articles: frozenset
+    number_words: frozenset
+    phrase_openers: frozenset
+    participles: frozenset
+    conjunctions: frozenset
+    generic_heads: frozenset
+    feature_connectives: frozenset
+
+
+def _compute_tables(language_id):
+    articles = frozenset(a.casefold() for a in _values("articles", language_id))
+    numbers = set()
+    for name in ("count_names", "count_words", "ordinal_words",
+                 "counter_numerals", "number_words"):
+        numbers.update(v.casefold() for v in _values(name, language_id))
+    participles = frozenset(
+        w.casefold() for w in _values("linking_participles", language_id))
+    dangling = {w.casefold() for w in _values("label_dangling", language_id)}
+    connectives = set()
+    templates = compositor_value("templates", language_id)
+    for key in ("surface_with", "surface_in"):
+        template = (str(templates.get(key) or "")
+                    if isinstance(templates, Mapping) else "")
+        for literal in re.split(r"\{[^}]*\}", template):
+            for word in literal.split():
+                connectives.add(word.casefold())
+    return _Tables(
+        articles=articles,
+        # The pack's word for ONE may be its indefinite article
+        # (``count_names`` "1": "a" -- "a figure"), and an article is never a
+        # number: read as one, "a scar across one cheek" opened an age-led
+        # phrase and the label read "the black-haired and slight a scar"
+        # (2026-10-20).
+        number_words=frozenset(numbers - articles),
+        phrase_openers=frozenset((dangling - articles - _COORDINATORS)
+                                 | participles),
+        participles=participles,
+        conjunctions=frozenset(str(w).casefold() for w in linguistic(
+            "agents.common", "_BREATH_CONJUNCTIONS", language_id)),
+        generic_heads=frozenset(str(w).casefold() for w in linguistic(
+            "agents.common", "_GENERIC_LABEL_HEADS", language_id)),
+        feature_connectives=frozenset(connectives),
+    )
+
+
+#: The tables per language, built once. They were rebuilt on EVERY call, and
+#: `is_boundary` asks three of them per word: one label ladder cost 378
+#: `compositor_value` calls and 7,120 casefolds, 6.29 ms (dressing audit E1,
+#: 2026-11-01; 1.51 ms memoized, identical output). Dropped whenever the packs
+#: reload (`on_packs_reloaded`), like `language_runtime._linguistic_cached`.
+_tables = lru_cache(maxsize=16)(_compute_tables)
+on_packs_reloaded(_tables.cache_clear)
+
+
+def _active():
+    """The active story language's tables -- the RESOLVED pack's, so "en-GB"
+    and "en" share one entry."""
+    return _tables(language_pack(current_language_id.get()).id)
+
+
 def articles():
     """The pack's determiners, casefolded; empty for a language without."""
-    return frozenset(str(a).casefold() for a in _values("articles"))
+    return _active().articles
 
 
 def head_final():
@@ -134,16 +227,9 @@ def unspaced(text):
 def number_words():
     """Every number word the pack owns: its counts, ordinals and numerals,
     and ``number_words`` -- the rest of the language's cardinals, a closed
-    class the pack completes rather than a list that chases prose."""
-    out = set()
-    for name in ("count_names", "count_words", "ordinal_words",
-                 "counter_numerals", "number_words"):
-        out.update(str(v).casefold() for v in _values(name))
-    # The pack's word for ONE may be its indefinite article (``count_names``
-    # "1": "a" -- "a figure"), and an article is never a number: read as
-    # one, "a scar across one cheek" opened an age-led phrase and the label
-    # read "the black-haired and slight a scar" (2026-10-20).
-    return frozenset(out - articles())
+    class the pack completes rather than a list that chases prose. Never the
+    pack's article (see `_compute_tables`)."""
+    return _active().number_words
 
 
 def _numeric_piece(piece, words):
@@ -182,26 +268,14 @@ def is_number(word):
 
 
 def conjunctions():
-    try:
-        return frozenset(str(w).casefold()
-                         for w in linguistic("agents.common", "_BREATH_CONJUNCTIONS"))
-    except Exception:
-        return frozenset()
-
-
-#: The two conjunctions that join LIKE with LIKE inside one noun phrase
-#: ("tall and powerful", "red or black") rather than opening a new one.
-_COORDINATORS = frozenset({"and", "or"})
+    return _active().conjunctions
 
 
 def phrase_openers():
     """The words that open a phrase attached to a noun: the pack's
     prepositions and possessives (``label_dangling`` less its articles and
     coordinators) and its linking participles."""
-    dangling = {str(w).casefold() for w in _values("label_dangling")}
-    openers = (dangling - articles() - _COORDINATORS) | {
-        str(w).casefold() for w in _values("linking_participles")}
-    return frozenset(openers)
+    return _active().phrase_openers
 
 
 def feature_connectives():
@@ -209,17 +283,7 @@ def feature_connectives():
     its own `surface_with` / `surface_in` templates ("{label} with
     {feature}", "{label} in {worn}"), so a bare noun phrase that attaches a
     feature with one of them has declared where its noun ends."""
-    out = set()
-    try:
-        templates = compositor_value("templates")
-    except Exception:
-        return frozenset()
-    for key in ("surface_with", "surface_in"):
-        template = str(templates.get(key) or "") if isinstance(templates, Mapping) else ""
-        for literal in re.split(r"\{[^}]*\}", template):
-            for word in literal.split():
-                out.add(word.casefold())
-    return frozenset(out)
+    return _active().feature_connectives
 
 
 def coordinator(word):
@@ -268,7 +332,8 @@ def first_sentence(text):
     head = str(text or "").strip()
     if not head:
         return ""
-    first = SENTENCE_END.split(head, 1)[0].strip()
+    sentences = split_sentences(head, 1)
+    first = sentences[0] if sentences else ""
     if head_final() or unspaced(head):
         # An unspaced script has no word count to judge a fragment by; its
         # first sentence is its first sentence.
@@ -392,7 +457,7 @@ def read(summary):
     other kind. Where the first sentence is a fragment and the run goes on
     (`first_sentence`), each further sentence is a part of its own."""
     sentence = first_sentence(summary)
-    parts = _join_promised_nouns([part for piece in SENTENCE_END.split(sentence)
+    parts = _join_promised_nouns([part for piece in split_sentences(sentence)
                                   for part in clause_parts(piece)])
     reading = Reading(sentence=sentence, parts=parts)
     if not parts:
@@ -558,11 +623,7 @@ def _list_modifiers(part):
 def generic_heads():
     """The words the pack heads its own generic labels with
     (``_GENERIC_LABEL_HEADS``) -- the person nouns the engine owns."""
-    try:
-        return frozenset(str(w).casefold()
-                         for w in linguistic("agents.common", "_GENERIC_LABEL_HEADS"))
-    except Exception:
-        return frozenset()
+    return _active().generic_heads
 
 
 def attaches(word):
@@ -583,7 +644,7 @@ def splits_tail(word):
         return False
     if w in _COORDINATORS or w in conjunctions():
         return True
-    return w in {str(x).casefold() for x in _values("linking_participles")}
+    return w in _active().participles
 
 
 def cuts_phrase(word):
@@ -594,8 +655,7 @@ def cuts_phrase(word):
     w = _fold(word)
     if not w or w in _COORDINATORS:
         return False
-    return w in conjunctions() or w in {
-        str(x).casefold() for x in _values("linking_participles")}
+    return w in conjunctions() or w in _active().participles
 
 
 def names_a_body(summary):

@@ -4291,7 +4291,7 @@
     "_STATION_POSSESSED_BEFORE": {
       "$type": "regex",
       "pattern": "(?:の)$",
-      "flags": 32
+      "flags": 34
     },
     "_SALIENCE_CUES": {
       "$type": "tuple",
@@ -4454,12 +4454,12 @@
   "story.scene": {
     "_ABSENCE_RE": {
       "$type": "regex",
-      "flags": 0,
+      "flags": 2,
       "pattern": "(?:ない|無い|なし|見えない|見えず|見当たらない|隠れ|隠し|隠さ|欠け|欠い|存在しない|ありません|ません|不在|皆無)"
     },
     "_DANGLING_TAIL_RE": {
       "$type": "regex",
-      "flags": 0,
+      "flags": 2,
       "pattern": "(?:の|と|に|で|を|が|は|や|へ|から|まで|より)$"
     },
     "_UNREMARKABLE_LABEL": "特徴のない外見の人物",
@@ -4504,7 +4504,7 @@
     },
     "_NUMBER_RUN": {
       "$type": "regex",
-      "flags": 0,
+      "flags": 2,
       "pattern": "[〇零一二三四五六七八九十百千万億兆]+"
     },
     "_SKIP_MEMORY_LABELS": {

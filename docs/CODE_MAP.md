@@ -92,8 +92,8 @@
 | `core/pipeline_context.py` | 625 | Typed mutable context passed through a turn pipeline. | `core.db` |
 | `core/updates.py` | 399 |  | `core.paths` |
 | `dressing/__init__.py` | 6 |  | — |
-| `dressing/ambience.py` | 2103 |  | `core`, `core.db`, `core.paths`, `dressing.backdrops`, `world.weather` |
-| `dressing/backdrops.py` | 1782 |  | `core`, `core.db`, `core.logging_utils`, `core.paths`, `persist.steps`, `world.day_cycle`, `world.spatial`, `world.weather` |
+| `dressing/ambience.py` | 2144 |  | `core`, `core.db`, `core.paths`, `dressing.backdrops`, `world.spatial`, `world.weather` |
+| `dressing/backdrops.py` | 2029 |  | `core`, `core.db`, `core.logging_utils`, `core.paths`, `persist.steps`, `world.day_cycle`, `world.spatial`, `world.weather` |
 | `llm/__init__.py` | 6 |  | — |
 | `llm/decisions.py` | 325 |  | `core.db` |
 | `llm/json_mend.py` | 302 |  | — |
@@ -163,7 +163,7 @@
 | `story/attire.py` | 3699 |  | — |
 | `story/authored_events.py` | 299 |  | `core.db` |
 | `story/carriers.py` | 1369 |  | `core.db`, `core.logging_utils`, `story.character_schema`, `story.scene`, `world`, `world.spatial` |
-| `story/character_schema.py` | 2781 | Versioned character/persona defaults, normalization, accessors, and export payloads. | `llm.schemas`, `story` |
+| `story/character_schema.py` | 2770 | Versioned character/persona defaults, normalization, accessors, and export payloads. | `llm.schemas`, `story` |
 | `story/couriers.py` | 1170 |  | `story.carriers`, `world` |
 | `story/dialogue_colors.py` | 268 |  | — |
 | `story/greetings.py` | 1340 |  | `agents.runtime`, `core`, `core.db`, `core.logging_utils`, `llm.llm_quality`, `llm.prompts`, `mind.affect_pass`, `mind.memory`, `mind.theory_of_mind`, `persist.steps`, `story.character_schema`, `story.importers`, `world.charter_runtime` |
@@ -1282,27 +1282,27 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `resolve_ambience()` | 1686 | 222 lines |
-| `_rank_candidates()` | 1083 | 105 lines |
-| `refine_layers()` | 774 | 89 lines |
-| `cached_ambience()` | 492 | 62 lines |
-| `search_freesound()` | 1368 | 61 lines |
-| `search_local()` | 885 | 54 lines |
-| `_query_ladder()` | 1197 | 51 lines |
-| `acoustic_fingerprint()` | 260 | 48 lines |
+| `resolve_ambience()` | 1727 | 222 lines |
+| `_rank_candidates()` | 1124 | 105 lines |
+| `refine_layers()` | 815 | 89 lines |
+| `cached_ambience()` | 499 | 62 lines |
+| `search_freesound()` | 1409 | 61 lines |
+| `search_local()` | 926 | 54 lines |
+| `acoustic_fingerprint()` | 262 | 53 lines |
+| `_query_ladder()` | 1238 | 51 lines |
 
 ### `dressing/backdrops.py`
 
 | Function | Start | Size |
 |---|---:|---:|
-| `generate_backdrop()` | 1580 | 116 lines |
-| `room_projection()` | 902 | 79 lines |
-| `build_backdrop_request()` | 1128 | 69 lines |
-| `visual_signature()` | 210 | 59 lines |
-| `_brief_sentences()` | 1278 | 51 lines |
-| `compose_prompt()` | 1331 | 48 lines |
-| `_camera_of()` | 793 | 44 lines |
-| `room_brief()` | 856 | 44 lines |
+| `generate_backdrop()` | 1827 | 116 lines |
+| `room_projection()` | 1118 | 90 lines |
+| `build_backdrop_request()` | 1355 | 69 lines |
+| `_scene_bodies()` | 439 | 61 lines |
+| `visual_signature()` | 236 | 59 lines |
+| `_brief_sentences()` | 1505 | 51 lines |
+| `compose_prompt()` | 1558 | 48 lines |
+| `_camera_of()` | 1009 | 44 lines |
 
 ### `llm/decisions.py`
 
@@ -2085,7 +2085,7 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `character_card_warnings()` | 2559 | 192 lines |
+| `character_card_warnings()` | 2548 | 192 lines |
 | `default_character_data()` | 726 | 146 lines |
 | `normalize_character_data()` | 1588 | 132 lines |
 | `_normalize_psychology()` | 315 | 83 lines |

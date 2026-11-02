@@ -18,11 +18,13 @@ import contextlib
 import contextvars
 import importlib
 import json
+import logging
 import os
 from pathlib import Path
 
 import re
 import threading
+import unicodedata
 from types import MappingProxyType
 from typing import Any, Mapping
 
@@ -68,6 +70,14 @@ _BUILTIN_ADAPTERS = {
 }
 current_language_id = contextvars.ContextVar(
     "current_language_id", default=DEFAULT_LANGUAGE)
+
+# The engine's logger, by name: `core.logging_utils` reads a setting from the
+# database at import, and this module is imported before one is configured.
+_log = logging.getLogger("fiction_engine")
+
+#: Caches built FROM pack data elsewhere (`referring`'s tables), dropped with
+#: `_linguistic_cached` whenever the packs reload. See `on_packs_reloaded`.
+_RELOAD_HOOKS: list = []
 
 
 class LanguagePackError(ValueError):
@@ -145,10 +155,11 @@ _FRAGMENT_MARK = "{{fragment"
 def _resolve_prompt_fragments(card: dict, language_id: str) -> dict:
     """Substitute every `{{fragment:<name>}}` reference in a prompt card.
 
-    Four authored fragments are embedded in seventeen prompt bodies. As
-    hand-maintained pastes they were free to drift, and in the Japanese pack
-    all seventeen had: each copy was translated independently of its own
-    fragment. A reference resolved here -- at card load, before anything
+    Authored fragments are embedded in many prompt bodies (eight fragments in
+    twenty-nine places, measured 2026-11-01; `make structure` is the live
+    count). As hand-maintained pastes they were free to drift, and in the
+    Japanese pack every copy had: each was translated independently of its
+    own fragment. A reference resolved here -- at card load, before anything
     downstream can read the card -- makes the copies the same bytes as the
     fragment by construction, and turns a fragment edit into one edit.
 
@@ -461,7 +472,20 @@ def installed_language_packs(*, refresh: bool = False) -> dict[str, LanguagePack
         _packs = found
         _pack_failure = None
         _linguistic_cached.cache_clear()
+        for hook in list(_RELOAD_HOOKS):
+            hook()
         return dict(found)
+
+
+def on_packs_reloaded(hook) -> None:
+    """Run `hook()` every time the installed packs are (re)loaded.
+
+    For a cache built FROM pack data in another module -- `referring`'s
+    per-language tables -- which would otherwise outlive the packs it was
+    read from, exactly as `_linguistic_cached` would without its
+    `cache_clear` above."""
+    if hook not in _RELOAD_HOOKS:
+        _RELOAD_HOOKS.append(hook)
 
 
 def _leaf_paths(value, prefix="") -> set[str]:
@@ -509,7 +533,8 @@ def raw_card(language_id: Any = DEFAULT_LANGUAGE,
     The documented way for a tool or a test to reach what a human wrote.
     `LanguagePack.card(...)` is the wrong artifact for that: it is frozen, and
     its `{{fragment:...}}` references have already been substituted, so a
-    single authored fragment appears in it seventeen times. Anything auditing
+    single authored fragment appears in it as many times as it is referenced
+    (up to seven, measured 2026-11-01). Anything auditing
     or grepping authored prompt text wants this; anything asking what a model
     will actually receive wants `card(...)`.
     """
@@ -536,12 +561,37 @@ def language_pack(language_id: Any = DEFAULT_LANGUAGE) -> LanguagePack:
     return packs.get(base) or packs[DEFAULT_LANGUAGE]
 
 
+#: (surface, stored language id) pairs whose English fallback has been
+#: reported in this process. Once per language, not once per call: the story
+#: reader runs on every turn.
+_FALLBACK_REPORTED: set = set()
+
+
+def _report_fallback(surface: str, stored: Any, exc: Exception) -> None:
+    """Log, once per process per (surface, language), that a stored
+    language could not be used and English stands in for it.
+
+    The fallback itself is the owner's "warn, never refuse": a story whose
+    pack or adapter cannot load still plays. It used to do so with no line at
+    any log level (dressing audit F12, 2026-11-01): a Japanese story whose
+    adapter failed to import ran every turn with English prompts, recognisers
+    and renderer while its stored language still said `ja`."""
+    key = (surface, str(stored))
+    with _lock:
+        if key in _FALLBACK_REPORTED:
+            return
+        _FALLBACK_REPORTED.add(key)
+    _log.warning("%s language %r cannot be used (%s); it falls back to %r",
+                 surface, str(stored), exc, DEFAULT_LANGUAGE)
+
+
 def story_language(chat_id: int) -> str:
     from core.db import wget
     stored = wget(chat_id, STORY_LANGUAGE_KEY, DEFAULT_LANGUAGE)
     try:
         return require_language_pack(stored, capability="story").id
-    except LanguagePackError:
+    except LanguagePackError as exc:
+        _report_fallback("story", stored, exc)
         return DEFAULT_LANGUAGE
 
 
@@ -557,7 +607,8 @@ def ui_language() -> str:
     stored = get_setting(UI_LANGUAGE_SETTING) or DEFAULT_LANGUAGE
     try:
         return require_language_pack(stored, capability="ui").id
-    except LanguagePackError:
+    except LanguagePackError as exc:
+        _report_fallback("interface", stored, exc)
         return DEFAULT_LANGUAGE
 
 
@@ -615,9 +666,9 @@ def apply_prompt_policy(text: str, language_id: Any = DEFAULT_LANGUAGE,
         return base
     # The role suffix varies while `common` does not, so two calls with
     # different roles both fail the endswith test above and `common` lands
-    # twice. English hides this (its `roles` map is empty, making the two
-    # suffixes identical); Japanese has role suffixes and exposes it. Append
-    # only the part that is not already there.
+    # twice. Both packs carry role suffixes (English since 2026-08-24:
+    # `interpret_repair` and `narrator`), so both expose it. Append only the
+    # part that is not already there.
     common = str(prompt_policy_common(language_id) or "").strip()
     if common and common in base:
         role_only = suffix[len(common):].strip()
@@ -697,9 +748,9 @@ def _load_builtin_adapter(adapter: str) -> None:
         except ImportError as exc:
             # Reported as a pack failure, because that is what every caller
             # can handle. `story_language` catches LanguagePackError to fall
-            # back to English; a bare ImportError sailed past it and killed
-            # the turn before any stage ran, with a traceback that never
-            # mentioned the language.
+            # back to English, and logs that it did (`_report_fallback`); a
+            # bare ImportError sailed past it and killed the turn before any
+            # stage ran, with a traceback that never mentioned the language.
             raise LanguagePackError(
                 f"deterministic adapter {adapter!r} could not be loaded: "
                 f"{exc}") from exc
@@ -773,15 +824,422 @@ def english_linguistic(module: str, name: str):
     return linguistic(module, name, DEFAULT_LANGUAGE)
 
 
+# ---- Scripts -------------------------------------------------------------------
+#
+# The helpers below are the engine's script-aware primitives: a comparison
+# key, a tokenizer, a whole-name boundary and a sentence splitter, each
+# decided by the SCRIPT a piece of text is written in rather than by the story
+# language, because a Japanese story carries Latin names through imported cards
+# and an English story carries Japanese ones. Use them instead of writing a
+# `\b`, a `.split()`, a `[a-z0-9]` class or another sentence regex.
+
+#: Letters that continue a word in a script that spaces its words: Latin (with
+#: its supplements), Greek, Cyrillic, digits and the underscore. Deliberately
+#: NOT `\w`, which also covers the scripts that do not space their words.
+#: (`story.character_schema._SPACED_WORD_CHARS` is the same class.)
+SPACED_WORD_CHARS = r"A-Za-z0-9_À-ɏḀ-ỿͰ-ϿЀ-ӿ"
+
+#: The scripts written without spaces between words, one class each, as
+#: regex character-class bodies. The iteration and closing marks 々〆〇 and the
+#: small counters ヵヶ belong to the ideographs they sit among (佐々木, 霞ヶ関);
+#: the middle dot ・ is punctuation, not katakana -- it is what JOINS two names.
+HIRAGANA = "ぁ-ゟ"
+KATAKANA = "ァ-ヴヷ-ヺー-ヿㇰ-ㇿｦ-ﾟ"
+HAN = ("々-〇ヵヶ㐀-䶿一-鿿豈-﫿"
+       "\U00020000-\U0003134f")
+HANGUL = "ᄀ-ᇿ㄰-㆏가-힯"
+THAI = "฀-๿"
+
+_JAPANESE = HIRAGANA + KATAKANA + HAN
+_SCRIPT_CLASSES = (
+    ("hiragana", re.compile(f"[{HIRAGANA}]")),
+    ("katakana", re.compile(f"[{KATAKANA}]")),
+    ("han", re.compile(f"[{HAN}]")),
+    ("hangul", re.compile(f"[{HANGUL}]")),
+    ("thai", re.compile(f"[{THAI}]")),
+)
+#: Any character of an unspaced script.
+UNSPACED_SCRIPT = re.compile(f"[{_JAPANESE}{HANGUL}{THAI}]")
+
+
+def script_of(char: Any) -> str:
+    """The unspaced script one character is written in -- "hiragana",
+    "katakana", "han", "hangul" or "thai" -- or "" for anything else: a
+    letter of a spaced script, a digit, punctuation, whitespace."""
+    ch = str(char or "")[:1]
+    if not ch:
+        return ""
+    for name, pattern in _SCRIPT_CLASSES:
+        if pattern.match(ch):
+            return name
+    return ""
+
+
+# ---- Comparison keys --------------------------------------------------------
+
+
+def fold_text(text: Any) -> str:
+    """NFKC, then casefold: the normalisation half of `fold_key`, with every
+    character kept, for a caller that tokenizes the result itself. NFKC is
+    what makes a full-width ＬＣＡＲＳ, a half-width ｶﾀｶﾅ and an ideographic
+    space read as the same text as their ordinary forms."""
+    return unicodedata.normalize("NFKC", str(text or "")).casefold()
+
+
+def _key_char(ch: str) -> bool:
+    # A letter, a digit or a combining mark, of any script. A mark is kept
+    # because it is part of its letter: NFKC composes the Latin ones, but an
+    # Indic vowel sign has no precomposed form and dropping it changes the
+    # word.
+    return unicodedata.category(ch)[0] in "LNM"
+
+
+def fold_key(text: Any, sep: str = "") -> str:
+    """A comparison key for a name, a place or any short label: NFKC,
+    casefold, and everything that is not a letter, digit or mark of SOME
+    script removed. "台所" -> "台所", "Café" -> "café", "Mirelle's Mouth" ->
+    "mirellesmouth", "佐藤・ヒナミ" -> "佐藤ヒナミ".
+
+    With `sep`, each run of removed characters becomes one separator and none
+    stands at either end: `fold_key("Back Yard", "_") == "back_yard"`.
+
+    THE CANONICAL REPLACEMENT for every `re.sub(r"[^a-z0-9]+", "_",
+    text.casefold()).strip("_")`-style slug in the engine (world_spatial_
+    structure_light F2 counted 67 such classes in 30 files). For ASCII input
+    it is the SAME string -- `sep="_"` is that slug, `sep=" "` the
+    space-joined form, `sep=""` the run-together key -- so an id already
+    minted keeps matching its own spelling. For every other script it keeps
+    the letters, which is the fix: the ASCII class folded `台所` to "" and
+    so made every Japanese name equal to every other one. The case it ends,
+    measured (persist_scene_entities F2): two kana owners shedding a jacket
+    minted ONE floor object, keyed `jacket_`, stamped with the first owner.
+
+    Two different names stay different. Two spellings of one name that
+    differ only in case, width, punctuation or spacing fold together. Accents
+    are letters and are kept ("café" is not "cafe"). An empty result means
+    the text had no letter or digit at all -- an emoji, a run of punctuation
+    -- and a caller keying a dict by this must still refuse "".
+    """
+    folded = fold_text(text)
+    if not sep:
+        return "".join(ch for ch in folded if _key_char(ch))
+    out: list[str] = []
+    gap = False
+    for ch in folded:
+        if _key_char(ch):
+            if gap and out:
+                out.append(sep)
+            out.append(ch)
+            gap = False
+        else:
+            gap = True
+    return "".join(out)
+
+
+def fold_words(text: Any) -> list[str]:
+    """The folded words of `text`, in order: runs of letters, digits and
+    marks, split at everything else AND where an unspaced script changes
+    (kanji to kana, kana to Latin, a digit beside a kanji). For ASCII input
+    it is exactly `re.findall(r"[a-z0-9]+", text.casefold())`, the token
+    class it replaces; for an unspaced name it is the parts the name is
+    written in -- `fold_words("佐藤ヒナミ") == ["佐藤", "ヒナミ"]` -- which a
+    whitespace split never finds. Japanese prose comes back as script runs,
+    hiragana runs (particles, inflection) included; a caller that wants
+    content words drops the runs `script_of` calls hiragana."""
+    words: list[str] = []
+    run: list[str] = []
+    run_script = None
+    for ch in fold_text(text):
+        if not _key_char(ch):
+            if run:
+                words.append("".join(run))
+            run, run_script = [], None
+            continue
+        if unicodedata.category(ch)[0] == "M" and run:
+            run.append(ch)          # a mark continues the letter it marks
+            continue
+        script = script_of(ch)
+        if run and script != run_script:
+            words.append("".join(run))
+            run = []
+        run.append(ch)
+        run_script = script
+    if run:
+        words.append("".join(run))
+    return words
+
+
+# ---- Whole-name boundaries ----------------------------------------------------
+
+#: What may directly FOLLOW a Japanese name in running text, where the name's
+#: own edge is in the same script as the text after it: the particles that
+#: attach to a noun, the copula, and the honorific and plural suffixes. A
+#: closed grammatical class -- the engine owns it the way it owns its enum
+#: tables -- and it lives here rather than in a pack because the boundary is a
+#: fact of the NAME's script, not of the story's language: an English story
+#: carries Japanese names too.
+JA_NAME_FOLLOWERS = (
+    "が", "を", "に", "へ", "と", "で", "の", "から", "より", "まで", "や",
+    "は", "も", "こそ", "さえ", "しか", "だけ", "ばかり", "など", "なら",
+    "ほど", "くらい", "ぐらい", "とか", "って", "か", "ね", "よ",
+    "だ", "です", "じゃ",
+    "さん", "さま", "様", "ちゃん", "くん", "君", "殿", "どの", "氏",
+    "たち", "達", "ら", "等",
+)
+#: What may directly PRECEDE a hiragana-initial name: the particles that end
+#: the phrase before it (「彼女はさくらを見た」).
+JA_NAME_LEADERS = ("の", "は", "が", "を", "に", "へ", "と", "で", "も", "や",
+                   "か", "から", "まで", "より")
+
+_FOLLOWED = "(?=" + "|".join(
+    sorted(set(JA_NAME_FOLLOWERS), key=len, reverse=True)) + ")"
+# One lookbehind per particle: a lookbehind has to be one fixed width.
+_LED = "|".join("(?<=%s)" % p for p in
+                sorted(set(JA_NAME_LEADERS), key=len, reverse=True))
+
+
+def _name_lead(char: str, single: bool) -> str:
+    script = script_of(char)
+    if script == "katakana":
+        return f"(?<![{KATAKANA}])"
+    if script == "hiragana":
+        return f"(?:(?<![{HIRAGANA}])|{_LED})"
+    if script == "han":
+        # A kanji run holds several words -- a family name before a given
+        # one (山田花子), a prefix before a name -- so a multi-character
+        # kanji name's left edge stays open, as it always was. A ONE-kanji
+        # term inside a run is nearly always another word (一角, 三角, 頭角
+        # for 角), so its left edge is not.
+        return f"(?<![{HAN}])" if single else ""
+    if script in ("hangul", "thai"):
+        return ""
+    return f"(?<![{SPACED_WORD_CHARS}])"
+
+
+def _name_tail(char: str, single: bool) -> str:
+    script = script_of(char)
+    if single and script in ("hiragana", "katakana", "han"):
+        # One kana or kanji is a name only where a particle, the copula, an
+        # honorific, punctuation, another script or the end follows it:
+        # 「角が」 is the horn, 「角ばった顎」 an angular jaw.
+        return f"(?:(?![{_JAPANESE}])|{_FOLLOWED})"
+    if script == "katakana":
+        return f"(?![{KATAKANA}])"
+    if script == "hiragana":
+        return f"(?:(?![{HIRAGANA}])|{_FOLLOWED})"
+    if script in ("han", "hangul", "thai"):
+        # Japanese compounds titles and suffixes onto a kanji name on the
+        # right (田中部長, 佐藤隊長, 山田家), and the name is in every one of
+        # them: an identity scrub that refused them would leak the name.
+        # Hangul and Thai keep the open edge they had: Korean writes its
+        # particles onto the noun and Thai runs its words together, and no
+        # closed class here says where either ends.
+        return ""
+    return f"(?![{SPACED_WORD_CHARS}])"
+
+
+@lru_cache(maxsize=2048)
+def name_boundary_pattern(form: str) -> str:
+    """Match `form` as a WHOLE name, in whatever script the name is written.
+
+    A pattern string: compose it (`+ "(?:'s|’s)?"`, inside `(?-i:...)`, in a
+    named group) and compile with your own flags, or use
+    `name_boundary_regex`. Decided per EDGE of the name, by that edge's script,
+    never by the story's language:
+
+      * Latin, Greek, Cyrillic or a digit at the edge: no spaced-script letter
+        or digit beside it -- `\\b` semantics that also see `彼はHinamiに`.
+        Byte-identical to the rule this replaced.
+      * katakana: no katakana beside it. 「ヒナミは」 and 「ヒナミ、」 match;
+        「ヒナミコ」, 「アヒナミ」 and 「プレイヤー」 (for レイ) do not.
+      * hiragana: no hiragana beside it, unless what is beside it is a
+        particle (`JA_NAME_LEADERS` before, `JA_NAME_FOLLOWERS` after):
+        「彼女はさくらを見た」 matches さくら; 「さくらんぼ」 does not.
+      * kanji: a two-or-more-character kanji name keeps open edges, because
+        Japanese compounds onto it on both sides and the name is in each
+        compound (田中さん, 田中部長, 山田花子) -- an identity scrub that
+        refused those would leak the name. A ONE-character kana or kanji name
+        needs no kanji before it and, after it, a particle, the copula, an
+        honorific, punctuation, another script or the end: 「額に二本の角が」
+        matches 角, 「角ばった顎」 and 「部屋の一角に」 do not.
+      * Hangul and Thai: open, as before (no closed class says where a word
+        ends in either).
+
+    Measured before this (dressing audit F7, 2026-11-01): an unspaced edge
+    had NO assertion, so ヒナミ matched inside ヒナミコ and アヒナミ, レイ
+    inside プレイヤー, and the disguise scrub of 角 rewrote 「角ばった顎」 as
+    「ばった顎」 in every observer's view. An empty name never matches.
+    """
+    text = str(form or "")
+    if not text:
+        return r"(?!)"  # never matches, rather than matching everywhere
+    single = len(text) == 1
+    return (_name_lead(text[0], single) + re.escape(text)
+            + _name_tail(text[-1], single))
+
+
+@lru_cache(maxsize=2048)
+def name_boundary_regex(form: str, flags: int = 0):
+    """`name_boundary_pattern` compiled, and cached here rather than in
+    `re`'s shared 512-entry cache, which forty call sites and every other
+    dynamic pattern in a long story compete for (dressing audit E7)."""
+    return re.compile(name_boundary_pattern(form), flags)
+
+
+@lru_cache(maxsize=512)
+def _longest_first(forms: tuple) -> tuple:
+    return tuple(sorted({str(f) for f in forms if str(f or "")},
+                        key=lambda f: (-len(f), f)))
+
+
+@lru_cache(maxsize=512)
+def _names_regex(forms: tuple, flags: int):
+    return re.compile("|".join("(%s)" % name_boundary_pattern(form)
+                               for form in forms), flags)
+
+
+def find_names(text: Any, forms, flags: int = re.IGNORECASE) -> list:
+    """Every whole-name occurrence of any of `forms` in `text`, as
+    `[(start, end, form), ...]` in text order -- the SET matcher.
+
+    At any position the LONGEST form wins, and no returned span lies inside
+    another, so "Great Hall" is not also "Hall" and 「ヒナミコ」 is not also
+    「ヒナミ」. That is the class fix for "does this text name this place /
+    person" readers that test each form alone and let the shorter one win
+    (mind_affect F6: five such readers disagreed; "Walk to the Great Hall"
+    named the Hall). Each form is bounded by `name_boundary_pattern`; `flags`
+    are the caller's (`0` for a case-sensitive proper-name match)."""
+    body = str(text or "")
+    if not body or not forms:
+        return []
+    unique = (_longest_first(forms) if isinstance(forms, tuple)
+              else _longest_first(tuple(forms)))
+    if not unique:
+        return []
+    return [(m.start(), m.end(), unique[m.lastindex - 1])
+            for m in _names_regex(unique, flags).finditer(body)]
+
+
+# ---- Sentences -----------------------------------------------------------------
+
+#: What closes a quotation or a parenthesis after a sentence's stop and belongs
+#: to that sentence: straight and curly quotes, guillemets, brackets, and the
+#: corner brackets and full-width brackets Japanese closes with.
+_ASCII_CLOSERS = "\"'”’»)]}"
+_CJK_CLOSERS = "」』）】〕〉》〙〛"
+_CLOSERS = "[" + re.escape(_ASCII_CLOSERS + _CJK_CLOSERS) + "]*"
+#: A sentence stop: ASCII `.!?` (any run of them) with its closers, which
+#: ends a sentence only before whitespace or the end -- `3.5`, `Dr.Moon` and
+#: an unspaced `.` are not stops; or a full-width stop `。！？` (and the
+#: half-width `｡`), which needs no whitespace after it, with its closers.
+_SENTENCE_STOP = re.compile(
+    r"(?P<ascii>[.!?]+)(?P<aclose>" + _CLOSERS + r")(?=\s|$)"
+    r"|(?P<cjk>[。！？｡][。！？｡!?]*)"
+    r"(?P<cclose>" + _CLOSERS + r")")
+#: Opening quotes and brackets a token before an abbreviation's period may
+#: carry: `("Dr.` is still the title "Dr".
+_OPENERS = "\"'“‘«([{「『（【〔〈《"
+#: The Japanese quotative particles: a quotation closed and carried on by one
+#: of them is inside its sentence (「行こう。」と彼は言った。).
+_QUOTATIVE = ("と", "って")
+#: A sentence ending in an unspaced script's stop or closer, which the next
+#: sentence follows with no space.
+_UNSPACED_SENTENCE_END = re.compile(
+    "[" + re.escape("。！？｡" + _CJK_CLOSERS) + "]$")
+
+
+def _token_before(text: str, index: int) -> str:
+    start = index
+    while start > 0 and not text[start - 1].isspace():
+        start -= 1
+    return text[start:index].lstrip(_OPENERS)
+
+
+def _sentence_spans(text: str, language_id: Any = None) -> list:
+    abbreviations = None
+    spans: list = []
+    start = 0
+    for match in _SENTENCE_STOP.finditer(text):
+        end = match.end()
+        if match.group("ascii") is not None:
+            if match.group("ascii") == ".":
+                if abbreviations is None:
+                    abbreviations = linguistic(
+                        "agents.common", "_SENTENCE_ABBREVIATIONS", language_id)
+                if _token_before(text, match.start()).casefold() in abbreviations:
+                    continue        # "Dr. Moon", "Capt. of the guard"
+            if match.group("aclose") and text[end:].lstrip()[:1].islower():
+                continue            # '"Hi!" she said.' is one sentence
+        elif match.group("cclose") and text[end:].lstrip().startswith(_QUOTATIVE):
+            continue                # 「行こう。」と彼は言った。 is one sentence
+        spans.append((start, end))
+        start = end
+    if start < len(text):
+        spans.append((start, len(text)))
+    return [(s, e) for s, e in spans if text[s:e].strip()]
+
+
+def split_sentences(text: Any, maxsplit: int = 0, *,
+                    language_id: Any = None) -> list:
+    """The sentences of `text`, stripped, in order, none empty.
+
+    ONE splitter for every script. A sentence ends at:
+
+      * ASCII `.`, `!` or `?` (or a run of them) followed by whitespace or the
+        end -- never at a `.` that ends one of the active pack's
+        `_SENTENCE_ABBREVIATIONS` ("Dr. Moon", "Capt. of the harbour guard"),
+        the token set `agents.common_names.split_sentences` already reads;
+      * a full-width `。`, `！` or `？`, with or without whitespace after it.
+
+    A closing quote or bracket after the stop stays with the sentence it
+    closes (`She said "Go."`, 「こんにちは。」), except where the sentence
+    plainly carries on past it: a lowercase word after a closed quote ('"Hi!"
+    she said.') or a Japanese quotative particle after a closed corner bracket
+    (「行こう。」と彼は言った。).
+
+    It replaces `referring.SENTENCE_END`'s `(?<=[a-z]{3}[.!?])\\s+`, which cut
+    a stranger's label at "Capt." and never at "300s.", "RAF." or "café."
+    (dressing audit F6), and is what UNBUILT_PIPELINE 1.69's other splitters
+    should read. `maxsplit` (as in `re.split`) keeps the remainder as written.
+    `language_id` names the pack whose abbreviations apply; by default the
+    active story language's.
+    """
+    body = str(text or "")
+    spans = _sentence_spans(body, language_id)
+    if maxsplit and maxsplit > 0 and len(spans) > maxsplit + 1:
+        spans = spans[:maxsplit] + [(spans[maxsplit][0], spans[-1][1])]
+    return [body[s:e].strip() for s, e in spans]
+
+
+def join_sentences(sentences) -> str:
+    """Rejoin sentences: a space after a sentence of a spaced script, none
+    after one ending in an unspaced script's stop or closer (「。」 runs
+    straight on). The inverse of `split_sentences` up to whitespace."""
+    out = ""
+    for sentence in sentences or ():
+        piece = str(sentence or "").strip()
+        if not piece:
+            continue
+        if out and not _UNSPACED_SENTENCE_END.search(out):
+            out += " "
+        out += piece
+    return out
+
+
 __all__ = [
     "DEFAULT_LANGUAGE", "STORY_LANGUAGE_KEY", "LanguagePack",
     "LanguagePackError", "apply_common_prompt_policy", "apply_prompt_policy",
     "compositor_text", "compositor_value", "prompt_policy_common",
-    "current_language_id", "installed_language_packs",
+    "current_language_id", "installed_language_packs", "on_packs_reloaded",
     "language_scope", "output_token_scale", "story_language_scope",
     "english_linguistic", "linguistic", "language_pack",
     "normalize_language_id", "register_renderer",
     "renderer_for", "require_language_pack", "set_story_language",
     "set_ui_language", "story_language", "ui_language",
     "pack_directory", "raw_card",
+    # Script-aware primitives (see "Scripts" above).
+    "SPACED_WORD_CHARS", "HIRAGANA", "KATAKANA", "HAN", "HANGUL", "THAI",
+    "UNSPACED_SCRIPT", "JA_NAME_FOLLOWERS", "JA_NAME_LEADERS", "script_of",
+    "fold_text", "fold_key", "fold_words", "name_boundary_pattern",
+    "name_boundary_regex", "find_names", "split_sentences", "join_sentences",
 ]

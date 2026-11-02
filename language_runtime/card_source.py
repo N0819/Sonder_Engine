@@ -11,10 +11,13 @@ single JSON documents whose values are 62 KB prompt strings with escaped
 newlines. Editing one meant a surgical raw-text replace against an escaped
 blob, which is slow, unreviewable in a diff, and the exact shape that turns a
 one-word prompt fix into an accidental reflow of the other 62,000 characters.
-Splitting moves WHERE the text lives and nothing else: the assembled card is
+Splitting moves WHERE the text lives and nothing else: the assembled card was
 byte-identical to what the monolith produced, and `tests/
-test_prompt_card_split.py` holds it to that against a committed pre-split
-reference forever.
+test_prompt_card_split.py` compares it with a committed pre-split reference.
+That comparison now guards little of the text: a leaf that has diverged is
+listed in `EXPECTED_DIVERGENCE.json`, an ancestor entry excuses its whole
+subtree, and every later edit to a listed path passes unseen -- measured
+2026-11-01, 287 of 308 prompt files per pack excused (dressing audit F18).
 
 The file format, and the one convention in it: a part file is the leaf's exact
 text plus a single trailing newline. Reading strips exactly one trailing
