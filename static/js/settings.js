@@ -297,8 +297,17 @@ $("#b-dlg").onclick = async () => {
   // two rooms off.
   const bubbleRadius = el("input", { type: "number", min: "1", max: "12",
                                      value: c.bubble_radius ?? 3 });
+  // EVERY NUMBER THIS PANEL SAVES IS READ THROUGH THESE (audit 2026-11-01,
+  // F5): the rule above was applied to two of its fields, and `+input.value`
+  // sent 0 for the rest -- an emptied "turns till auto-promotion" switched
+  // promotion off for the story (0 means never), an emptied "max managed"
+  // fell to the server's floor of 1, all under "Dialogue config saved.".
   const shownNumber = (input, fallback) => {
     const n = parseInt(input.value, 10);
+    return Number.isFinite(n) ? n : fallback;
+  };
+  const shownFraction = (input, fallback) => {
+    const n = parseFloat(input.value);
     return Number.isFinite(n) ? n : fallback;
   };
   // Institutions (docs/design/DESIGN_INSTITUTIONS_AND_UPKEEP.md). There is now
@@ -510,16 +519,20 @@ $("#b-dlg").onclick = async () => {
     el("div", { class: "row", style: "margin-top:8px" },
       el("button", { class: "primary", onclick: async () => {
         await api("PUT", `/api/chats/${chatId}/dialogue_config`, {
-          style: st.value, min_lines: mn.value, max_lines: mx.value, variance: va.value,
+          style: st.value,
+          min_lines: shownNumber(mn, c.min_lines ?? 0),
+          max_lines: shownNumber(mx, c.max_lines ?? 4),
+          variance: shownFraction(va, c.variance ?? 0.6),
           autonomy: +auto.value, allow_npc_initiative: npcInit.checked, allow_npc_to_npc_dialogue: npcNpc.checked,
           stop_on_player_address: stopAddr.checked, stop_on_question_to_player: stopQ.checked, silence_ends_exchange: silence.checked,
-          promote_after_addressed: +promoteAfter.value,
+          promote_after_addressed: shownNumber(promoteAfter, c.promote_after_addressed ?? 0),
           max_bubbles: shownNumber(maxBubbles, c.max_bubbles ?? 3),
           bubble_radius: shownNumber(bubbleRadius, c.bubble_radius ?? 3)
         });
         await api("PUT", `/api/chats/${chatId}/background_config`, {
-          scene_life: sceneLife.value, max_managed: +maxManaged.value,
-          max_reactors: +maxReactors.value
+          scene_life: sceneLife.value,
+          max_managed: shownNumber(maxManaged, bg.max_managed ?? 6),
+          max_reactors: shownNumber(maxReactors, bg.max_reactors ?? 1)
         });
         closeModal(); toast("Dialogue config saved.", "ok");
       } }, "Save"))));
@@ -1218,10 +1231,14 @@ async function hydrateCastLocations(slots, sceneSlot, chatId) {
   // story's business, not an authoring dropdown's.
   if (sceneSlot?.isConnected && data.persona) {
     const here = rooms.find(r => r.id === data.persona.room);
-    sceneSlot.textContent = data.location
-      ? `${data.location} — ${data.persona.name} is `
-        + (here ? `in ${castRoomLabel(here)}.` : "not placed in a room.")
-      : "";
+    // Two whole sentences rather than one built round a clause, so each is
+    // a catalog entry (F7); the names go in after the lookup.
+    sceneSlot.textContent = !data.location ? ""
+      : here
+        ? t("{location} — {name} is in {room}.",
+            { location: data.location, name: data.persona.name, room: castRoomLabel(here) })
+        : t("{location} — {name} is not placed in a room.",
+            { location: data.location, name: data.persona.name });
   }
 
   for (const [charId, slot] of slots) {
@@ -1815,14 +1832,17 @@ function renderGuestInvitePanel(chatId) {
                 { persona_id: p.id });
               const link = `${location.origin}/guest?code=${invite.code}`;
               modal("Share this with your friend", b => b.append(
+                // One message with the name as a field, not a paragraph
+                // built round it: the pieces never matched a catalog entry
+                // (F7, audit 2026-11-01).
                 el("div", { class: "small dim", style: "margin-bottom:8px" },
-                  "This link works once, expires in 30 minutes, and only lets them play as "
-                  + p.name + ". They'll need this to actually be reachable -- run a tunnel "
-                  + "(e.g. cloudflared tunnel --url http://localhost:8008) and swap this "
-                  + "page's origin for the tunnel's public URL before sending it. "
-                  + "Start the server with SONDER_PUBLIC=1 when you do: without it the "
-                  + "session cookies are sent without the Secure flag, so anything that "
-                  + "reaches this origin over plain http can read them."),
+                  t("This link works once, expires in 30 minutes, and only lets them play as "
+                    + "{name}. They'll need this to actually be reachable -- run a tunnel "
+                    + "(e.g. cloudflared tunnel --url http://localhost:8008) and swap this "
+                    + "page's origin for the tunnel's public URL before sending it. "
+                    + "Start the server with SONDER_PUBLIC=1 when you do: without it the "
+                    + "session cookies are sent without the Secure flag, so anything that "
+                    + "reaches this origin over plain http can read them.", { name: p.name })),
                 el("input", { readonly: "", value: link, style: "width:100%", onclick: e => e.target.select() }),
                 el("div", { class: "row", style: "margin-top:8px" },
                   el("button", { class: "primary", onclick: () => { navigator.clipboard?.writeText(link); toast("Copied.", "ok") } }, "📋 Copy link"))));
@@ -1997,7 +2017,7 @@ function embeddingBankBlock() {
   const render = async () => {
     let data;
     try { data = await api("GET", "/api/memory/embeddings"); }
-    catch (e) { body.textContent = "Could not check: " + (e?.message || e); return; }
+    catch (e) { body.textContent = t("Could not check: {error}", { error: e?.message || e }); return; }
     const mem = data.memories || {}, sums = data.memory_summaries || {};
     const stranded = (mem.stranded || 0) + (sums.stranded || 0);
     const total = (mem.total || 0) + (sums.total || 0);
@@ -2031,8 +2051,8 @@ function embeddingBankBlock() {
       // offers), while a 429 is a rate limit that will pass on its own.
       body.append(el("div", { class: "warn-note", style: "margin-top:4px" },
         data.fallback_reason
-          ? "The configured embeddings model did not answer: "
-            + data.fallback_reason
+          ? t("The configured embeddings model did not answer: {reason}",
+              { reason: data.fallback_reason })
           : "The configured embeddings model did not answer."));
       body.append(el("div", { style: "margin-top:3px" },
         "This role needs a model that produces embeddings, not one that "
@@ -2063,9 +2083,9 @@ function embeddingBankBlock() {
       return;
     }
     body.append(el("div", { style: "margin-top:3px" },
-      stranded.toLocaleString() + " can currently be found by keyword and exact "
-      + "phrase only. Rebuilding re-reads them through the current model; it "
-      + "runs in the background and resumes if interrupted."));
+      t("{n} can currently be found by keyword and exact phrase only. Rebuilding "
+        + "re-reads them through the current model; it runs in the background and "
+        + "resumes if interrupted.", { n: stranded.toLocaleString() })));
     if (data.is_fallback) {
       body.append(el("div", { style: "margin-top:5px" },
         "Set an embeddings provider above first — rebuilding onto the local "
@@ -2085,7 +2105,7 @@ function embeddingBankBlock() {
           }
           render();
         },
-      }, "Rebuild " + stranded.toLocaleString() + " now")));
+      }, t("Rebuild {n} now", { n: stranded.toLocaleString() }))));
   };
   render();
   return wrap;
@@ -2184,6 +2204,26 @@ function preferredBackdropSize(sizes) {
   return sizes.find(s => /landscape/i.test(s)) || sizes[0];
 }
 
+// A global switch saved on its own click (E3, audit 2026-11-01). The box
+// shows what the server ANSWERED -- the prompt-cache box's rule, "a box that
+// reports what it asked for rather than what happened would show a state that
+// is not real" -- and a refusal puts it back and says why, where it used to
+// stay ticked over a setting that never changed. The caller installs the
+// answer in `S.boot` itself; `boot()` re-downloaded the whole bootstrap
+// (~1.23 MB on the owner's install) and re-translated the page for one flag.
+async function settleSwitch(box, write) {
+  const want = box.checked;
+  try {
+    const answer = await write(want);
+    box.checked = !!(answer && answer.enabled);
+    return true;
+  } catch (e) {
+    box.checked = !want;
+    toast(e.message, "err");
+    return false;
+  }
+}
+
 function renderFullApiSettings(b) {
   const am = structuredClone(S.boot.agent_models || {});
   const ds = S.boot.default_samplers;
@@ -2232,8 +2272,10 @@ function renderFullApiSettings(b) {
               const r = await api("PUT", "/api/providers/" + p.id + "/prompt_cache", { write_beside: want });
               // The server's answer again: caching off reports this off too.
               besideBox.checked = !!r.prompt_cache_write_beside;
+              // `p` is `S.boot.providers`' own row, so setting it IS the
+              // refresh; the whole bootstrap is not fetched again for one
+              // flag (audit 2026-11-01, E3).
               p.prompt_cache_write_beside = !!r.prompt_cache_write_beside;
-              await boot();
               toast(r.prompt_cache_write_beside
                 ? `Cache writes go beside the call for ${p.name || p.kind}: sooner, and billed in full.`
                 : `Cache writes stay inside the call for ${p.name || p.kind}.`, "ok");
@@ -2261,9 +2303,13 @@ function renderFullApiSettings(b) {
               besideBox.checked = !!r.prompt_cache_write_beside;
               p.prompt_cache_write_beside = !!r.prompt_cache_write_beside;
             }
-            await boot();
-            toast(`Prompt caching ${(r.prompt_cache ? "on" : "off")
-              + " for " + (p.name || p.kind) + "."}`, "ok");
+            // `p` is the bootstrap's own row (E3, above). One whole sentence
+            // per state: a sentence built round a placeholder holding
+            // English translated only its head (F7: "プロンプトキャッシュon
+            // for OpenRouter.").
+            toast(r.prompt_cache
+              ? t("Prompt caching on for {name}.", { name: p.name || p.kind })
+              : t("Prompt caching off for {name}.", { name: p.name || p.kind }), "ok");
           } catch (e) {
             cacheBox.checked = !want;
             toast(`Could not change caching: ${e.message}`, "err");
@@ -2325,23 +2371,26 @@ function renderFullApiSettings(b) {
           onclick: async () => {
             const r = await api("PUT", "/api/max_output_tokens", { value: motInput.value });
             motInput.value = String(r.value);
-            await boot();
-            toast(`Response limit saved: ${r.value + " tokens."}`, "ok");
+            // The answer is the stored value: installed, not re-fetched (E3).
+            S.boot.max_output_tokens = r.value;
+            toast(t("Response limit saved: {n} tokens.", { n: r.value }), "ok");
           },
         }, "Save"),
         el("button", {
           onclick: () => { motInput.value = String(motBounds.default); },
-        }, "Reset to " + motBounds.default)),
+        }, t("Reset to {n}", { n: motBounds.default }))),
       el("div", { class: "small dim" },
         "The cap on how much any single call may generate — not your context window. ",
-        el("b", {}, motBounds.default + " is the recommended default"),
+        el("b", {}, t("{n} is the recommended default", { n: motBounds.default })),
         " and comfortably fits every stage; the longest thing the engine writes in one call is a narrator turn, which runs well under it. A stage asking for less keeps its own smaller budget, so raising this never makes a short call expensive."),
       el("details", { style: "margin-top:6px" },
         el("summary", {}, "When should I change this?"),
         el("div", { class: "small dim", style: "margin-top:6px" },
           el("div", {}, el("b", {}, "Raise it"), " only if you're running a model with a genuinely large output window AND you're seeing replies cut off mid-sentence. Setting it above what your model can actually emit is not free: pay-per-use providers reserve credit against the number you ask for, and a model whose context can't fit your prompt plus this number is refused outright — which reads as 'that model doesn't work' when the real cause is this setting."),
           el("div", { style: "margin-top:6px" }, el("b", {}, "Lower it"), " to hard-cap what a single call can cost, or when you're on a small local model whose output limit is well under the default."),
-          el("div", { style: "margin-top:6px" }, "Values outside " + motBounds.min + "–" + motBounds.max + " are pulled into range on save."))));
+          el("div", { style: "margin-top:6px" },
+            t("Values outside {min}–{max} are pulled into range on save.",
+              { min: motBounds.min, max: motBounds.max })))));
 
     // OpenRouter upstream routing. One OpenRouter model id is served by
     // several upstreams (Anthropic direct, Bedrock, Azure, Vertex, third-party
@@ -2403,7 +2452,7 @@ function renderFullApiSettings(b) {
           }
         } catch (err) {
           epBox.innerHTML = "";
-          epBox.append(el("span", {}, "Could not list upstreams: " + err.message));
+          epBox.append(el("span", {}, t("Could not list upstreams: {error}", { error: err.message })));
         }
       };
 
@@ -2438,7 +2487,8 @@ function renderFullApiSettings(b) {
                 sort: sortSel.value || null,
                 exclude_quantizations: quantBoxes.filter(([, box]) => box.checked).map(([q]) => q),
               });
-              await boot();
+              // The answer is the stored block (E3).
+              S.boot.openrouter_routing = r.routing;
               toast(Object.keys(r.routing).length
                 ? "Upstream routing saved." : "Upstream routing cleared — OpenRouter chooses.", "ok");
             },
@@ -2542,10 +2592,15 @@ function renderFullApiSettings(b) {
           el("button", {
             onclick: async () => {
               const picked = imgCombo.read();
-              await api("PUT", "/api/image_model", { ...picked, size: sizeIn.value.trim() });
-              await api("PUT", "/api/backdrops", { enabled: enableBox.checked,
-                                                  continuity: continuityBox.checked });
-              await boot();
+              const im = await api("PUT", "/api/image_model", { ...picked, size: sizeIn.value.trim() });
+              const bd = await api("PUT", "/api/backdrops", { enabled: enableBox.checked,
+                                                             continuity: continuityBox.checked });
+              // Both answers are the bootstrap's own values for these keys:
+              // installed, and the backdrop re-synced as `boot()` would (E3).
+              S.boot.image_model = im.image_model;
+              S.boot.backdrops_enabled = !!bd.enabled;
+              S.boot.backdrop_continuity = !!bd.continuity;
+              if (typeof syncBackdrops === "function") syncBackdrops();
               toast(picked.provider && picked.model
                 ? "Backdrop image model saved." : "Backdrop image model cleared.", "ok");
             },
@@ -2579,9 +2634,9 @@ function renderFullApiSettings(b) {
         ...(S.boot.affect_habituation ? { checked: "" } : {})
       });
       habitBox.onchange = async () => {
-        await api("PUT", "/api/affect_habituation",
-                  { enabled: habitBox.checked });
-        await boot();
+        if (!await settleSwitch(habitBox, want =>
+              api("PUT", "/api/affect_habituation", { enabled: want }))) return;
+        S.boot.affect_habituation = habitBox.checked;
         toast(habitBox.checked
           ? "A held peak will wear off, so a new one can land."
           : "Feeling will hold wherever the beat puts it.", "ok");
@@ -2612,8 +2667,9 @@ function renderFullApiSettings(b) {
         type: "checkbox", ...(S.boot.attire_beneath ? { checked: "" } : {})
       });
       beneathBox.onchange = async () => {
-        await api("PUT", "/api/attire_beneath", { enabled: beneathBox.checked });
-        await boot();
+        if (!await settleSwitch(beneathBox, want =>
+              api("PUT", "/api/attire_beneath", { enabled: want }))) return;
+        S.boot.attire_beneath = beneathBox.checked;
         toast(beneathBox.checked
           ? "Underneath descriptions will be used."
           : "Underneath descriptions will be left out.", "ok");
@@ -2645,8 +2701,9 @@ function renderFullApiSettings(b) {
         type: "checkbox", ...(S.boot.auto_promote ? { checked: "" } : {})
       });
       promoteBox.onchange = async () => {
-        await api("PUT", "/api/auto_promote", { enabled: promoteBox.checked });
-        await boot();
+        if (!await settleSwitch(promoteBox, want =>
+              api("PUT", "/api/auto_promote", { enabled: want }))) return;
+        S.boot.auto_promote = promoteBox.checked;
         toast(promoteBox.checked
           ? "Stories may promote an extra into a full character on their own."
           : "Extras will only become characters when you promote them.", "ok");
@@ -2688,6 +2745,18 @@ function renderFullApiSettings(b) {
         type: "checkbox",
         ...((cfg.licenses || []).includes("Attribution NonCommercial") ? { checked: "" } : {}),
       });
+      // The route answers with the whole of what the bootstrap carries for
+      // this block (`ambience_settings()` without the key), so the answer is
+      // installed where the bootstrap would have put it and the bed re-synced
+      // -- no `boot()`, which re-downloaded every card and book to change one
+      // setting (audit 2026-11-01, E3). The key field then says what is
+      // stored, from the same answer.
+      const settle = answer => {
+        S.boot.ambience = answer;
+        keyIn.value = "";
+        keyIn.placeholder = t(answer.has_key ? "•••• (key set — blank keeps it)" : "Freesound API key");
+        if (typeof syncAmbience === "function") syncAmbience();
+      };
       b.append(el("h4", {}, "Room ambience"),
         el("div", { class: "small dim" },
           "Plays a looping sound bed for the room the player is standing in, chosen from the room's spatial description only — never from who is in it. It follows the room, the hour, the weather and any damage, and each distinct state is fetched once and cached. Mute, volume and reroll live beside the input box."),
@@ -2696,18 +2765,27 @@ function renderFullApiSettings(b) {
             onclick: async () => {
               const licenses = ["Creative Commons 0", "Attribution"];
               if (ncBox.checked) licenses.push("Attribution NonCommercial");
-              await api("PUT", "/api/ambience", {
+              settle(await api("PUT", "/api/ambience", {
                 enabled: enableBox.checked,
                 source: sourceSel.value,
                 library: libIn.value.trim(),
                 freesound_key: keyIn.value.trim(),
                 licenses,
-              });
-              await boot();
-              if (typeof syncAmbience === "function") syncAmbience();
+              }));
               toast("Ambience settings saved.", "ok");
             },
-          }, "Save")),
+          }, "Save"),
+          // A blank field keeps the stored key, so clearing it is its own
+          // act -- the route has always taken `clear_key` ("Clearing is
+          // explicit"), and nothing sent it, so a key once saved could only
+          // be replaced, never removed (audit 2026-11-01, F13). The research
+          // block below has had its "Clear key" all along.
+          el("button", {
+            onclick: async () => {
+              settle(await api("PUT", "/api/ambience", { clear_key: true }));
+              toast("Freesound key cleared.", "ok");
+            },
+          }, "Clear key")),
         el("div", { class: "row", style: "margin:6px 0" },
           el("label", { class: "small" }, enableBox, " Play ambience"),
           el("label", { class: "small", style: "margin-left:14px" }, ncBox,
@@ -2734,20 +2812,24 @@ function renderFullApiSettings(b) {
         el("div", { class: "small dim" },
           "Lets the Story Planner search the web for reference material — how a trade, a place or a period really worked — once a story has granted it research in words. Every query is written into the room thread before it is sent, results are cached per story, and nothing from the web enters the world until it is filed as lore with its address and date."),
         el("div", { class: "row", style: "margin:6px 0" }, provSel, keyIn,
+          // The route answers with `research_settings()`, the bootstrap's
+          // own value for this block: installed there, not re-fetched with
+          // the whole bootstrap (E3).
           el("button", {
             onclick: async () => {
-              await api("PUT", "/api/research", {
+              S.boot.research = await api("PUT", "/api/research", {
                 provider: provSel.value,
                 key: keyIn.value.trim(),
               });
-              await boot();
+              keyIn.value = "";
+              keyIn.placeholder = t(S.boot.research.has_key ? "•••• (key set — blank keeps it)" : "Search API key");
               toast("Research settings saved.", "ok");
             },
           }, "Save"),
           el("button", {
             onclick: async () => {
-              await api("PUT", "/api/research", { clear_key: true });
-              await boot();
+              S.boot.research = await api("PUT", "/api/research", { clear_key: true });
+              keyIn.placeholder = t("Search API key");
               toast("Research key cleared.", "ok");
             },
           }, "Clear key")));
@@ -2801,7 +2883,8 @@ function renderFullApiSettings(b) {
           el("button", { class: "primary", onclick: async () => {
             const r = await api("PUT", "/api/exemplars",
                                 { exemplars: areas.map(ta => ta.value) });
-            await boot();
+            // The answer carries the stored passages (E3).
+            S.boot.exemplars = r.exemplars;
             toast(r.count
               ? `${r.count} passage(s) saved — the narrator will study them.`
               : "Cleared. The narrator writes from the prompt alone.", "ok");
@@ -3123,10 +3206,22 @@ function renderFullApiSettings(b) {
       // as the model does; "(model default)" on Default means send nothing.
       const effLevels = S.boot.reasoning_effort_levels || ["off", "minimal", "low", "medium", "high"];
       const effMap = S.boot.reasoning_effort || {};
+      // One whole label per level, the FORMAT_LABELS shape below: "reasoning:
+      // " + level was harvested as a fragment no catalog entry matched, so it
+      // stayed English in every pack (audit 2026-11-01, F7). A level this
+      // table has not heard of still shows, under its own word.
+      const EFFORT_LABELS = {
+        off: "reasoning: off",
+        minimal: "reasoning: minimal",
+        low: "reasoning: low",
+        medium: "reasoning: medium",
+        high: "reasoning: high",
+      };
       const effortSel = el("select", { style: "min-width:118px", title: "Reasoning effort" },
         [el("option", { value: "" }, isDefault ? "reasoning: default" : "reasoning: follow default")]
           .concat(effLevels.map(l => el("option",
-            { value: l, ...(effMap[role] === l ? { selected: "" } : {}) }, "reasoning: " + l))));
+            { value: l, ...(effMap[role] === l ? { selected: "" } : {}) },
+            EFFORT_LABELS[l] || t("reasoning: {level}", { level: l })))));
       roleInputs[role] = roleInputs[role] || {};
       // An embeddings request carries the model and the text, nothing else
       // (providers._embed_request), so reasoning and format are not offered.
@@ -3176,9 +3271,10 @@ function renderFullApiSettings(b) {
                 && (String(p) !== String(embedWas.provider)
                     || String(m || "") !== String(embedWas.model || ""))) {
               embedWarned = true;
-              toast(`Changing the embeddings model means every memory already ${"stored has to be re-read through it — until then those "
-                  + "memories are found by keyword only. Save, and the engine "
-                  + "will offer to rebuild."}`, "warn", 11000);
+              toast("Changing the embeddings model means every memory already "
+                + "stored has to be re-read through it — until then those "
+                + "memories are found by keyword only. Save, and the engine "
+                + "will offer to rebuild.", "warn", 11000);
             }
           },
           isEmbeddings ? {
@@ -3238,7 +3334,7 @@ function renderFullApiSettings(b) {
                 // so every row truthfully renders default as its parent; it
                 // was not empty once, and the label lied on the eight rows
                 // a host is most likely to leave blank deliberately.
-                "follow " + ((S.boot.role_fallbacks || {})[role] || "default")
+                t("follow {role}", { role: (S.boot.role_fallbacks || {})[role] || "default" })
               )
             : null,
           primaryContainer,
@@ -3433,13 +3529,36 @@ function checkpointCompactionBlock() {
     body);
 
   const mb = n => (Number(n || 0) / 1e6).toFixed(1) + " MB";
-  let timer = null;
 
-  const render = async () => {
+  // ONE STATUS REQUEST AT A TIME, AND ONLY WHILE THE CARD IS ON THE PAGE
+  // (audit 2026-11-01, F3). This polled with `setInterval(render, 1000)`,
+  // never awaiting the request before it, while the status route parsed the
+  // whole checkpoint store on every call -- about 49 s on the owner's 2.8 GB
+  // store (measured `mode=ro`) -- so a conversion kept ~49 of them in flight,
+  // enough to fill the server's thread pool, and closing the dialog stopped
+  // none of it; each reopen added an interval. The next poll is armed only
+  // after the last one has answered and drawn, and only while `wrap` is still
+  // in the document: the embedding block's shape (`embeddingBankBlock`).
+  // While a run is in flight only `progress` is read, so the route may answer
+  // with that alone.
+  let timer = null;
+  let inflight = null;
+
+  const render = () => {
+    if (inflight) return inflight;
+    inflight = draw().finally(() => { inflight = null; });
+    return inflight;
+  };
+  const poll = () => {
+    timer = null;
+    if (wrap.isConnected) render();
+  };
+
+  const draw = async () => {
     let d;
     try { d = await api("GET", "/api/maintenance/checkpoints"); }
     catch (e) {
-      body.textContent = "Could not check: " + (e?.message || e);
+      body.textContent = t("Could not check: {error}", { error: e?.message || e });
       return;
     }
     const p = d.progress || {};
@@ -3461,15 +3580,15 @@ function checkpointCompactionBlock() {
         body.append(el("div", { class: "small dim", style: "margin-top:6px" },
           `${mb(p.bytes_before)} → ${mb(p.bytes_after)} so far`));
       }
-      if (!timer) timer = setInterval(render, 1000);
+      if (!timer && wrap.isConnected) timer = setTimeout(poll, 1000);
       return;
     }
 
-    if (timer) { clearInterval(timer); timer = null; }
+    if (timer) { clearTimeout(timer); timer = null; }
 
     if (p.error) {
       body.append(el("div", { style: "color:var(--danger,#c0392b)" },
-        "Conversion stopped: " + p.error));
+        t("Conversion stopped: {error}", { error: p.error })));
       body.append(el("div", { class: "small dim", style: "margin-top:4px" },
         "Nothing was lost — converted checkpoints stay converted and the rest "
         + "are untouched. Running it again resumes."));
@@ -3779,6 +3898,7 @@ function openPromptsModal() {
       // greyed back to pack defaults.
       const preset = presetOf(sel.value);
       if (preset && storyPacks.some(p => p.id === preset.language)) langSel.value = preset.language;
+      shown = langSel.value;
       showLanguage();
     };
     // The whole language change, from one control. The prompt sheets, the
@@ -3786,28 +3906,42 @@ function openPromptsModal() {
     // Japanese here means Japanese, not "Japanese prompts under an English
     // interface". Story language is per-chat, so it only applies to the story
     // currently open, and only when no turn is running.
+    // The language the control showed before this change: what a refused
+    // change returns it (and the sheets under it) to.
+    let shown = langSel.value;
     langSel.onchange = async () => {
       const id = langSel.value;
       await showLanguage();
-      // The wizard reads this for the language of a NEW story, so the single
-      // switch has to set it too -- otherwise new characters and personas are
-      // still generated in whatever the wizard last remembered.
-      try { localStorage.setItem("storyLanguage", id); } catch (e) {}
-      let storyNote = "";
+      // A REFUSED STORY CHANGE STOPS THE WHOLE SWITCH, before anything else
+      // moves (audit 2026-11-01, F4). A turn in flight refuses it (409,
+      // `_require_chat_idle`), and this used to switch the interface anyway
+      // and reload -- so the toast that said the story kept its language was
+      // destroyed by the reload on the next line, the Prompts menu reopened
+      // in the new language, and the story stayed in the old one with
+      // nothing on screen saying so. The switch is one decision; a refusal
+      // of its story half is said, in the story's words, and the control
+      // goes back to the language that is still in force.
       if (S.chatId) {
         try {
           const out = await api("PUT", `/api/chats/${S.chatId}/language`,
                                 { language: id });
           if (S.chat) S.chat.chat.story_language = out.language;
         } catch (e) {
-          // A turn in flight refuses the change; the interface still moves.
-          storyNote = " This story kept its language: " + e.message;
+          langSel.value = shown;
+          await showLanguage();
+          return toast(t("This story kept its language, so nothing was switched: {reason}",
+                         { reason: e.message }), "warn", 9000);
         }
       }
+      shown = id;
+      // The wizard reads this for the language of a NEW story, so the single
+      // switch has to set it too -- otherwise new characters and personas are
+      // still generated in whatever the wizard last remembered.
+      try { localStorage.setItem("storyLanguage", id); } catch (e) {}
       if (id !== S.uiLanguage) {
         try {
           await api("PUT", "/api/ui-language", { language: id });
-          toast(`Language changed.${storyNote}`, "ok");
+          toast("Language changed.", "ok");
           // Reload for the same reason the style guide does: localizeDocument
           // rewrites English source text in place, so it cannot translate a
           // second time from an already-translated DOM. Come back to this
@@ -3817,10 +3951,10 @@ function openPromptsModal() {
           return window.location.reload();
         } catch (e) { return toast(e.message, "err"); }
       }
-      if (storyNote) toast(storyNote.trim(), "warn");
     };
     const active = presetOf(sel.value);
     if (active && storyPacks.some(p => p.id === active.language)) langSel.value = active.language;
+    shown = langSel.value;
     showLanguage();
   });
 }
@@ -3872,6 +4006,20 @@ function extensionTrustNote(ext) {
 // place that vocabulary lives.
 function extensionCapabilitySummary(ext) {
   return (ext && ext.disclosures) || [];
+}
+
+// The consent moment for running an extension's code: what it is trusted
+// with, and what it asks to do, IN the dialog. Used by Enable and by the
+// re-enable after an Update, which shows the NEW version's asks -- the same
+// disclosure for the same act (F2, at `update.onclick`).
+function extensionEnableConsent(ext) {
+  const caps = extensionCapabilitySummary(ext);
+  return confirmModal(
+    `Enable ${ext.name || ext.id}?\n\n${extensionTrustNote(ext)}`
+    + (caps.length
+        ? `\n\nIt asks to:\n${caps.map(line => "• " + line).join("\n")}`
+        : ""),
+    { confirmLabel: "Enable" });
 }
 
 //: id -> the row `/api/extensions/updates` last returned for it. Held across
@@ -3966,12 +4114,7 @@ async function openExtensionsMenu() {
         // it used to show the trust sentence alone while the capability
         // summary was rendered into the row BEHIND the dialog. Disclosure
         // that arrives after consent is not disclosure.
-        if (!enabled && !await confirmModal(
-              `Enable ${ext.name || ext.id}?\n\n${extensionTrustNote(ext)}`
-              + (caps.length
-                  ? `\n\nIt asks to:\n${caps.map(line => "• " + line).join("\n")}`
-                  : ""),
-              { confirmLabel: "Enable" })) return;
+        if (!enabled && !await extensionEnableConsent(ext)) return;
         try {
           await api("POST", `/api/extensions/${encodeURIComponent(ext.id)}/`
                     + (enabled ? "disable" : "enable"));
@@ -4017,21 +4160,58 @@ async function openExtensionsMenu() {
       if (report && report.update) {
         update = el("button", { class: "primary", title: report.latest || "" },
           "Update");
+        // AN UPDATE IS NEW CODE, SO IT IS ASKED FOR AND THEN ENABLED AGAIN
+        // (audit 2026-11-01, `frontend_lorebooks_editors` F2). One click
+        // re-cloned the remote and -- the extension being enabled -- ran the
+        // new version's `register(api)` in the engine process, with no
+        // dialog; its new capability list appeared in the row only after it
+        // was already running, and "disclosure that arrives after consent is
+        // not disclosure" (the Enable dialog's own rule). Now the fetch is
+        // consented to first, the server leaves the updated extension
+        // switched off (lane L2; an older server that re-enabled it is
+        // switched off here), and running it again is the Enable dialog over
+        // the NEW version's asks.
         update.onclick = async () => {
+          if (!await confirmModal(
+                `Update ${ext.name || ext.id}?\n\nThe new version is fetched from its `
+                + `repository, and nothing has reviewed it. It is left switched off `
+                + `until you enable it again, after seeing what the new version asks to do.`,
+                { confirmLabel: "Update" })) return;
           await backgroundTask("Updating extension",
             () => api("POST", `/api/extensions/${encodeURIComponent(ext.id)}/update`),
-            { onSuccess: async () => {
+            { onSuccess: async row => {
                 delete EXTENSION_UPDATES[ext.id];
-                // The Python half is already the new one; the browser still
-                // holds the old script, so reload it the way enable does.
-                if (window.Sonder && enabled) {
-                  Sonder._unload(ext.id);
-                  await Sonder._load(ext.id);
-                  Sonder.refresh();
+                // Nothing was fetched (`update_extension` answers `updated:
+                // false` when the remote has not moved): what runs is what
+                // the host already enabled, so nothing is asked again.
+                if (row && row.updated === false) {
+                  toast("Up to date.", "ok");
+                  openExtensionsMenu();
+                  return;
                 }
+                // The browser half that ran is the OLD version's.
+                if (window.Sonder && enabled) { Sonder._unload(ext.id); Sonder.refresh(); }
+                let fresh = row && row.id === ext.id ? row : { ...ext, enabled: false };
+                if (fresh.enabled) {
+                  fresh = { ...fresh, ...await api("POST",
+                    `/api/extensions/${encodeURIComponent(ext.id)}/disable`) };
+                }
+                // `disabled_for_consent` is the server's own word that it
+                // was switched on before (L2); the row this menu drew says
+                // the same from here.
+                const wasOn = enabled || fresh.disabled_for_consent === true;
+                let running = false;
+                if (wasOn && await extensionEnableConsent(fresh)) {
+                  await api("POST", `/api/extensions/${encodeURIComponent(ext.id)}/enable`);
+                  if (window.Sonder) { await Sonder._load(ext.id); Sonder.refresh(); }
+                  running = true;
+                }
+                toast(running ? "Extension updated and enabled."
+                  : wasOn ? "Extension updated and left switched off — enable it to run the new version."
+                  : "Extension updated.", "ok");
                 openExtensionsMenu();
               },
-              successMessage: "Extension updated." });
+              successMessage: null });
         };
       }
 

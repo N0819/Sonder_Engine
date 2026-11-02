@@ -175,13 +175,126 @@ function carryUnpresentedFields(stored, built, owned, path) {
 // `regions`, which would let the same garment return through the other door.
 const OWNED_SHEET_PATHS = ["initial_outfit"];
 
+// ---- A fill is a proposal over the FORM, never over the stored card ----
+//
+// The three fill buttons used to reopen the editor from what the route
+// answered, and every route answers with the STORED card plus its proposal
+// (`story/importers.py`: `merged = copy.deepcopy(stored)`). So a drive essence
+// typed and not yet saved was replaced by the model's -- under a tooltip that
+// says "populated fields are preserved" -- and every unsaved edit OUTSIDE the
+// fill's own fields was simply gone: a hair colour typed before a psychology
+// fill, a trait typed before a body fill (audit 2026-11-01, F4). Now each
+// fill reads the form as Save would build it, lays the proposal over THAT --
+// by the fill's own rule, on the fill's own fields only -- and reopens with
+// it, still unsaved.
+//
+// The rule per fill is the server's, applied to what the author typed:
+//   psychology -- fills GAPS (`_merge_missing_fields`, ported below as
+//     `fillCardGaps`): a typed value stands, an empty one takes the
+//     proposal, a list of named items gains the ones it lacks. A list item the
+//     author removed before filling can come back from the stored card; the
+//     review shows it, and Save is still the only write.
+//   body and clothing -- REPLACES (`fill_appearance`'s docstring): the model
+//     was shown the typed appearance, voice, outfit and parts, so its answer
+//     stands for those -- except where the answer only repeats the card as
+//     saved, which is the server filling in a field the model left out, and
+//     then what was typed stands.
+//   the inside -- REPLACES the interior chain, which the model was shown.
+const PSYCHOLOGY_FILL_PATHS = ["psychology", "embodiment.interoception",
+                               "initial_state.stress", "initial_state.hedonic"];
+const APPEARANCE_FILL_PATHS = ["embodiment.visible", "embodiment.voice",
+                               "embodiment.extra_parts", "initial_outfit"];
+const INTERIOR_FILL_PATHS = ["embodiment.interior"];
+
+function cardPathValue(card, path) {
+  return path.split(".").reduce(
+    (node, key) => (node && typeof node === "object" ? node[key] : undefined), card);
+}
+
+function setCardPathValue(card, path, value) {
+  const keys = path.split(".");
+  let node = card;
+  for (const key of keys.slice(0, -1)) {
+    if (!node[key] || typeof node[key] !== "object" || Array.isArray(node[key])) node[key] = {};
+    node = node[key];
+  }
+  node[keys[keys.length - 1]] = value;
+}
+
+// `story/importers.py`'s `_merge_missing_fields`, over the form: fill what is
+// empty, never replace what is there; lists of named items merge by name
+// (or belief, or cue).
+function fillCardGaps(existing, proposed) {
+  const isMap = v => !!v && typeof v === "object" && !Array.isArray(v);
+  const copy = v => (v === undefined ? undefined : structuredClone(v));
+  if (isMap(existing) && isMap(proposed)) {
+    const out = copy(existing);
+    for (const [key, value] of Object.entries(proposed)) {
+      out[key] = key in out ? fillCardGaps(out[key], value) : copy(value);
+    }
+    return out;
+  }
+  if (Array.isArray(existing) && Array.isArray(proposed)) {
+    if (!existing.length) return copy(proposed);
+    if ([...existing, ...proposed].every(isMap)) {
+      const fields = ["name", "belief", "cue"];
+      const said = (item, field) => String(item[field] ?? "").trim().toLowerCase();
+      const out = copy(existing);
+      for (const candidate of proposed) {
+        const identity = fields.map(f => said(candidate, f)).find(Boolean) || "";
+        const at = identity ? out.findIndex(item => fields.some(f => said(item, f) === identity)) : -1;
+        if (at < 0) out.push(copy(candidate));
+        else out[at] = fillCardGaps(out[at], candidate);
+      }
+      return out;
+    }
+    return copy(existing);
+  }
+  const empty = existing == null || existing === ""
+    || (Array.isArray(existing) && !existing.length)
+    || (isMap(existing) && !Object.keys(existing).length);
+  return empty ? copy(proposed) : copy(existing);
+}
+
+// The sheet to reopen the editor with after a fill: the form as Save would
+// build it (`draft`), the fill's `proposal` laid over the fill's own `paths`
+// by its rule. `saved` is the card as last saved, which tells a field the
+// model wrote from one the server merely carried over from the saved card.
+function proposalOverForm(kind, draft, proposal, saved) {
+  const same = (a, b) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
+  const out = structuredClone(draft);
+  const paths = { psychology: PSYCHOLOGY_FILL_PATHS, appearance: APPEARANCE_FILL_PATHS,
+                  interior: INTERIOR_FILL_PATHS }[kind] || [];
+  for (const path of paths) {
+    const offered = cardPathValue(proposal, path);
+    if (offered === undefined) continue;
+    const typed = cardPathValue(draft, path);
+    let value;
+    if (kind === "psychology") {
+      value = fillCardGaps(typed, offered);
+    } else if (kind === "appearance" && path === "embodiment.visible") {
+      const was = cardPathValue(saved, path) || {};
+      value = { ...(typed || {}) };
+      for (const [key, v] of Object.entries(offered || {})) {
+        if (!same(v, was[key])) value[key] = v;
+      }
+    } else if (kind === "appearance") {
+      value = same(offered, cardPathValue(saved, path)) && typed !== undefined ? typed : offered;
+    } else {
+      value = offered;
+    }
+    setCardPathValue(out, path, value);
+  }
+  return out;
+}
+
 // Editable, swipeable greetings for a saved character card. Greetings are
 // captured at import (first_mes + alternate_greetings, stored on
 // sheet.opening.greetings) and can be added/edited/removed here; the list is
 // read back into the main character Save. {{PLAYER}} is the neutral player
 // token, substituted with the real persona name when a story launches.
 // Returns { node, read } -- read() yields the current (edited) greetings list.
-function greetingCarousel(character, initial) {
+function greetingCarousel(character, initial, { unsaved = () => false, proposal = false } = {}) {
   const list = (initial || []).map(g => ({ ...g }));
   let i = 0;
 
@@ -255,6 +368,20 @@ function greetingCarousel(character, initial) {
   const quick = el("button", { class: "primary",
     onclick: () => {
       if (!list.length) { toast("Add a greeting first.", "warn"); return; }
+      // QUICK START LAUNCHES FROM THE SAVED CARD, so it never saves one (audit
+      // 2026-11-01, F5). It used to PUT `character.sheet` with the greetings
+      // laid in -- and after a fill `character.sheet` IS the unreviewed
+      // proposal, so this button published it to the reusable card without
+      // the author's Save; without a fill it wrote the sheet as opened and
+      // silently dropped every edit made in the form. The greetings stay its
+      // own to save; anything else unsaved is refused, in words, so the
+      // author saves (or discards) it first.
+      if (unsaved()) {
+        toast(proposal
+          ? "This card holds a fill's proposal that is not saved. Review it and Save, then quick start."
+          : "This card has unsaved edits. Save it first, then quick start.", "warn", 7000);
+        return;
+      }
       // Persist current greetings before launch -- start_story reads the DB.
       const stored = JSON.parse(character.sheet);
       const updated = { ...stored,
@@ -379,7 +506,9 @@ function charEditor(c, options = {}) {
     ? sheet.opening.greetings : [];
   // Editable greetings box (saved characters only -- it needs a real id to
   // save/recover/quick-start against). gc.read() feeds back into Save below.
-  const gc = c && !isChatCard ? greetingCarousel(c, greetings) : null;
+  const gc = c && !isChatCard
+    ? greetingCarousel(c, greetings, { unsaved: () => holdsUnsaved(), proposal: !!options.proposal })
+    : null;
 
   f.name = fText("Name", sheet.identity?.name);
   if (isChatCard) {
@@ -493,6 +622,120 @@ function charEditor(c, options = {}) {
 
   f.first_message = fArea("First message (optional, for scene open)", sheet.opening?.first_message, 3);
   const ph = phEditor(sheet.knowledge?.private_history, true);
+  // THE FORM AS SAVE WOULD SEND IT -- one builder for Save, for every fill
+  // (which lays its proposal over this, never over the stored card: F4,
+  // above `PSYCHOLOGY_FILL_PATHS`) and for Quick start's "is anything
+  // unsaved" question (F5, at `greetingCarousel`).
+  const buildSheet = () => {
+    const access_tags = [];
+    if (f.knowledge_common.checked) access_tags.push("common");
+    if (f.knowledge_scholarly.checked) access_tags.push("scholarly");
+    if (f.knowledge_esoteric.checked) access_tags.push("esoteric");
+
+    // Everything below is what the widgets OWN. Anything else the
+    // stored sheet carries is merged back by carryUnpresentedFields --
+    // without it a full-replacement PUT behind a field-by-field editor
+    // deletes every field that has no widget.
+    const s = carryUnpresentedFields(sheet, {
+      identity: {
+        uid: sheet.identity?.uid,
+        name: f.name.read(),
+        aliases: f.aliases.read(),
+        pronouns: f.pronouns.read()
+      },
+      // `wearing` is derived from the regions by the schema, never
+      // sent from here -- two authored copies of one outfit is how the
+      // ledger ends up saying different things about the same body.
+      initial_outfit: { regions: f.outfit_regions.read() },
+      // No `sampler` key: there is no widget for it, so writing one
+      // here would erase whatever was authored or imported into it. It
+      // rides the carry with every other unpresented field.
+      simulation: { tier: f.tier.read(), temperature: f.temperature.read(),
+        offscreen_agent: f.offscreen_agent.querySelector("input").checked },
+      embodiment: {
+        senses: f.senses.read(),
+        visible: { summary: f.summary.read(), build: f.build.read(), face: f.face.read(), hair: f.hair.read(), eyes: f.eyes.read(), distinctive_features: f.distinctive.read() },
+        scent: f.scent.read(),
+        voice: f.voice.read(),
+        latent: f.latent.read(),
+        extra_parts: f.extra_parts.read(),
+        interior: f.interior.read(),
+        interoception: {
+          acuity: f.intero_acuity.read() ?? 0.5,
+          pain_sensitivity: f.pain_sensitivity.read() ?? 0.5,
+          fatigue_sensitivity: f.fatigue_sensitivity.read() ?? 0.5,
+          pleasure_sensitivity: f.pleasure_sensitivity.read() ?? 0.5
+        }
+      },
+      psychology: {
+        drive: { essence: f.drive_essence.read(), expression: f.drive_expression.read(), taboo: f.drive_taboo.read() },
+        capacity: f.capacity.read(),
+        traits: f.traits.read(),
+        values: f.values.read(),
+        self_model: {
+          summary: f.self_summary.read(), protected_beliefs: f.protected.read(),
+          pride_triggers: f.pride.read(), shame_triggers: f.shame.read(),
+          beliefs: f.beliefs.read()
+        },
+        coping: {
+          under_stress: splitCL(f.coping.read()),
+          default_conflict_style: f.conflict.read(),
+          strategies: f.coping_strategies.read(),
+          recovery_supports: f.recovery_supports.read()
+        },
+        stress_profile: {
+          baseline_reactivity: f.stress_reactivity.read() ?? 0.5,
+          recovery_rate: f.stress_recovery.read() ?? 0.5,
+          overload_threshold: f.overload_threshold.read() ?? 0.8,
+          attentional_style: f.attentional_style.read(),
+          somatic_signs: f.somatic_signs.read()
+        },
+        learning: { associations: f.associations.read() }
+      },
+      social: {
+        voice: { register: f.voice_register.read(), cadence: f.voice_cadence.read(), verbosity: f.voice_verbosity.read(), markers: f.voice_markers.read(), notes: f.voice_notes.read() },
+        baseline_stances: { unknown_person: { trust: f.trust.read() || 0, warmth: f.warmth.read() || 0, threat_sensitivity: f.threat.read() || 0 } }
+      },
+      competence: { abilities: f.abilities.read() },
+      knowledge: { access_tags, excluded_titles: f.excluded_titles.read(), public_history: f.public_history.read(), private_history: ph.read() },
+      initial_state: {
+        mood: { label: f.mood.read(), valence: f.valence.read() || 0, arousal: f.arousal.read() || 0 },
+        goals: f.goals.read(), active_concerns: f.active_concerns.read(),
+        stress: {
+          activation: f.initial_stress.read() || 0,
+          load: f.initial_load.read() || 0,
+          coping_mode: f.initial_coping.read()
+        },
+        hedonic: {
+          pain: f.initial_pain.read() || 0,
+          pleasure: f.initial_pleasure.read() || 0,
+          source: f.initial_hedonic_source.read()
+        }
+      },
+      // Persist the (possibly edited) greetings alongside first_message.
+      // gc.read() is the live list from the greetings box; falling back to
+      // the stored list keeps them intact for the new-character form.
+      opening: {
+        ...(sheet.opening || {}),
+        first_message: f.first_message.read(),
+        greetings: gc ? gc.read() : (sheet.opening?.greetings || [])
+      }
+    }, OWNED_SHEET_PATHS);
+    return s;
+  };
+  // The card as last SAVED: what tells a field a fill's model wrote from one
+  // the server carried over unchanged. A reopen after a fill hands it on.
+  const storedSheet = options.storedSheet || sheet;
+  // What the form held when it opened, greetings aside -- they are Quick
+  // start's own to save. A reopen after a fill is unsaved by definition.
+  const comparableSheet = built => JSON.stringify(
+    { ...built, opening: { ...(built.opening || {}), greetings: undefined } });
+  const openedAs = comparableSheet(buildSheet());
+  const holdsUnsaved = () => !!options.proposal || comparableSheet(buildSheet()) !== openedAs;
+  // A fill's answer, reopened over the form (F4) and marked unsaved (F5).
+  const reopenWithFill = (kind, proposal) => charEditor(
+    { ...c, sheet: JSON.stringify(proposalOverForm(kind, buildSheet(), proposal, storedSheet)) },
+    { ...options, proposal: true, storedSheet });
   // Offered on BOTH cards, like the interior fill below and for the same
   // reason (A64): the sheet the proposal has to land in is whichever one
   // this story reads.
@@ -512,14 +755,10 @@ function charEditor(c, options = {}) {
           ? `/api/characters/${c.id}/fill_psychology`
           : `/api/chats/${chatId}/characters/${c.id}/fill_psychology`,
           { prompt: brief });
-        const refreshed = {
-          ...c,
-          name: r.sheet?.identity?.name || c.name,
-          sheet: JSON.stringify(r.sheet)
-        };
         closeAllModals();
         if (chatId === null) await boot();
-        charEditor(refreshed, options);
+        // Over the FORM, gaps only, and unsaved (F4/F5, above).
+        reopenWithFill("psychology", r.sheet);
         toast("Missing psychology fields filled. Review and save any edits.", "ok");
         showCardWarnings(r);
       } catch (e) {
@@ -540,7 +779,7 @@ function charEditor(c, options = {}) {
         voice: f.voice.read(),
         extra_parts: f.extra_parts.read(),
         initial_outfit: { regions: f.outfit_regions.read() }
-      }), refreshed => charEditor(refreshed, options), chatId)
+      }), refreshed => reopenWithFill("appearance", JSON.parse(refreshed.sheet)), chatId)
     : null;
 
   // Offered on BOTH cards, unlike the two sibling fills: those propose a
@@ -551,13 +790,16 @@ function charEditor(c, options = {}) {
   // sheet, measured 2026-08-25).
   const fillInterior = c
     ? interiorFillButton(c, () => ({ interior: f.interior.read() }),
-        refreshed => charEditor(refreshed, options), chatId)
+        refreshed => reopenWithFill("interior", JSON.parse(refreshed.sheet)), chatId)
     : null;
 
   modal(
     isChatCard
-      ? "Edit story card — " + sheet.identity?.name
-      : c ? "Edit character — " + sheet.identity?.name : "New character",
+      // One message per title with the name as a field (audit 2026-11-01,
+      // F12: "Edit story card — " + name rendered as "story card — Hinamiを
+      // 編集" under the ja pack, a shorter rule matching first).
+      ? t("Edit story card — {name}", { name: sheet.identity?.name })
+      : c ? t("Edit character — {name}", { name: sheet.identity?.name }) : "New character",
     b => {
     if (isChatCard) {
       b.append(el("div", { class: "card small dim" },
@@ -660,100 +902,7 @@ function charEditor(c, options = {}) {
         el("div", { class: "small dim" }, "Secrets only this character (and anyone tagged in known_by) knows."), ph.node),
       el("div", { class: "row", style: "margin-top:10px" },
         el("button", { class: "primary", onclick: async () => {
-          const access_tags = [];
-          if (f.knowledge_common.checked) access_tags.push("common");
-          if (f.knowledge_scholarly.checked) access_tags.push("scholarly");
-          if (f.knowledge_esoteric.checked) access_tags.push("esoteric");
-
-          // Everything below is what the widgets OWN. Anything else the
-          // stored sheet carries is merged back by carryUnpresentedFields --
-          // without it a full-replacement PUT behind a field-by-field editor
-          // deletes every field that has no widget.
-          const s = carryUnpresentedFields(sheet, {
-            identity: {
-              uid: sheet.identity?.uid,
-              name: f.name.read(),
-              aliases: f.aliases.read(),
-              pronouns: f.pronouns.read()
-            },
-            // `wearing` is derived from the regions by the schema, never
-            // sent from here -- two authored copies of one outfit is how the
-            // ledger ends up saying different things about the same body.
-            initial_outfit: { regions: f.outfit_regions.read() },
-            // No `sampler` key: there is no widget for it, so writing one
-            // here would erase whatever was authored or imported into it. It
-            // rides the carry with every other unpresented field.
-            simulation: { tier: f.tier.read(), temperature: f.temperature.read(),
-              offscreen_agent: f.offscreen_agent.querySelector("input").checked },
-            embodiment: {
-              senses: f.senses.read(),
-              visible: { summary: f.summary.read(), build: f.build.read(), face: f.face.read(), hair: f.hair.read(), eyes: f.eyes.read(), distinctive_features: f.distinctive.read() },
-              scent: f.scent.read(),
-              voice: f.voice.read(),
-              latent: f.latent.read(),
-              extra_parts: f.extra_parts.read(),
-              interior: f.interior.read(),
-              interoception: {
-                acuity: f.intero_acuity.read() ?? 0.5,
-                pain_sensitivity: f.pain_sensitivity.read() ?? 0.5,
-                fatigue_sensitivity: f.fatigue_sensitivity.read() ?? 0.5,
-                pleasure_sensitivity: f.pleasure_sensitivity.read() ?? 0.5
-              }
-            },
-            psychology: {
-              drive: { essence: f.drive_essence.read(), expression: f.drive_expression.read(), taboo: f.drive_taboo.read() },
-              capacity: f.capacity.read(),
-              traits: f.traits.read(),
-              values: f.values.read(),
-              self_model: {
-                summary: f.self_summary.read(), protected_beliefs: f.protected.read(),
-                pride_triggers: f.pride.read(), shame_triggers: f.shame.read(),
-                beliefs: f.beliefs.read()
-              },
-              coping: {
-                under_stress: splitCL(f.coping.read()),
-                default_conflict_style: f.conflict.read(),
-                strategies: f.coping_strategies.read(),
-                recovery_supports: f.recovery_supports.read()
-              },
-              stress_profile: {
-                baseline_reactivity: f.stress_reactivity.read() ?? 0.5,
-                recovery_rate: f.stress_recovery.read() ?? 0.5,
-                overload_threshold: f.overload_threshold.read() ?? 0.8,
-                attentional_style: f.attentional_style.read(),
-                somatic_signs: f.somatic_signs.read()
-              },
-              learning: { associations: f.associations.read() }
-            },
-            social: {
-              voice: { register: f.voice_register.read(), cadence: f.voice_cadence.read(), verbosity: f.voice_verbosity.read(), markers: f.voice_markers.read(), notes: f.voice_notes.read() },
-              baseline_stances: { unknown_person: { trust: f.trust.read() || 0, warmth: f.warmth.read() || 0, threat_sensitivity: f.threat.read() || 0 } }
-            },
-            competence: { abilities: f.abilities.read() },
-            knowledge: { access_tags, excluded_titles: f.excluded_titles.read(), public_history: f.public_history.read(), private_history: ph.read() },
-            initial_state: {
-              mood: { label: f.mood.read(), valence: f.valence.read() || 0, arousal: f.arousal.read() || 0 },
-              goals: f.goals.read(), active_concerns: f.active_concerns.read(),
-              stress: {
-                activation: f.initial_stress.read() || 0,
-                load: f.initial_load.read() || 0,
-                coping_mode: f.initial_coping.read()
-              },
-              hedonic: {
-                pain: f.initial_pain.read() || 0,
-                pleasure: f.initial_pleasure.read() || 0,
-                source: f.initial_hedonic_source.read()
-              }
-            },
-            // Persist the (possibly edited) greetings alongside first_message.
-            // gc.read() is the live list from the greetings box; falling back to
-            // the stored list keeps them intact for the new-character form.
-            opening: {
-              ...(sheet.opening || {}),
-              first_message: f.first_message.read(),
-              greetings: gc ? gc.read() : (sheet.opening?.greetings || [])
-            }
-          }, OWNED_SHEET_PATHS);
+          const s = buildSheet();
           try {
             let result = null;
             if (isChatCard) {
@@ -786,7 +935,7 @@ function charEditor(c, options = {}) {
   }, { wide: true });
 }
 
-function personaEditor(p) {
+function personaEditor(p, savedSheet = null) {
   const sheet = p ? JSON.parse(p.sheet) : {
     identity: { name: "New Persona", aliases: [], pronouns: { subject: "they", object: "them", possessive: "their" } },
     initial_outfit: { regions: {} },
@@ -835,6 +984,36 @@ function personaEditor(p) {
   f.public_history = fArea("Public history (world could know)", sheet.knowledge?.public_history, 3);
   f.voice_setting = fArea("Voice setting (PRIVATE — narrator only)", sheet.narration?.voice_setting, 3);
   f.abilities = fAbilities("Abilities", sheet.competence?.abilities);
+  const ph = phEditor(sheet.knowledge?.private_history, false);
+  // The form as Save sends it, and what a fill is laid over (F4, above
+  // `PSYCHOLOGY_FILL_PATHS`): the same one builder as the character card's.
+  const buildSheet = () => {
+    const s = carryUnpresentedFields(sheet, {
+      identity: {
+        uid: sheet.identity?.uid,
+        name: f.name.read(),
+        aliases: f.aliases.read(),
+        pronouns: f.pronouns.read()
+      },
+      // `wearing` is derived from the regions by the schema, never
+      // sent from here -- two authored copies of one outfit is how the
+      // ledger ends up saying different things about the same body.
+      initial_outfit: { regions: f.outfit_regions.read() },
+      embodiment: {
+        senses: f.senses.read(),
+        visible: { summary: f.appearance.read(), build: f.build.read(), face: f.face.read(), hair: f.hair.read(), eyes: f.eyes.read(), distinctive_features: f.distinctive.read() },
+        scent: f.scent.read(),
+        voice: f.voice.read(),
+        latent: f.latent.read(),
+        extra_parts: f.extra_parts.read()
+      },
+      competence: { abilities: f.abilities.read() },
+      knowledge: { public_history: f.public_history.read(), private_history: ph.read() },
+      narration: { voice_setting: f.voice_setting.read() }
+    }, OWNED_SHEET_PATHS);
+    return s;
+  };
+  const storedSheet = savedSheet || sheet;
   const fillAppearance = p ? appearanceFillButton("persona", p, () => ({
     appearance: {
       summary: f.appearance.read(), build: f.build.read(), face: f.face.read(),
@@ -844,10 +1023,12 @@ function personaEditor(p) {
     voice: f.voice.read(),
     extra_parts: f.extra_parts.read(),
     initial_outfit: { regions: f.outfit_regions.read() }
-  }), refreshed => personaEditor(refreshed)) : null;
-  const ph = phEditor(sheet.knowledge?.private_history, false);
+  }), refreshed => personaEditor(
+    { ...p, sheet: JSON.stringify(proposalOverForm("appearance", buildSheet(),
+                                                   JSON.parse(refreshed.sheet), storedSheet)) },
+    storedSheet)) : null;
 
-  modal(p ? "Edit persona — " + sheet.identity?.name : "New persona", b => {
+  modal(p ? t("Edit persona — {name}", { name: sheet.identity?.name }) : "New persona", b => {
     b.append(
       el("details", { open: "" }, el("summary", {}, "Basic"),
         f.name.node, f.aliases.node, f.pronouns.node,
@@ -881,29 +1062,7 @@ function personaEditor(p) {
       el("details", { open: "" }, el("summary", {}, "Private history"), ph.node),
       el("div", { class: "row", style: "margin-top:10px" },
         el("button", { class: "primary", onclick: async () => {
-          const s = carryUnpresentedFields(sheet, {
-            identity: {
-              uid: sheet.identity?.uid,
-              name: f.name.read(),
-              aliases: f.aliases.read(),
-              pronouns: f.pronouns.read()
-            },
-            // `wearing` is derived from the regions by the schema, never
-            // sent from here -- two authored copies of one outfit is how the
-            // ledger ends up saying different things about the same body.
-            initial_outfit: { regions: f.outfit_regions.read() },
-            embodiment: {
-              senses: f.senses.read(),
-              visible: { summary: f.appearance.read(), build: f.build.read(), face: f.face.read(), hair: f.hair.read(), eyes: f.eyes.read(), distinctive_features: f.distinctive.read() },
-              scent: f.scent.read(),
-              voice: f.voice.read(),
-              latent: f.latent.read(),
-              extra_parts: f.extra_parts.read()
-            },
-            competence: { abilities: f.abilities.read() },
-            knowledge: { public_history: f.public_history.read(), private_history: ph.read() },
-            narration: { voice_setting: f.voice_setting.read() }
-          }, OWNED_SHEET_PATHS);
+          const s = buildSheet();
           try {
             if (p) await api("PUT", "/api/personas/" + p.id, { sheet: s });
             else await api("POST", "/api/personas", { sheet: s });
@@ -1003,7 +1162,8 @@ function importModal(kind) {
   const typeSel = kind === "lorebook" ? el("select", {}, S.boot.lorebook_types.map(t => el("option", { value: t }, t))) : null;
   const sumIn = kind === "lorebook" ? el("input", { placeholder: "Brief summary of what this book covers", style: "width:100%" }) : null;
 
-  modal(`Import ${kind}`, b => {
+  modal({ character: "Import character", persona: "Import persona",
+          lorebook: "Import lorebook" }[kind], b => {
     b.append(drop, fileIn, status,
       kind === "lorebook" ? el("div", { class: "card" },
         el("div", { class: "ff" }, el("label", {}, "Book type"), typeSel),
@@ -1032,16 +1192,21 @@ function importModal(kind) {
               // character rather than an unfilled field. Say so.
               showCardWarnings(r);
             },
-             successMessage: kind.charAt(0).toUpperCase() + kind.slice(1) + " imported.",
-             errorPrefix: kind.charAt(0).toUpperCase() + kind.slice(1) + " import failed" });
+             // Whole sentences per kind, not a capitalised kind glued to a
+             // fragment no catalog entry matches (F12).
+             successMessage: { character: "Character imported.", persona: "Persona imported.",
+                               lorebook: "Lorebook imported." }[kind],
+             errorPrefix: { character: "Character import failed", persona: "Persona import failed",
+                            lorebook: "Lorebook import failed" }[kind] });
         } }, "Import")));
   });
 }
 
 // ---- Generate ----
 function generateModal(kind) {
-  const ta = el("textarea", { style: "width:100%;height:170px", placeholder: "Describe the " + kind + " you want…" });
-  modal(`Generate ${kind}`, b => {
+  const ta = el("textarea", { style: "width:100%;height:170px",
+    placeholder: kind === "character" ? "Describe the character you want…" : "Describe the persona you want…" });
+  modal(kind === "character" ? "Generate character" : "Generate persona", b => {
     b.append(ta,
       el("div", { class: "small dim", style: "margin-top:8px" }, "The dialog will close when generation starts. Progress is visible in the activity panel."),
       el("div", { class: "row", style: "margin-top:11px" },
@@ -1049,9 +1214,13 @@ function generateModal(kind) {
           const prompt = ta.value.trim();
           backgroundTask(`Generating ${kind}`,
             () => api("POST", `/api/${kind === "character" ? "characters" : "personas"}/generate`, { prompt }),
-            { onSuccess: async () => { await boot() },
-             successMessage: kind.charAt(0).toUpperCase() + kind.slice(1) + " generated.",
-             errorPrefix: kind.charAt(0).toUpperCase() + kind.slice(1) + " generation failed" });
+            // The route returns `character_card_warnings` like every other
+            // card-producing surface, and this was the one browser half that
+            // dropped them -- a generated card with an empty drive was created
+            // in silence (audit 2026-11-01, F10).
+            { onSuccess: async r => { await boot(); showCardWarnings(r); },
+             successMessage: kind === "character" ? "Character generated." : "Persona generated.",
+             errorPrefix: kind === "character" ? "Character generation failed" : "Persona generation failed" });
         } }, "Generate")));
   });
 }

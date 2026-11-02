@@ -133,8 +133,12 @@ function wbSelect(options, value, { blank = null, title = null, onchange, labels
 // A text control that commits on blur or Enter and reverts on Escape. Only a
 // CHANGED value is sent: tabbing through a field is not an edit.
 function wbText(value, save, { multiline = false, placeholder = "", title = null } = {}) {
+  // The VALUE is the story's (`translate="no"`); the placeholder and title
+  // are chrome, translated here because `el()` leaves an opted-out element's
+  // attributes alone since the 2026-11-01 frontend-core fix (F8 there).
   const attrs = { class: multiline ? "wb-textarea" : "wb-input", translate: "no",
-                  ...(placeholder ? { placeholder } : {}), ...(title ? { title } : {}) };
+                  ...(placeholder ? { placeholder: t(placeholder) } : {}),
+                  ...(title ? { title: t(title) } : {}) };
   const input = multiline ? el("textarea", attrs) : el("input", { type: "text", ...attrs });
   input.value = value == null ? "" : String(value);
   let settled = input.value;
@@ -204,6 +208,10 @@ function wbCoalesced(run) {
 async function wbWrite(ctx, call, { quiet = false } = {}) {
   try {
     const result = await call();
+    // The server now holds what this write sent, so a remembered inverse is
+    // no longer the inverse of anything (F1, at `wbUndoStack`). A drag
+    // clears here too, and remembers its own inverse after this returns.
+    if (ctx.undo && typeof ctx.undo.clear === "function") ctx.undo.clear();
     if (!quiet) toast("Saved.", "ok");
     return result;
   } catch (error) {
@@ -211,6 +219,51 @@ async function wbWrite(ctx, call, { quiet = false } = {}) {
     await ctx.refresh();
     return null;
   }
+}
+
+// A LIST IS WRITTEN ONLY OVER THE LIST IT WAS EDITED FROM (audit 2026-11-01,
+// F2). `PATCH /rooms/{id}` REPLACES a room's exits, anchors and parts with
+// the list it is sent (`web/world_routes.py` `_apply_exits`, `_apply_anchors`,
+// `_apply_parts`), and the card builds that list from the slice it last drew.
+// The dialog is not gated on the story being idle -- a beat that commits
+// while it sits open, a second window, the Writers' Room's package
+// operations all write the room underneath it -- so the next exit edit sent
+// the card's stale list back, and `_apply_exits` removed the doorway the beat
+// had just built from BOTH rooms and popped its passage record, under
+// "Saved." (a snippet against the shipped `_apply_exits`: a bearing changed on
+// the parlour exit left `hall -> ['parlour']` and `cellar -> []`). Anchors
+// and parts the same: an anchor the beat added was deleted by any anchor edit.
+// So the list is read again at the moment of writing and compared with the
+// one the edit was made against, the Raw JSON tab's own question (A18); a
+// room that moved is refused in words and the card redrawn from what it now
+// holds (`wbWrite`'s error path). What is left open is the read-to-write gap
+// of one request; a revision on the route would close that too.
+const WB_ROOM_LISTS = {
+  exits: slice => (slice && slice.record ? slice.record.adjacent : null) ?? null,
+  anchors: slice => (slice && slice.record ? slice.record.anchors : null) ?? null,
+  parts: slice => (slice && slice.record ? slice.record.parts : null) ?? null,
+};
+
+async function wbPatchRoomList(ctx, roomId, field, before, next) {
+  const path = `/api/chats/${ctx.chatId}/rooms/${encodeURIComponent(roomId)}${frameQuery()}`;
+  const now = await api("GET", path);
+  if (JSON.stringify(WB_ROOM_LISTS[field](now)) !== JSON.stringify(before ?? null)) {
+    throw new Error(t("This room changed since the card was drawn — a beat, another window or the Writers' Room wrote it. Nothing was saved; the card now shows what the room holds."));
+  }
+  return api("PATCH", path, { [field]: next });
+}
+
+// One body's ledger entry as the index hands it over (`world_routes.
+// body_rows` -> `attire.entry_for`): the ledger's own key, else the one that
+// folds to the same name, and an empty entry is no entry.
+function wbAttireEntryOf(ledger, name) {
+  const book = ledger && typeof ledger === "object" ? ledger : {};
+  const folded = String(name ?? "").trim().toLowerCase();
+  const key = Object.prototype.hasOwnProperty.call(book, name) ? name
+    : Object.keys(book).find(k => String(k).trim().toLowerCase() === folded);
+  const entry = key === undefined ? null : book[key];
+  return entry && typeof entry === "object" && !Array.isArray(entry)
+    && Object.keys(entry).length ? entry : null;
 }
 
 // ---- The tree -------------------------------------------------------------
@@ -376,8 +429,8 @@ function wbMoveControl(slice, positions, chatId, ctx) {
 function wbNumber(value, save, { min, max, title = null, placeholder = "" } = {}) {
   const input = el("input", { type: "number", class: "wb-input wb-paces", min: String(min),
                               max: String(max), step: "1", translate: "no",
-                              ...(title ? { title } : {}),
-                              ...(placeholder ? { placeholder } : {}) });
+                              ...(title ? { title: t(title) } : {}),
+                              ...(placeholder ? { placeholder: t(placeholder) } : {}) });
   input.value = value == null || value === "" ? "" : String(value);
   let settled = input.value;
   const commit = async () => {
@@ -557,6 +610,13 @@ function wbRoomFields(slice, ctx) {
     await ctx.replaceCard(fresh);
     return fresh;
   });
+  // A whole list, written only over the list this card was drawn from (F2,
+  // at `wbPatchRoomList`).
+  const patchList = (name, before, next) => wbWrite(ctx, async () => {
+    const fresh = await wbPatchRoomList(ctx, slice.id, name, before, next);
+    await ctx.replaceCard(fresh);
+    return fresh;
+  });
   const field = (label, control, cls = "") => el("label", { class: "wb-field " + cls },
     el("span", { class: "small dim" }, label), control);
 
@@ -599,7 +659,8 @@ function wbRoomFields(slice, ctx) {
   const shape = wbSelect(vocab.shapes, record.shape || "",
     { blank: "—", title: "Rectangle when unset", onchange: v => patch({ shape: v }) });
   const parts = (record.parts || []).map(p => ({ ...p }));
-  const patchParts = () => patch({ parts: parts.map(p => ({ w: p.w, d: p.d, at: p.at })) });
+  const patchParts = () => patchList("parts", record.parts,
+    parts.map(p => ({ w: p.w, d: p.d, at: p.at })));
   const partShapes = vocab.part_shapes || [];
   let partsEditor = null;
   if (partShapes.includes(record.shape) || parts.length) {
@@ -762,10 +823,11 @@ function wbRegionLook(slice, ctx) {
 function wbExits(slice, ctx) {
   const vocab = ctx.vocab;
   const stored = slice.record ? slice.record.adjacent || [] : null;
+  // The room's whole exit list, written only over the list this card was
+  // drawn from (F2, at `wbPatchRoomList`): a doorway a beat built since is
+  // never deleted by an edit to another one.
   const patchExits = exits => wbWrite(ctx, async () => {
-    const fresh = await api("PATCH",
-      `/api/chats/${ctx.chatId}/rooms/${encodeURIComponent(slice.id)}${frameQuery()}`,
-      { exits });
+    const fresh = await wbPatchRoomList(ctx, slice.id, "exits", slice.record.adjacent, exits);
     await ctx.replaceCard(fresh);
     return fresh;
   });
@@ -866,7 +928,7 @@ function wbExits(slice, ctx) {
       const target = el("select", { class: "wb-select", title: "Where the new exit leads" },
         ...candidates.map(r => el("option", { value: r.id, translate: "no" },
           txt(r.status === "planned" ? `${wbRoomLabel(r)} (${t("Planned")})` : wbRoomLabel(r)))));
-      const barrier = wbSelect(vocab.barriers, (vocab.barriers || [])[0] || "",
+      const barrier = wbSelect(vocab.barriers, wbNewDoorwayBarrier(vocab),
         { title: "Barrier", onchange: () => {} });
       const dir = wbSelect(vocab.dirs, "", { blank: "—", title: "Bearing", onchange: () => {} });
       kids.push(el("div", { class: "wb-exit wb-add" },
@@ -879,6 +941,18 @@ function wbExits(slice, ctx) {
   }
   kids.push(...wbLintRows(slice, "exits"));
   return wbSection("Exits", ...kids);
+}
+
+// The barrier a NEW doorway starts with, on either add form (the card's
+// "Add exit" and the map's wall form): `open`, the server's own default for
+// an edge that names none (`_apply_exits`, `doorway_create`), when the
+// engine's set holds it. The card took the set's first member instead --
+// `bars`, alphabetically, which nobody can walk through -- so joining two
+// rooms from the card built a barred doorway where the same act on the map
+// built an open one (audit 2026-11-01, F6).
+function wbNewDoorwayBarrier(vocab) {
+  const barriers = (vocab && vocab.barriers) || [];
+  return barriers.includes("open") ? "open" : barriers[0] || "";
 }
 
 // Windows: each in its wall, never a way out (the owner, 2026-10-12:
@@ -894,10 +968,9 @@ function wbWindows(slice, ctx) {
   const stored = slice.record ? slice.record.adjacent || [] : null;
   const byTo = new Map((slice.exits || []).map(x => [x.to, x]));
   const asExit = e => ({ to: e.to, barrier: e.barrier || "", dir: e.dir || "" });
+  // The same whole exit list as `wbExits` writes, under the same check (F2).
   const patchExits = exits => wbWrite(ctx, async () => {
-    const fresh = await api("PATCH",
-      `/api/chats/${ctx.chatId}/rooms/${encodeURIComponent(slice.id)}${frameQuery()}`,
-      { exits });
+    const fresh = await wbPatchRoomList(ctx, slice.id, "exits", slice.record.adjacent, exits);
     await ctx.replaceCard(fresh);
     return fresh;
   });
@@ -968,10 +1041,10 @@ function wbAnchors(slice, ctx) {
   const vocab = ctx.vocab;
   const anchors = slice.record.anchors || {};
   const walls = (slice.record.geometry || {}).walls || {};
+  // The whole anchor map, written only over the map this card was drawn
+  // from (F2, at `wbPatchRoomList`).
   const patchAnchors = next => wbWrite(ctx, async () => {
-    const fresh = await api("PATCH",
-      `/api/chats/${ctx.chatId}/rooms/${encodeURIComponent(slice.id)}${frameQuery()}`,
-      { anchors: next });
+    const fresh = await wbPatchRoomList(ctx, slice.id, "anchors", slice.record.anchors, next);
     await ctx.replaceCard(fresh);
     return fresh;
   });
@@ -986,7 +1059,7 @@ function wbAnchors(slice, ctx) {
     return patchAnchors(next);
   };
   const row = (aid, a) => el("div", { class: "wb-exit wb-anchor", "data-anchor": aid },
-    el("span", { class: "small dim", translate: "no", title: "Anchor id" }, txt(aid)),
+    el("span", { class: "small dim", translate: "no", title: t("Anchor id") }, txt(aid)),
     wbText(a.desc || "", v => update(aid, { desc: v }), { placeholder: "Description" }),
     wbSelect(vocab.dirs, a.dir || "", { blank: "—", title: "Bearing — the wall this anchor stands on; change it to move the anchor",
                                         onchange: v => update(aid, { dir: v }) }),
@@ -1057,7 +1130,7 @@ function wbAnchors(slice, ctx) {
   const stray = wbLintRows(slice, "anchors", { wall: "" });
 
   const desc = el("input", { type: "text", class: "wb-input", translate: "no",
-                             placeholder: "A feature prose refers to — the hearth, the bar" });
+                             placeholder: t("A feature prose refers to — the hearth, the bar") });
   const dir = wbSelect(vocab.dirs, "", { blank: "—", title: "Bearing — which wall the new anchor stands on",
                                          onchange: () => {} });
   const add = () => {
@@ -1273,7 +1346,7 @@ function wbRenderCard(host, slice, ctx) {
   // click does the same with a cell.
   const occupants = slice.occupants || [];
   const presenceName = el("input", { type: "text", class: "wb-input", translate: "no",
-                                     placeholder: "A presence to place here — a name the story will know them by" });
+                                     placeholder: t("A presence to place here — a name the story will know them by") });
   const addPresence = () => {
     const text = presenceName.value.trim();
     if (!text) return;
@@ -1297,8 +1370,8 @@ function wbRenderCard(host, slice, ctx) {
 
   const things = slice.things || [];
   const thingName = el("input", { type: "text", class: "wb-input", translate: "no",
-                                  placeholder: "A thing standing here — a lamp, a crate" });
-  const thingKind = el("input", { type: "text", class: "wb-input wb-kind", translate: "no", placeholder: "Kind" });
+                                  placeholder: t("A thing standing here — a lamp, a crate") });
+  const thingKind = el("input", { type: "text", class: "wb-input wb-kind", translate: "no", placeholder: t("Kind") });
   const addThing = () => {
     const text = thingName.value.trim();
     if (!text) return;
@@ -1435,10 +1508,19 @@ function wbAttireEditor(body, ctx) {
   // re-derives; the route writes the entries it is sent and leaves the rest
   // of the ledger as the story holds it. Sending every body as the index
   // last read them overwrote a beat committed in between with a stale copy.
+  // The entry itself is still whole, built from the one this tab drew, so it
+  // is written only over that entry: a beat that took a garment off since
+  // would have it put back on by an edit to this body's notes (F2, at
+  // `wbPatchRoomList` -- the same question, asked of the ledger).
   const save = () => wbWrite(ctx, async () => {
+    const path = `/api/chats/${ctx.chatId}/attire${frameQuery()}`;
+    const now = wbAttireEntryOf(await api("GET", path), body.name);
+    if (JSON.stringify(now) !== JSON.stringify(entry)) {
+      throw new Error(t("This body's clothing changed since the tab was drawn — a beat or another window wrote it. Nothing was saved; the tab now shows what the ledger holds."));
+    }
     const ledger = {};
     ledger[body.name] = wbLedgerEntry(entry, garments, beneath, notes);
-    await api("PUT", `/api/chats/${ctx.chatId}/attire${frameQuery()}`, ledger);
+    await api("PUT", path, ledger);
     await ctx.refresh();
     return true;
   });
@@ -1473,7 +1555,7 @@ function wbAttireEditor(body, ctx) {
 
   // Add a garment: a name, the regions it covers, its state.
   const name = el("input", { type: "text", class: "wb-input", translate: "no",
-                             placeholder: "Garment" });
+                             placeholder: t("Garment") });
   const checks = regionOrder.map(region => {
     const box = el("input", { type: "checkbox", value: region });
     return el("label", { class: "wb-check" }, box, el("span", { translate: "no" }, txt(region)));
@@ -1498,7 +1580,7 @@ function wbAttireEditor(body, ctx) {
     el("button", { class: "small wb-remove", title: "Remove this note",
                    onclick: () => { notes.splice(i, 1); save(); } }, "✕")));
   const noteInput = el("input", { type: "text", class: "wb-input", translate: "no",
-                                  placeholder: "A note about this body's appearance" });
+                                  placeholder: t("A note about this body's appearance") });
   const addNote = () => {
     const text = noteInput.value.trim();
     if (!text) return;
@@ -1848,14 +1930,26 @@ function wbDraggable(svg, node, { onDrop, onClick, onArrow = null, ratio = 1 }) 
 }
 
 // The last drag, undone: ONE step, client-side, the previous value re-issued
-// through the same route the drop used (2026-09-05). `remember(label, run)`
-// keeps the inverse of the write just made; the map bar's Undo button runs
-// it and forgets it. A write from the card clears it, since the card's own
-// value is now what the server holds.
+// through the same route the drop used (2026-09-05). `remember(label, run,
+// room)` keeps the inverse of the write just made and the room it was made
+// in; the map bar's Undo button runs it and forgets it.
+//
+// ANY OTHER WRITE CLEARS IT, and so does leaving the room (audit 2026-11-01,
+// F1). The inverse is a whole-field snapshot -- the anchor map, the parts,
+// the extent as they stood before the drag -- so it is only the drag's
+// inverse while nothing else has written that field. This comment said a
+// card write cleared it, and nothing did: dragging the hearth and then
+// setting the bar's height on the card left an Undo that reverted the height
+// too, under a toast naming only the hearth. And the inverse re-issued
+// through whichever room was SELECTED when it was clicked, so following a
+// body from the Bodies tab into another room offered that room the first
+// room's anchors. `wbWrite` now clears on every success, `loadRoom` clears
+// on every room change (the Bodies tab's link included), and each inverse
+// names its own room rather than the selected one.
 function wbUndoStack(onChange = () => {}) {
   let last = null;
   return {
-    remember: (label, run) => { last = { label, run }; onChange(); },
+    remember: (label, run, room = null) => { last = { label, run, room }; onChange(); },
     clear: () => { const had = last; last = null; if (had) onChange(); },
     peek: () => last,
     run: async () => { const u = last; last = null; onChange(); if (u) await u.run(); },
@@ -2533,9 +2627,17 @@ function wbRenderRoomMap(host, view, ctx, { overlay = null } = {}) {
     return [x0, y0, Math.max(0, Math.min(w, part.at[0] + part.w)), Math.max(0, Math.min(d, part.at[1] + part.d))];
   }
   const partsOf = () => (ctx.currentSlice().record.parts || []).map(p => ({ w: p.w, d: p.d, at: p.at }));
+  // The parts and the anchors are whole lists, so a drop writes them only
+  // over the list the map was drawn from, and Undo only over the list the
+  // drop left (F2, at `wbPatchRoomList`); both name the room they were made
+  // in, never the one selected when Undo is clicked (F1, at `wbUndoStack`).
   async function writeParts(next, label, before) {
-    const done = await ctx.patchRoom({ parts: next }, label);
-    if (done) ctx.undo.remember(label, () => ctx.patchRoom({ parts: before }, t(`Undid: ${label}`)));
+    const drawn = WB_ROOM_LISTS.parts(ctx.currentSlice());
+    const done = await ctx.patchRoomList("parts", drawn, next, label, room.id);
+    if (!done) return;
+    const after = WB_ROOM_LISTS.parts(done);
+    ctx.undo.remember(label,
+      () => ctx.patchRoomList("parts", after, before, t(`Undid: ${label}`), room.id), room.id);
   }
   async function movePart(i, part, x, y) {
     const before = partsOf();
@@ -2568,8 +2670,11 @@ function wbRenderRoomMap(host, view, ctx, { overlay = null } = {}) {
     d = Math.max(range.min, Math.min(range.max, Math.round(d)));
     if (w === room.w && d === room.d) return;
     label = label || t(`Resized the room to ${w} × ${d} paces`);
-    const done = await ctx.patchRoom({ extent: { w, d } }, label);
-    if (done) ctx.undo.remember(label, () => ctx.patchRoom({ extent: before }, t("Undid the resize")));
+    const done = await ctx.patchRoom({ extent: { w, d } }, label, room.id);
+    if (done) {
+      ctx.undo.remember(label,
+        () => ctx.patchRoom({ extent: before }, t("Undid the resize"), room.id), room.id);
+    }
   }
   async function dropHandle(side, p) {
     // A side dragged sets the box's size on its axis: the east and south
@@ -2587,8 +2692,12 @@ function wbRenderRoomMap(host, view, ctx, { overlay = null } = {}) {
     return writeExtent(room.w, room.d - dy);
   }
   async function writeAnchors(anchors, label, before) {
-    const done = await ctx.patchRoom({ anchors }, label);
-    if (done) ctx.undo.remember(label, () => ctx.patchRoom({ anchors: before }, t(`Undid: ${label}`)));
+    const drawn = WB_ROOM_LISTS.anchors(ctx.currentSlice());
+    const done = await ctx.patchRoomList("anchors", drawn, anchors, label, room.id);
+    if (!done) return;
+    const after = WB_ROOM_LISTS.anchors(done);
+    ctx.undo.remember(label,
+      () => ctx.patchRoomList("anchors", after, before, t(`Undid: ${label}`), room.id), room.id);
   }
 
   async function dropAnchor(aid, a, p, quiet = false) {
@@ -2639,8 +2748,11 @@ function wbRenderRoomMap(host, view, ctx, { overlay = null } = {}) {
                            : t(`Moved the doorway to ${d.name} along the wall`);
     ctx.refocus(d.window ? `.wb-m-window[data-window="${CSS.escape(d.id)}"]`
                          : `.wb-m-doorway[data-exit="${CSS.escape(d.to)}"]`);
-    const done = await ctx.patchDoorway(d.to, { offset }, label);
-    if (done) ctx.undo.remember(label, () => ctx.patchDoorway(d.to, { offset: d.offset }, t(`Undid: ${label}`)));
+    const done = await ctx.patchDoorway(d.to, { offset }, label, room.id);
+    if (done) {
+      ctx.undo.remember(label,
+        () => ctx.patchDoorway(d.to, { offset: d.offset }, t(`Undid: ${label}`), room.id), room.id);
+    }
   }
 
   // A body dropped on ANY cell of its room is pinned to it (`cell`, in the
@@ -2657,7 +2769,7 @@ function wbRenderRoomMap(host, view, ctx, { overlay = null } = {}) {
       const previous = { at: b.at || null, near: b.near || [], cell: b.source === "cell" ? b.cell : null };
       ctx.refocus(`.wb-m-body[data-body="${CSS.escape(name)}"]`);
       const done = await ctx.putStation(name, { at: anchor ? anchor[0] : door ? door.id : null, near: b.near || [], cell: c }, label);
-      if (done) ctx.undo.remember(label, () => ctx.putStation(name, previous, t(`Undid: ${label}`)));
+      if (done) ctx.undo.remember(label, () => ctx.putStation(name, previous, t(`Undid: ${label}`)), room.id);
       return;
     }
     if (quiet) return;
@@ -2687,7 +2799,7 @@ function wbRenderRoomMap(host, view, ctx, { overlay = null } = {}) {
       const at = anchor ? anchor[0] : door ? door.id : null;
       ctx.refocus(`.wb-m-body[data-body="${CSS.escape(name)}"]`);
       const done = await ctx.putCharterStation(b, { room: room.id, ...(at ? { at } : { cell: c }) }, label);
-      if (done) ctx.undo.remember(label, () => restore(t(`Undid: ${label}`)));
+      if (done) ctx.undo.remember(label, () => restore(t(`Undid: ${label}`)), room.id);
       return;
     }
     if (quiet) return;
@@ -2708,7 +2820,7 @@ function wbRenderRoomMap(host, view, ctx, { overlay = null } = {}) {
       const previous = { at: null, near: [], cell: th.source === "cell" ? th.cell : null };
       ctx.refocus(`.wb-m-thing[data-thing="${CSS.escape(th.id)}"]`);
       const done = await ctx.putStation(th.id, { at: null, near: [], cell: c }, label);
-      if (done) ctx.undo.remember(label, () => ctx.putStation(th.id, previous, t(`Undid: ${label}`)));
+      if (done) ctx.undo.remember(label, () => ctx.putStation(th.id, previous, t(`Undid: ${label}`)), room.id);
       return;
     }
     if (quiet) return;
@@ -3260,7 +3372,7 @@ function wbWallForm(host, chosen, ctx) {
   const target = el("select", { class: "wb-select", title: "Which room the doorway opens onto" },
     ...candidates.map(r => el("option", { value: r.id, translate: "no" }, txt(wbRoomLabel(r)))));
   const name = el("input", { type: "text", class: "wb-input", translate: "no",
-                             placeholder: "A new room's name" });
+                             placeholder: t("A new room's name") });
   const pct = Math.round(chosen.offset * 100);
   host.append(el("div", { class: "wb-exit wb-wall-form" },
     el("b", {}, txt(`${chosen.wall.toUpperCase()}`)), el("span", { class: "dim" }, "wall,"),
@@ -3285,7 +3397,7 @@ function wbCellForm(host, cell, ctx) {
   host.innerHTML = "";
   if (!cell) return;
   const name = el("input", { type: "text", class: "wb-input", translate: "no",
-                             placeholder: "What stands here" });
+                             placeholder: t("What stands here") });
   host.append(el("div", { class: "wb-exit wb-cell-form" },
     el("b", { translate: "no" }, txt(`(${cell[0]}, ${cell[1]})`)), el("span", { class: "dim" }, "—"),
     name,
@@ -3422,7 +3534,10 @@ async function openWorldBrowser(opts = {}) {
       openBodies: new Set(opts.expandAttire ? (index.bodies || []).map(b => b.name) : []),
       select: id => loadRoom(id),
       showPlan: (plan, level) => showPlan(plan, level),
-      showRoom: id => { state.selected = id; selectTab("rooms"); },
+      // Through `loadRoom` with the new id, so leaving the room drops what
+      // was pending on its map and its Undo (F1): setting `state.selected`
+      // first made `loadRoom`'s "another room?" test answer no.
+      showRoom: id => selectTab("rooms", id),
       showBody: name => { ctx.openBodies.add(name); selectTab("bodies"); },
       // The card rebuilt from a write's fresh slice, the grid re-read (an
       // anchor moved is a cell moved), the tree re-read, since a rename or
@@ -3455,9 +3570,19 @@ async function openWorldBrowser(opts = {}) {
       // unfocused after an arrow-key nudge from 2026-09-27.
       refocus: selector => { state.refocus = selector; },
       stationableOf: room => (state.slice && state.slice.id === room ? state.slice.stationable : []) || [],
-      patchRoom: (fields, label = null) => wbWrite(ctx, async () => {
+      // `room` is the room the gesture was made in: an Undo names its own,
+      // never the one selected when it is clicked (F1).
+      patchRoom: (fields, label = null, room = state.selected) => wbWrite(ctx, async () => {
         const fresh = await api("PATCH",
-          `/api/chats/${chatId}/rooms/${encodeURIComponent(state.selected)}${frameQuery()}`, fields);
+          `/api/chats/${chatId}/rooms/${encodeURIComponent(room)}${frameQuery()}`, fields);
+        if (label) toast(label, "ok");
+        await ctx.replaceCard(fresh);
+        return fresh;
+      }, { quiet: !!label }),
+      // A whole list -- exits, anchors, parts -- written only over `before`,
+      // the list the gesture was made against (F2, at `wbPatchRoomList`).
+      patchRoomList: (field, before, next, label = null, room = state.selected) => wbWrite(ctx, async () => {
+        const fresh = await wbPatchRoomList(ctx, room, field, before, next);
         if (label) toast(label, "ok");
         await ctx.replaceCard(fresh);
         return fresh;
@@ -3471,9 +3596,9 @@ async function openWorldBrowser(opts = {}) {
       }, { quiet: !!label }),
       // The doorway as ONE object, from either room (the passage record):
       // its offset, bearing, barrier and the rest through the doorways PATCH.
-      patchDoorway: (to, fields, label = null) => wbWrite(ctx, async () => {
+      patchDoorway: (to, fields, label = null, room = state.selected) => wbWrite(ctx, async () => {
         const out = await api("PATCH",
-          `/api/chats/${chatId}/doorways/${encodeURIComponent(state.selected)}/${encodeURIComponent(to)}${frameQuery()}`,
+          `/api/chats/${chatId}/doorways/${encodeURIComponent(room)}/${encodeURIComponent(to)}${frameQuery()}`,
           fields);
         if (label) toast(label, "ok");
         await ctx.replaceCard(out.slice);
@@ -3588,7 +3713,8 @@ async function openWorldBrowser(opts = {}) {
         const anchors = {};
         for (const [id, rec] of Object.entries(slice.record.anchors || {})) anchors[id] = { ...rec };
         anchors[""] = { desc, cell };
-        const done = await ctx.patchRoom({ anchors }, t(`Added ${desc} at (${cell[0]}, ${cell[1]})`));
+        const done = await ctx.patchRoomList("anchors", WB_ROOM_LISTS.anchors(slice), anchors,
+          t(`Added ${desc} at (${cell[0]}, ${cell[1]})`), slice.id);
         if (done) ctx.chooseCell(null);
       },
       // A click on a blank wall or on empty floor: the chosen place is kept
@@ -3679,8 +3805,11 @@ async function openWorldBrowser(opts = {}) {
       map.bar.innerHTML = "";
       // a storey drawn as a plan takes the width a whole building needs
       map.pane.classList.toggle("wb-plan-wide", state.zoom === "plan");
+      // Only the selected room's own last drag is offered (F1): `loadRoom`
+      // clears the stack on a room change, and this says so again here.
       const undo = ctx.undo.peek();
-      const undoButton = undo ? el("button", { class: "small wb-undo", title: undo.label,
+      const ours = undo && (undo.room == null || undo.room === state.selected);
+      const undoButton = ours ? el("button", { class: "small wb-undo", title: undo.label,
         onclick: async () => { await ctx.undo.run(); renderMapBar(); } }, "Undo") : null;
       // THE THREE VIEWS AS ONE SWITCH, first in the bar: the room, the
       // storey it stands on drawn as a plan, every room. The owner never
@@ -3945,7 +4074,10 @@ async function openWorldBrowser(opts = {}) {
       await loadGrid(id);
     }
 
-    function selectTab(tabId) {
+    // `room` opens the Rooms tab on another room (the Bodies tab's room
+    // links); `loadRoom` is what drops the last room's pending forms and
+    // Undo, so it is handed the new id rather than finding it already set.
+    function selectTab(tabId, room = state.selected) {
       state.tab = tabId;
       for (const button of tabBar.querySelectorAll("button")) {
         button.classList.toggle("on", button.dataset.tab === tabId);
@@ -3958,7 +4090,7 @@ async function openWorldBrowser(opts = {}) {
         content.append(bodies);
       } else {
         content.append(browse);
-        loadRoom(state.selected);
+        loadRoom(room);
       }
     }
 

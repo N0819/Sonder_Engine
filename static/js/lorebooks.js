@@ -51,6 +51,68 @@ const loreUI = {
   renderOwner: null
 };
 
+// A LOREBOOK DRAG CARRIES ITS OWN TYPE (audit 2026-11-01, F7). Every drop
+// target read `getData("text/plain") || loreUI.dragId`, and the sidebar never
+// cleared `dragId` -- so after a sidebar drag released on empty space, a file
+// dropped on "Drop here to move to root" re-rooted that book ("Lorebook
+// moved."), and any selected text reading "12" moved book 12. A drag this
+// file did not start carries no `LORE_DRAG_TYPE`, and nothing else is read.
+// During `dragover` the browser hides the data itself, so there the TYPE
+// proves the drag is ours and `dragId` -- set by our own dragstart, cleared by
+// our own dragend -- names the book.
+const LORE_DRAG_TYPE = "application/x-sonder-lorebook";
+
+function loreDragStart(event, bookId) {
+  loreUI.dragId = bookId;
+  event.dataTransfer.effectAllowed = "move";
+  event.dataTransfer.setData(LORE_DRAG_TYPE, String(bookId));
+}
+
+function loreDraggedBook(event) {
+  const transfer = event.dataTransfer;
+  if (!transfer || !Array.from(transfer.types || []).includes(LORE_DRAG_TYPE)) return null;
+  return Number(transfer.getData(LORE_DRAG_TYPE) || loreUI.dragId) || null;
+}
+
+// Every book under `bookId`, at any depth: what it may not be moved beneath.
+// The server refuses the cycle (`would_create_book_cycle`); the select and
+// the drops no longer offer it (F24).
+function loreDescendantIds(books, bookId) {
+  const byParent = loreBooksByParent(books);
+  const found = new Set();
+  const walk = id => {
+    for (const child of byParent.get(String(id)) || []) {
+      if (found.has(child.id)) continue;
+      found.add(child.id);
+      walk(child.id);
+    }
+  };
+  walk(bookId);
+  return found;
+}
+
+// THE STORY-LOCAL RULE, AND THE WRITES THE SERVER HAS NO STORY-LOCAL FORM FOR
+// (audit 2026-11-01, F6). Opened from inside a story, a library book's
+// ENTRIES are the story's: an edit writes the story's overlay
+// (`_story_overlay_edit`) and "+ Entry" lands in the story's canon book
+// (`lore_entry_create`). Everything else the workspace does to a library book
+// -- generating or reinterpreting its entries, its own fields, its place in
+// the tree, its links, deleting it, applying a plan to it -- has no story
+// form on the server and writes the SHARED library, which every story that
+// attaches the book reads. Those writes used to go through without a word,
+// beside a "+ Entry" that stayed story-local. Each now says so and asks;
+// with no story open the library is being edited as the library, and
+// nothing asks. `message` is a whole sentence per act, for the catalog.
+async function loreLibraryWriteConfirmed(book, message) {
+  if (!S.chatId || !loreBookIsLibrary(book)) return true;
+  return confirmModal(message, { confirmLabel: "Change the library" });
+}
+
+function loreLibraryBook(bookId) {
+  return (S.boot.lorebooks || []).map(normalizeLoreBook)
+    .find(book => book.id === Number(bookId)) || null;
+}
+
 function loreBookTypeIcon(type) {
   return {
     general: "📚",
@@ -374,19 +436,12 @@ function renderLoreLibrarySidebar(list, actions) {
             : ""),
         draggable: "true",
         onclick: () => openLoreWorkspace(book.id),
-        ondragstart: event => {
-          loreUI.dragId = book.id;
-          event.dataTransfer.effectAllowed = "move";
-          event.dataTransfer.setData(
-            "text/plain",
-            String(book.id)
-          );
-        },
+        ondragstart: event => loreDragStart(event, book.id),
+        // The sidebar's drag ended without a drop on a lorebook target too:
+        // its id must not outlive it (F7).
+        ondragend: () => { loreUI.dragId = null; },
         ondragover: event => {
-          const dragged = Number(
-            event.dataTransfer.getData("text/plain")
-            || loreUI.dragId
-          );
+          const dragged = loreDraggedBook(event);
           if (dragged && dragged !== book.id) {
             event.preventDefault();
             row.classList.add("drag-over");
@@ -398,11 +453,12 @@ function renderLoreLibrarySidebar(list, actions) {
         ondrop: async event => {
           event.preventDefault();
           row.classList.remove("drag-over");
-          const dragged = Number(
-            event.dataTransfer.getData("text/plain")
-            || loreUI.dragId
-          );
+          const dragged = loreDraggedBook(event);
           if (!dragged || dragged === book.id) {
+            return;
+          }
+          if (loreDescendantIds(books, dragged).has(book.id)) {
+            toast("A book cannot be moved beneath one of its own books.", "warn");
             return;
           }
           await moveLoreBook(dragged, book.id, null);
@@ -505,9 +561,13 @@ function renderLoreLibrarySidebar(list, actions) {
 
 // A LIBRARY book opened from inside a story is read AS THAT STORY reads it:
 // the story's overlays merged over the library rows, each marked
-// (`entry.overlay`). Edits made here write the story's overlay, never the
-// shared library; additions land in the story's canon book. Opened with no
-// story selected, the library is shown and edited as written.
+// (`entry.overlay`). An entry edited here writes the story's overlay, never
+// the shared library, and "+ Entry" lands in the story's canon book. The
+// writes the server has no story form for -- generated or reinterpreted
+// entries, the book's own fields, its place in the tree, its links, its
+// deletion, an applied plan -- do write the shared library, and each asks
+// first (`loreLibraryWriteConfirmed`). Opened with no story selected, the
+// library is shown and edited as written.
 function loreStoryQuery() {
   return S.chatId ? `?chat_id=${encodeURIComponent(S.chatId)}` : "";
 }
@@ -665,8 +725,10 @@ async function renderLoreWorkspaceBody(selectedId) {
       return;
     }
 
+    // One message with the book's name as a field (F12: "Lorebook workspace
+    // — Harbour" matched the `Lorebook ${id}` rule and came out half-English).
     $("#modaltitle").textContent =
-      "Lorebook workspace — " + state.selected.name;
+      t("Lorebook workspace — {name}", { name: state.selected.name });
     body.innerHTML = "";
     body.append(buildLoreWorkspace(state));
   } catch (error) {
@@ -997,23 +1059,15 @@ function renderWorkspaceTree(state, container) {
           openLoreWorkspace(book.id);
         },
         ondragstart: event => {
-          loreUI.dragId = book.id;
           row.classList.add("dragging");
-          event.dataTransfer.effectAllowed = "move";
-          event.dataTransfer.setData(
-            "text/plain",
-            String(book.id)
-          );
+          loreDragStart(event, book.id);
         },
         ondragend: () => {
           row.classList.remove("dragging");
           loreUI.dragId = null;
         },
         ondragover: event => {
-          const draggedId = Number(
-            event.dataTransfer.getData("text/plain")
-            || loreUI.dragId
-          );
+          const draggedId = loreDraggedBook(event);
           if (draggedId && draggedId !== book.id) {
             event.preventDefault();
             row.classList.add("drag-over");
@@ -1025,11 +1079,12 @@ function renderWorkspaceTree(state, container) {
         ondrop: async event => {
           event.preventDefault();
           row.classList.remove("drag-over");
-          const draggedId = Number(
-            event.dataTransfer.getData("text/plain")
-            || loreUI.dragId
-          );
+          const draggedId = loreDraggedBook(event);
           if (!draggedId || draggedId === book.id) {
+            return;
+          }
+          if (loreDescendantIds(state.books, draggedId).has(book.id)) {
+            toast("A book cannot be moved beneath one of its own books.", "warn");
             return;
           }
           await moveLoreBook(
@@ -1184,9 +1239,12 @@ function renderWorkspaceTree(state, container) {
     {
       class: "filedrop",
       style: "margin-top:8px;padding:12px",
+      // Every drag is swallowed here -- a file let through would be opened
+      // by the browser in place of the app -- but only a lorebook dragged
+      // from this file is acted on (F7).
       ondragover: event => {
         event.preventDefault();
-        rootDrop.classList.add("drag-over");
+        if (loreDraggedBook(event)) rootDrop.classList.add("drag-over");
       },
       ondragleave: () => {
         rootDrop.classList.remove("drag-over");
@@ -1194,10 +1252,7 @@ function renderWorkspaceTree(state, container) {
       ondrop: async event => {
         event.preventDefault();
         rootDrop.classList.remove("drag-over");
-        const draggedId = Number(
-          event.dataTransfer.getData("text/plain")
-          || loreUI.dragId
-        );
+        const draggedId = loreDraggedBook(event);
         if (draggedId) {
           await moveLoreBook(draggedId, null, null);
         }
@@ -1238,8 +1293,11 @@ function renderLoreBookEditor(state, container) {
     book.summary || ""
   );
 
+  // Not itself, and not one of its own books: the server refuses the cycle,
+  // and offering it only set up a refused save (F24).
+  const descendants = loreDescendantIds(state.books, book.id);
   const compatibleParents = state.books.filter(candidate => {
-    return candidate.id !== book.id;
+    return candidate.id !== book.id && !descendants.has(candidate.id);
   });
 
   const parentSelect = el(
@@ -1312,6 +1370,28 @@ function renderLoreBookEditor(state, container) {
               ? Number(parentSelect.value)
               : null;
 
+            if (!await loreLibraryWriteConfirmed(book,
+                  "This is a library book: its name, type, summary and place in the "
+                  + "tree are the shared library's, read by every story that "
+                  + "attaches it, not this story's. Save them to the library?")) {
+              return;
+            }
+
+            // THE MOVE FIRST (F24). It is the half the server can refuse (a
+            // cycle, a parent in another scope), and the fields used to be
+            // written before it -- so a refused move left the rename saved
+            // under an error toast that read as if nothing had been.
+            if (parentId !== book.parent_id) {
+              await api(
+                "POST",
+`/api/lorebooks/${book.id}/move`,
+                {
+                  parent_id: parentId,
+                  position: Number(orderInput.value || 0)
+                }
+              );
+            }
+
             await api(
               "PUT",
 `/api/lorebooks/${book.id}`,
@@ -1328,17 +1408,6 @@ function renderLoreBookEditor(state, container) {
                 sort_order: Number(orderInput.value || 0)
               }
             );
-
-            if (parentId !== book.parent_id) {
-              await api(
-                "POST",
-`/api/lorebooks/${book.id}/move`,
-                {
-                  parent_id: parentId,
-                  position: Number(orderInput.value || 0)
-                }
-              );
-            }
 
             await refreshLoreUI(book.id);
             toast("Lorebook saved.", "ok");
@@ -1520,6 +1589,11 @@ function renderLoreBookEditor(state, container) {
             if (!await confirmModal(warning, { danger: true, confirmLabel: "Delete" })) {
               return;
             }
+            if (!await loreLibraryWriteConfirmed(book,
+                  "This is a library book: deleting it takes it from every story "
+                  + "that attaches it, not only this one. Delete it from the library?")) {
+              return;
+            }
 
             await api(
               "DELETE",
@@ -1538,6 +1612,12 @@ function renderLoreBookEditor(state, container) {
 }
 
 async function moveLoreBook(bookId, parentId, position) {
+  const library = loreLibraryBook(bookId);
+  if (library && !await loreLibraryWriteConfirmed(library,
+        "This is a library book: moving it rearranges the shared library for "
+        + "every story that attaches it, not only this one. Move it?")) {
+    return;
+  }
   try {
     await api(
       "POST",
@@ -1556,6 +1636,12 @@ async function moveLoreBook(bookId, parentId, position) {
 }
 
 async function reorderLoreBook(bookId, direction) {
+  const library = loreLibraryBook(bookId);
+  if (library && !await loreLibraryWriteConfirmed(library,
+        "This is a library book: moving it rearranges the shared library for "
+        + "every story that attaches it, not only this one. Move it?")) {
+    return;
+  }
   try {
     await api(
       "POST",
@@ -1717,8 +1803,18 @@ function createLoreBookDialog(
   );
 }
 
-async function refreshLoreUI(selectedId) {
-  await boot();
+// `books: false` for an edit that changes no BOOK -- an entry saved, added,
+// deleted or reverted, a link made or changed, entries generated or
+// reinterpreted. Every one of those used to re-run `boot()`, re-downloading
+// the whole bootstrap (every card's sheet, every library book, every chat:
+// 890 KiB of character sheets alone on the owner's install) and
+// re-translating the page, for a change no bootstrap key holds -- the
+// library's books carry no entry count there -- and then re-read the
+// workspace anyway (audit 2026-11-01, E1). A book created, renamed, moved,
+// re-typed or deleted still refreshes the bootstrap, which the sidebar and
+// every book picker read.
+async function refreshLoreUI(selectedId, { books = true } = {}) {
+  if (books) await boot();
   await openLoreWorkspace(selectedId);
 }
 
@@ -1773,7 +1869,7 @@ function renderLoreEntries(state, container) {
             toast("Added to the story's canon book; the library is unchanged.", "ok");
           }
 
-          await refreshLoreUI(state.selected.id);
+          await refreshLoreUI(state.selected.id, { books: false });
 
           if (result?.id) {
             requestAnimationFrame(() => {
@@ -1881,6 +1977,76 @@ function renderLoreEntries(state, container) {
 }
 
 function buildLoreEntryCard(state, entry) {
+  const category = entry.category || "other";
+
+  // THE BODY IS BUILT ON FIRST OPEN (audit 2026-11-01, E2). Every card used
+  // to be built in full while folded -- about 70 elements and three
+  // `JSON.parse` each -- so the owner's largest book (310 entries) built and
+  // localized ~20k elements on every open, every edit's refresh and every
+  // debounced search, to show 310 summary lines. The summary is all a folded
+  // card shows; the editor is built when it is opened (`+ Entry` and a
+  // generation open theirs by setting `open`, which fires the same toggle).
+  const title = (
+    entry.title
+    || entry.keys
+    || entry.content
+    || `Entry ${entry.id}`
+  );
+
+  const card = el(
+    "details",
+    {
+      class: "lore-entry-card card",
+      "data-entry-id": entry.id
+    },
+    el(
+      "summary",
+      {},
+      el("span", { class: "badge" }, category),
+      // An entry's title is lore, not interface: through `txt()` and under
+      // `translate="no"`, or a title that equals a catalog key ("Cast",
+      // "Book") renders translated (audit 2026-11-01, F14).
+      el(
+        "span",
+        {
+          class: "lore-entry-title",
+          translate: "no",
+          title
+        },
+        txt(title)
+      ),
+      entry.canon_locked || entry.locked
+        ? el("span", { class: "badge warn" }, "locked")
+        : null,
+      entry.overlay
+        ? el(
+            "span",
+            {
+              class: "badge",
+              title: "This story's reading of a library entry; the library is unchanged"
+            },
+            "story edit"
+          )
+        : null,
+      el(
+        "span",
+        { class: "small dim" },
+`#${entry.id}`
+      )
+    )
+  );
+  let built = false;
+  card.addEventListener("toggle", () => {
+    if (!card.open || built) return;
+    built = true;
+    card.append(buildLoreEntryBody(state, entry));
+  });
+
+  return card;
+}
+
+// The open card's editor: every field, the save, revert and delete.
+function buildLoreEntryBody(state, entry) {
   const category = entry.category || "other";
   const aliases = parseStoredJSON(entry.aliases, []);
   const scope = parseStoredJSON(entry.scope, {});
@@ -2037,227 +2203,180 @@ function buildLoreEntryCard(state, entry) {
         : "none";
   };
 
-  const title = (
-    entry.title
-    || entry.keys
-    || entry.content
-    || `Entry ${entry.id}`
-  );
-
-  const card = el(
-    "details",
+  return el(
+    "div",
     {
-      class: "lore-entry-card card",
-      "data-entry-id": entry.id
+      class: "lore-entry-grid",
+      style: "margin-top:10px"
     },
-    el(
-      "summary",
-      {},
-      el("span", { class: "badge" }, category),
+    loreField("Keys", keysInput, "full"),
+    loreField("Title", titleInput),
+    loreField("Category", categorySelect),
+    loreField("Content", contentInput, "full"),
+    loreField("Importance", importanceInput),
+    loreField(
+      "Canon lock",
       el(
-        "span",
-        {
-          class: "lore-entry-title",
-          title
-        },
-        title
-      ),
-      entry.canon_locked || entry.locked
-        ? el("span", { class: "badge warn" }, "locked")
-        : null,
-      entry.overlay
-        ? el(
-            "span",
-            {
-              class: "badge",
-              title: "This story's reading of a library entry; the library is unchanged"
-            },
-            "story edit"
-          )
-        : null,
-      el(
-        "span",
-        { class: "small dim" },
-`#${entry.id}`
+        "label",
+        { class: "tgl" },
+        lockedInput,
+        " locked"
       )
     ),
+    loreField("Aliases", aliasesInput, "full"),
+    loreField("World scope", worldIdsInput),
+    loreField("Location scope", locationIdsInput),
+    loreField("Entity scope", entityIdsInput, "full"),
+    knowledgeFields,
     el(
-      "div",
-      {
-        class: "lore-entry-grid",
-        style: "margin-top:10px"
-      },
-      loreField("Keys", keysInput, "full"),
-      loreField("Title", titleInput),
-      loreField("Category", categorySelect),
-      loreField("Content", contentInput, "full"),
-      loreField("Importance", importanceInput),
-      loreField(
-        "Canon lock",
-        el(
-          "label",
-          { class: "tgl" },
-          lockedInput,
-          " locked"
-        )
-      ),
-      loreField("Aliases", aliasesInput, "full"),
-      loreField("World scope", worldIdsInput),
-      loreField("Location scope", locationIdsInput),
-      loreField("Entity scope", entityIdsInput, "full"),
-      knowledgeFields,
-      el(
-        "details",
-        { class: "full" },
-        el("summary", {}, "Entry relationships"),
-        el(
-          "div",
-          { class: "lore-entry-grid" },
-          loreField("Supersedes entry", supersedesInput),
-          loreField("Refines entries", refinesInput),
-          loreField(
-            "Contradicts entries",
-            contradictsInput,
-            "full"
-          )
-        )
-      ),
-      loreField("Source notes", sourceNotesInput, "full"),
+      "details",
+      { class: "full" },
+      el("summary", {}, "Entry relationships"),
       el(
         "div",
-        { class: "full row" },
-        el(
-          "button",
-          {
-            class: "primary",
-            onclick: async event => {
-              await buttonTask(
-                event.currentTarget,
-                "Saving…",
-                async () => {
-                  const isKnowledge =
-                    categorySelect.value === "knowledge";
-
-                  const knowledgeLocations = (
-                    isKnowledge
-                    && knowledgeRangeSelect.value === "local"
-                  )
-                    ? splitCL(knowledgeLocationsInput.value)
-                    : [];
-
-                  const inStory = S.chatId && loreBookIsLibrary(state.selected);
-                  const saved = await api(
-                    "PUT",
-`/api/lore_entries/${entry.id}`,
-                    {
-                      ...(inStory ? { chat_id: S.chatId } : {}),
-                      keys: keysInput.value,
-                      title: titleInput.value || null,
-                      category: categorySelect.value,
-                      content: contentInput.value,
-                      canon_locked: lockedInput.checked,
-                      importance: numOr(
-                        importanceInput.value,
-                        0.5
-                      ),
-                      aliases: splitCL(aliasesInput.value),
-                      scope: {
-                        world_ids: splitCL(
-                          worldIdsInput.value
-                        ),
-                        location_ids: splitCL(
-                          locationIdsInput.value
-                        ),
-                        entity_ids: splitCL(
-                          entityIdsInput.value
-                        )
-                      },
-                      relations: {
-                        supersedes_entry_id:
-                          supersedesInput.value
-                            ? Number(supersedesInput.value)
-                            : null,
-                        refines_entry_ids:
-                          splitNumberList(refinesInput.value),
-                        contradicts_entry_ids:
-                          splitNumberList(
-                            contradictsInput.value
-                          )
-                      },
-                      source_notes: sourceNotesInput.value,
-                      knowledge_tag: isKnowledge
-                        ? knowledgeTagSelect.value
-                        : null,
-                      knowledge_range: isKnowledge
-                        ? knowledgeRangeSelect.value
-                        : null,
-                      knowledge_locations:
-                        knowledgeLocations
-                    }
-                  );
-
-                  toast(
-                    saved?.entry?.overlay
-                      ? "Story edit saved; the library is unchanged."
-                      : "Entry saved.",
-                    "ok"
-                  );
-                  await refreshLoreUI(state.selected.id);
-                }
-              );
-            }
-          },
-          "Save entry"
-        ),
-        (S.chatId && loreBookIsLibrary(state.selected))
-          ? (entry.overlay
-              ? el(
-                  "button",
-                  {
-                    title: "Drop this story's edit and read the library's entry again",
-                    onclick: async () => {
-                      if (!await confirmModal("Revert this entry to the library's text?", { confirmLabel: "Revert" })) {
-                        return;
-                      }
-                      await api(
-                        "DELETE",
-`/api/lore_entries/${entry.id}/overlay?chat_id=${encodeURIComponent(S.chatId)}`
-                      );
-                      toast("Reverted to the library.", "ok");
-                      await refreshLoreUI(state.selected.id);
-                    }
-                  },
-                  "Revert to library"
-                )
-              : el(
-                  "span",
-                  { class: "small dim" },
-                  "A library entry is deleted from the library, not from a story."
-                ))
-          : el(
-          "button",
-          {
-            class: "danger",
-            onclick: async () => {
-              if (!await confirmModal("Delete this lore entry?", { danger: true, confirmLabel: "Delete" })) {
-                return;
-              }
-
-              await api(
-                "DELETE",
-`/api/lore_entries/${entry.id}`
-              );
-
-              await refreshLoreUI(state.selected.id);
-            }
-          },
-          "Delete"
+        { class: "lore-entry-grid" },
+        loreField("Supersedes entry", supersedesInput),
+        loreField("Refines entries", refinesInput),
+        loreField(
+          "Contradicts entries",
+          contradictsInput,
+          "full"
         )
+      )
+    ),
+    loreField("Source notes", sourceNotesInput, "full"),
+    el(
+      "div",
+      { class: "full row" },
+      el(
+        "button",
+        {
+          class: "primary",
+          onclick: async event => {
+            await buttonTask(
+              event.currentTarget,
+              "Saving…",
+              async () => {
+                const isKnowledge =
+                  categorySelect.value === "knowledge";
+
+                const knowledgeLocations = (
+                  isKnowledge
+                  && knowledgeRangeSelect.value === "local"
+                )
+                  ? splitCL(knowledgeLocationsInput.value)
+                  : [];
+
+                const inStory = S.chatId && loreBookIsLibrary(state.selected);
+                const saved = await api(
+                  "PUT",
+`/api/lore_entries/${entry.id}`,
+                  {
+                    ...(inStory ? { chat_id: S.chatId } : {}),
+                    keys: keysInput.value,
+                    title: titleInput.value || null,
+                    category: categorySelect.value,
+                    content: contentInput.value,
+                    canon_locked: lockedInput.checked,
+                    importance: numOr(
+                      importanceInput.value,
+                      0.5
+                    ),
+                    aliases: splitCL(aliasesInput.value),
+                    scope: {
+                      world_ids: splitCL(
+                        worldIdsInput.value
+                      ),
+                      location_ids: splitCL(
+                        locationIdsInput.value
+                      ),
+                      entity_ids: splitCL(
+                        entityIdsInput.value
+                      )
+                    },
+                    relations: {
+                      supersedes_entry_id:
+                        supersedesInput.value
+                          ? Number(supersedesInput.value)
+                          : null,
+                      refines_entry_ids:
+                        splitNumberList(refinesInput.value),
+                      contradicts_entry_ids:
+                        splitNumberList(
+                          contradictsInput.value
+                        )
+                    },
+                    source_notes: sourceNotesInput.value,
+                    knowledge_tag: isKnowledge
+                      ? knowledgeTagSelect.value
+                      : null,
+                    knowledge_range: isKnowledge
+                      ? knowledgeRangeSelect.value
+                      : null,
+                    knowledge_locations:
+                      knowledgeLocations
+                  }
+                );
+
+                toast(
+                  saved?.entry?.overlay
+                    ? "Story edit saved; the library is unchanged."
+                    : "Entry saved.",
+                  "ok"
+                );
+                await refreshLoreUI(state.selected.id, { books: false });
+              }
+            );
+          }
+        },
+        "Save entry"
+      ),
+      (S.chatId && loreBookIsLibrary(state.selected))
+        ? (entry.overlay
+            ? el(
+                "button",
+                {
+                  title: "Drop this story's edit and read the library's entry again",
+                  onclick: async () => {
+                    if (!await confirmModal("Revert this entry to the library's text?", { confirmLabel: "Revert" })) {
+                      return;
+                    }
+                    await api(
+                      "DELETE",
+`/api/lore_entries/${entry.id}/overlay?chat_id=${encodeURIComponent(S.chatId)}`
+                    );
+                    toast("Reverted to the library.", "ok");
+                    await refreshLoreUI(state.selected.id, { books: false });
+                  }
+                },
+                "Revert to library"
+              )
+            : el(
+                "span",
+                { class: "small dim" },
+                "A library entry is deleted from the library, not from a story."
+              ))
+        : el(
+        "button",
+        {
+          class: "danger",
+          onclick: async () => {
+            if (!await confirmModal("Delete this lore entry?", { danger: true, confirmLabel: "Delete" })) {
+              return;
+            }
+
+            await api(
+              "DELETE",
+`/api/lore_entries/${entry.id}`
+            );
+
+            await refreshLoreUI(state.selected.id, { books: false });
+          }
+        },
+        "Delete"
       )
     )
   );
-
-  return card;
 }
 
 function splitNumberList(value) {
@@ -2266,7 +2385,12 @@ function splitNumberList(value) {
     .filter(Number.isFinite);
 }
 
-function reinterpretLoreBook(state) {
+async function reinterpretLoreBook(state) {
+  if (!await loreLibraryWriteConfirmed(state.selected,
+        "Reinterpreting rewrites this library book's entries for every story "
+        + "that attaches it, not only this one. Reinterpret the library book?")) {
+    return;
+  }
   backgroundTask(`Reinterpreting ${state.selected.name}`,
     () => api(
       "POST",
@@ -2274,7 +2398,7 @@ function reinterpretLoreBook(state) {
     ),
     {
       onSuccess: async () => {
-        await refreshLoreUI(state.selected.id);
+        await refreshLoreUI(state.selected.id, { books: false });
       },
       successMessage: result => {
         return`Reinterpreted ${result?.reinterpreted || 0} entries.`;
@@ -2384,7 +2508,7 @@ function generateLoreEntriesPrompt(state) {
             "button",
             {
               class: "primary",
-              onclick: event => {
+              onclick: async event => {
                 const request = buildDirectLoreRequest(
                   guidanceInput.value,
                   promptInput.value,
@@ -2401,6 +2525,13 @@ function generateLoreEntriesPrompt(state) {
                 }
 
                 const button = event.currentTarget;
+                if (!await loreLibraryWriteConfirmed(state.selected,
+                      "Generated entries are written into the shared library book, "
+                      + "where every story that attaches it will find them -- not "
+                      + "into this story's canon, where + Entry puts what you add "
+                      + "here. Generate into the library?")) {
+                  return;
+                }
                 button.disabled = true;
 
                 backgroundTask(
@@ -2414,7 +2545,7 @@ function generateLoreEntriesPrompt(state) {
                   ),
                   {
                     onSuccess: async result => {
-                      await boot();
+                      // Entries only: no bootstrap key changed (E1).
                       await openLoreWorkspace(
                         state.selected.id
                       );
@@ -2437,14 +2568,10 @@ function generateLoreEntriesPrompt(state) {
                     successMessage: result => {
                       const count = result?.added || 0;
 
-                      return (
-`Generated ${count} `
-                        + (
-                          count === 1
-                            ? "lore entry."
-                            : "lore entries."
-                        )
-                      );
+                      // Count first, noun fixed -- the plural ternary the
+                      // plan toast below warns against rendered "1 lore
+                      // entry. を生成しました" (F12).
+                      return t("Lore entries generated: {n}.", { n: count });
                     },
                     errorPrefix:
                       "Lore entry generation failed",
@@ -2807,6 +2934,11 @@ function renderRelationshipList(state, list) {
             {
               class: "primary",
               onclick: async () => {
+                if (!await loreLibraryWriteConfirmed(state.selected,
+                      "Links between library books are the shared library's, read "
+                      + "by every story that attaches them. Change the library's link?")) {
+                  return;
+                }
                 await api(
                   "PUT",
 `/api/lorebook_links/${link.id}`,
@@ -2822,7 +2954,7 @@ function renderRelationshipList(state, list) {
                   }
                 );
 
-                await refreshLoreUI(state.selected.id);
+                await refreshLoreUI(state.selected.id, { books: false });
               }
             },
             "Save"
@@ -2835,13 +2967,18 @@ function renderRelationshipList(state, list) {
                 if (!await confirmModal("Delete this relationship?", { danger: true, confirmLabel: "Delete" })) {
                   return;
                 }
+                if (!await loreLibraryWriteConfirmed(state.selected,
+                      "Links between library books are the shared library's, read "
+                      + "by every story that attaches them. Change the library's link?")) {
+                  return;
+                }
 
                 await api(
                   "DELETE",
 `/api/lorebook_links/${link.id}`
                 );
 
-                await refreshLoreUI(state.selected.id);
+                await refreshLoreUI(state.selected.id, { books: false });
               }
             },
             "Delete"
@@ -2958,6 +3095,11 @@ function showNewRelationshipForm(state, list) {
           {
             class: "primary",
             onclick: async () => {
+              if (!await loreLibraryWriteConfirmed(state.selected,
+                    "Links between library books are the shared library's, read "
+                    + "by every story that attaches them. Change the library's link?")) {
+                return;
+              }
               await api(
                 "POST",
 `/api/lorebooks/${state.selected.id}/links`,
@@ -2974,7 +3116,7 @@ function showNewRelationshipForm(state, list) {
                 }
               );
 
-              await refreshLoreUI(state.selected.id);
+              await refreshLoreUI(state.selected.id, { books: false });
             }
           },
           "Create link"
@@ -3568,6 +3710,12 @@ function renderLorePlanPreview(state, container) {
           return;
         }
 
+        if (!await loreLibraryWriteConfirmed(state.selected,
+              "Applying this plan writes into the shared library, which every "
+              + "story that attaches these books reads, not only this one. "
+              + "Apply it to the library?")) {
+          return;
+        }
         await buttonTask(
           event.currentTarget,
           "Applying…",
