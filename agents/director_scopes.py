@@ -56,10 +56,13 @@ SPECIALISTS = {
         "channels": ("cast_changes", "introductions",
                      "public_evidence", "crowd_ops", "courier_ops",
                      "telling_ops", "ratified_claims", "contradicted_claims",
-                     "charter_ops", "claim_dispositions", "consequences", "obligations"),
+                     "charter_ops", "claim_dispositions", "consequences"),
         # This channel is step metadata rather than StateDiff, so its list
-        # shape cannot be derived from StateDiff's annotations below.
-        "list_channels": ("public_evidence", "obligations"),
+        # shape cannot be derived from StateDiff's annotations below. (It had
+        # a sibling, `obligations`, until the ledger that channel wrote was
+        # deleted on 2026-11-01 -- the owner: "obligations caused
+        # hyperfixation"; `director_prose.RETIRED_CHANNELS`.)
+        "list_channels": ("public_evidence",),
     },
     "contact": {
         "step_key": "director_contact",
@@ -117,7 +120,6 @@ RETIRED_HANDS = {"offscreen": "social"}
 #: act on and can only restate; for these it is the act itself. An
 #: assertion spoken aloud is a claim, never an objective fact.
 SPEECH_WRITTEN_CHANNELS = frozenset((
-    "obligations",           # explicit requests, promises, answers and refusals
     "introductions",         # a name is given by being said
     "comms_ops",             # a line carried by a device IS the op
     "telling_ops",           # who told whom what
@@ -201,7 +203,6 @@ _CATEGORY_CHANNELS = {
     "destruction": "destruction",
     "artifacts": "artifact_ops",
     "introductions": "introductions",
-    "obligations": "obligations",
 }
 
 #: The delegated channels whose value is a LIST rather than a keyed table.

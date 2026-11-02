@@ -27,6 +27,7 @@ import copy
 import json
 import logging
 import re
+import warnings
 
 _COMMIT_SCOPE = contextvars.ContextVar("sonder_ext_commit_scope", default=False)
 
@@ -1699,10 +1700,20 @@ class ChatAccess:
 #: the rule that put the comment there stands: a name goes in when the
 #: behaviour lands and never before.
 #:
-#: ONE NAME HAS LEFT while `ext_api` stayed 1: `list_channels`
-#: (`add_director_specialist(list_channels=...)`), withdrawn 2026-09-27 with
-#: the Director specialists it described. The call now raises, and a name
-#: still promising it would be the lie this set exists to prevent.
+#: TWO NAMES HAVE LEFT while `ext_api` stayed 1, each with the behaviour it
+#: promised, because a name still promising a thing the host no longer does
+#: would be the lie this set exists to prevent:
+#:   * `list_channels` (`add_director_specialist(list_channels=...)`),
+#:     withdrawn 2026-09-27 with the Director specialists it described. The
+#:     call now raises.
+#:   * `living_world_provisioning` (`provision_story(offscreen_life=,
+#:     living_world=)` and the effective ladder read back from `story_view`),
+#:     withdrawn 2026-11-01 with the paid off-screen tiers and the ladder over
+#:     them, superseded by the Charter and the Writers' Room. The call does NOT
+#:     raise: both arguments are still accepted with every value they ever
+#:     accepted, provision nothing, and say so (`provision_story`'s
+#:     docstring). Raising would break a campaign whose call was valid under
+#:     the version it declares.
 HOST_CAPABILITIES = frozenset({
     "frame_coherent_reads",
     # `api.char_state(chat_id, char_id)` -- per-character per-story state.
@@ -1736,14 +1747,6 @@ HOST_CAPABILITIES = frozenset({
     # `api.provision_story(...)` -- create a story with cast and state in one
     # atomic call.
     "provision_story",
-    # `api.provision_story(..., offscreen_life=, living_world=)` -- set how
-    # much of the world runs unwatched, in the same atomic call, and read the
-    # EFFECTIVE ladder back from `story_view`'s `living_world` slice. Named
-    # separately from `provision_story` for the reason `frame_state` and
-    # `frame_coherent_reads` are: an extension can have the second without
-    # the first, and one name covering both would be a promise it could not
-    # check.
-    "living_world_provisioning",
     # `api.generate_lived_location(...)` + `api.living_world_job(...)` -- add
     # an inhabited place to a story from Python, and see whether a previous
     # attempt was interrupted.
@@ -1756,13 +1759,18 @@ HOST_CAPABILITIES = frozenset({
 })
 
 
-def _wget_living_world(chat_id):
-    """The stored living-world config, or `{}`. Chat-global, so no frame."""
-    from core.db import wget
-    from world.living_world import LIVING_WORLD_KEY
-
-    stored = wget(int(chat_id), LIVING_WORLD_KEY, None)
-    return stored if isinstance(stored, dict) else {}
+#: What `provision_story(offscreen_life=, living_world=)` accepted while the
+#: off-screen ladder existed, kept so a call written against `ext_api` 1 is
+#: still answered rather than refused. Nothing reads these as settings: the
+#: ladder, its four approaches and the paid tiers it rationed were deleted on
+#: 2026-11-01, superseded by the Charter and the Writers' Room. A value
+#: outside them was refused then and is refused now -- a typo was never
+#: valid, and validation before the archive is touched is the contract.
+RETIRED_OFFSCREEN_LIFE_RUNGS = ("inert", "deterministic", "reactive",
+                                "stochastic", "character_agent")
+RETIRED_LIVING_WORLD_APPROACHES = ("routine_residue", "scheduled_consequence",
+                                   "place_obligations", "antagonist_ladder")
+RETIRED_LIVING_WORLD_DEPTHS = ("off", "floor", "ceiling")
 
 
 class SonderExtensionAPI:
@@ -2283,24 +2291,19 @@ class SonderExtensionAPI:
         mean anything. That is not a race, it is failure atomicity, and the only
         cure is being inside the same transaction.
 
-        `offscreen_life` and `living_world` set how much of the world runs
-        while nobody is looking, and they are here for the same reason the
-        four above are: a campaign whose premise is that the town keeps
-        working without you is not a campaign until that is switched on, and
-        a second write afterwards can fail. Both are OPTIONAL and `None`
-        means "leave whatever the package or the host already chose" -- these
-        are settings a story can legitimately arrive with.
-
-        Both are REFUSED rather than normalized, which is the opposite of the
-        HTTP routes and deliberate. A host typing into a panel sees the
-        normalized answer come straight back and can correct it; a campaign
-        calling this sees nothing, so a typo'd `offscreen_life` would land as
-        the DEFAULT rung (`normalize_offscreen_life` falls to the default,
-        never to the floor) and buy more off-screen life than was asked for,
-        silently. `living_world` MERGES over what is stored rather than
-        replacing it, because `normalize_living_world` is total over the four
-        approaches: naming one and replacing would set the other three to
-        `off`, including any the package meant to arrive with.
+        `offscreen_life` and `living_world` are RETIRED, and accepted. They
+        set the off-screen ladder and its four living-world approaches, which
+        were deleted on 2026-11-01 with the paid off-screen tiers they
+        rationed: the Charter and the Writers' Room superseded them, the
+        consequence fuse and the owed history are unconditional, and what a
+        story says about how much lives beside the player's thread is
+        `max_bubbles`. `ext_api` stays 1, so a call that was valid under it
+        stays valid: every rung, approach and depth either argument ever
+        accepted is still accepted, NOTHING is provisioned for it, and the
+        call says so three ways -- a `DeprecationWarning`, a line on this
+        extension's log, and a sentence in the result's `deprecations`. A
+        value the ladder never had is still REFUSED before the archive is
+        touched, as it always was: a typo was never a valid call.
 
         Data rather than a callback, deliberately (the report that asked for
         this recommended the same and the reasoning holds): every value is
@@ -2365,36 +2368,45 @@ class SonderExtensionAPI:
             except (TypeError, ValueError):
                 raise ExtensionError(
                     f"document {path!r} is not JSON-serialisable")
+        # THE RETIRED LADDER: validated as it always was, provisioned never.
+        deprecations = []
         if offscreen_life is not None:
-            from story.scene import OFFSCREEN_LIFE_LADDER
-
-            if offscreen_life not in OFFSCREEN_LIFE_LADDER:
+            if offscreen_life not in RETIRED_OFFSCREEN_LIFE_RUNGS:
                 raise ExtensionError(
                     f"offscreen_life must be one of "
-                    f"{', '.join(OFFSCREEN_LIFE_LADDER)}")
-        ladder = {}
+                    f"{', '.join(RETIRED_OFFSCREEN_LIFE_RUNGS)}")
+            deprecations.append(
+                f"offscreen_life={offscreen_life!r} was ignored: the "
+                "off-screen ladder was retired on 2026-11-01 (superseded by "
+                "the Charter and the Writers' Room); max_bubbles in the "
+                "story's dialogue_config is the dial that runs")
         if living_world is not None:
-            from world.living_world import (LIVING_WORLD_APPROACHES,
-                                            LIVING_WORLD_DEPTHS)
-
             if not isinstance(living_world, dict):
                 raise ExtensionError("living_world must be a mapping of "
                                      "approach to depth")
             for approach, depth in living_world.items():
-                # Named rather than dropped. `normalize_living_world` drops an
-                # unknown approach silently, which is right for a panel that
-                # echoes the result back and wrong for a caller who is told
-                # nothing -- a typo'd approach would simply never run.
-                if approach not in LIVING_WORLD_APPROACHES:
+                # Named rather than dropped, as before the retirement: a typo
+                # was never a valid call, and a caller who is told nothing
+                # learns nothing.
+                if approach not in RETIRED_LIVING_WORLD_APPROACHES:
                     raise ExtensionError(
                         f"unknown living_world approach {approach!r}; the "
-                        f"approaches are "
-                        f"{', '.join(LIVING_WORLD_APPROACHES)}")
-                if depth not in LIVING_WORLD_DEPTHS:
+                        f"approaches were "
+                        f"{', '.join(RETIRED_LIVING_WORLD_APPROACHES)} "
+                        "(all retired 2026-11-01)")
+                if depth not in RETIRED_LIVING_WORLD_DEPTHS:
                     raise ExtensionError(
                         f"living_world[{approach!r}] must be one of "
-                        f"{', '.join(LIVING_WORLD_DEPTHS)}")
-                ladder[approach] = depth
+                        f"{', '.join(RETIRED_LIVING_WORLD_DEPTHS)}")
+            deprecations.append(
+                f"living_world={dict(living_world)!r} was ignored: its "
+                "approaches were retired on 2026-11-01 -- consequences fire "
+                "and unvisited places owe their history unconditionally, and "
+                "the Charter and the Writers' Room superseded the rest")
+        for note in deprecations:
+            warnings.warn(f"provision_story: {note}", DeprecationWarning,
+                          stacklevel=2)
+            self.log.warning("provision_story: %s", note)
         for label, value in (("state", state), ("frame_state", frame_state)):
             if value is None:
                 continue
@@ -2441,38 +2453,6 @@ class SonderExtensionAPI:
                         f"player_authority must be one of "
                         f"{', '.join(PLAYER_AUTHORITY_MODES)}")
                 set_player_authority(chat_id, player_authority, turn_idx=0)
-            if offscreen_life is not None:
-                from core.db import wget as _wget
-                from story.scene import dialogue_config
-
-                # ONE KEY MERGED IN, not a whole-blob write. The archive
-                # importer writes the package's own `dialogue_config` row
-                # verbatim, so replacing the blob here would discard the
-                # autonomy, line budgets, parallel-reactor count and
-                # promotion threshold it arrived with -- and nothing would
-                # fail, because `dialogue_config()` re-fills every missing
-                # key from the schema default. Read what is stored, change
-                # the one field, write it back; the host route does the same
-                # thing through its own `submitted()` fallback.
-                stored = dict(_wget(chat_id, "dialogue_config", None) or {})
-                stored["offscreen_life"] = offscreen_life
-                wset(chat_id, "dialogue_config", stored)
-                # Read it back through the reader that clamps, so a story
-                # provisioned this way is in exactly the state the panel
-                # would have left it in.
-                dialogue_config(chat_id)
-            if ladder:
-                from world.living_world import (LIVING_WORLD_KEY,
-                                                normalize_living_world)
-
-                # MERGE, for the reason in the docstring: normalization is
-                # total over the four approaches, so a replace would switch
-                # off every approach this call did not name.
-                merged = normalize_living_world(
-                    _wget_living_world(chat_id))
-                merged.update(ladder)
-                wset(chat_id, LIVING_WORLD_KEY,
-                     normalize_living_world(merged))
             if state is not None:
                 self.state(chat_id).set_now(state)
             if frame_state is not None:
@@ -2495,12 +2475,13 @@ class SonderExtensionAPI:
         view = self.story_view(chat_id)
         return {"chat_id": chat_id, "name": chat.get("name"),
                 "schema": view["schema"],
-                # WHAT ACTUALLY RUNS, not what was asked for. Two of the four
-                # approaches have no built ceiling and the off-screen rung
-                # caps all of them, so a caller that reads back only its own
-                # request learns nothing about the clamp -- and the clamp is
-                # silent by design (`effective_depth` never raises).
-                "living_world": view["living_world"]}
+                # What the story runs beside the player's thread -- its
+                # `max_bubbles`, background life and institutions -- as
+                # `story_view` reports it.
+                "living_world": view["living_world"],
+                # What this call asked for that the host no longer does, one
+                # sentence each; empty when it asked for nothing retired.
+                "deprecations": deprecations}
 
     def generate_lived_location(self, chat_id, request, *, frame_id=None):
         """Add one lore-grounded inhabited place to a story, and wait for it.

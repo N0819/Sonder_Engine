@@ -565,7 +565,7 @@ def _subjects(events, identities):
 #: Standing slices of the encoder payload shown to Jev as BEFORE THE BEAT,
 #: filtered to the subjects the beat touches.
 _BEFORE_SLICES = ("positions", "stations", "poses", "attire", "worn_garments",
-                  "entities", "active_conditions", "pending_obligations", "contained")
+                  "entities", "active_conditions", "contained")
 
 
 def before_lines(payload, events):

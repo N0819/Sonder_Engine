@@ -700,13 +700,12 @@ def _build_carriers(cid, frame_id, scene, chat=None):
     being dormant is a decision about what the engine spends on a character,
     not a claim that they have left the world. Reading only the active cast
     made the whole "an absent mind learns something" route unreachable by
-    construction: `full_agent_candidates` admits a dormant subject who has
-    carried reports newer than their last tick, and a dormant subject could
-    never acquire one. Measured on a fifty-beat quest -- the villain stood in
-    the room where his own working completed, and learned nothing until the
-    hero walked in and made him active. An antagonist who has always been
-    off-screen is exactly the character that tier exists for, and was the one
-    character it could not reach.
+    construction: a dormant subject could never acquire a report. Measured on
+    a fifty-beat quest -- the villain stood in the room where his own working
+    completed, and learned nothing until the hero walked in and made him
+    active. (The paid off-screen tier that read those reports, retired
+    2026-11-01, is not the only reader: an absent mind's own thread and its
+    return both read what it carries.)
 
     The PLAYER is the next ring out and the same argument again: a body
     standing in the room where something happened learns it. `0bed7cf` gave
@@ -1290,7 +1289,8 @@ def apply_tellings(ctx, scene, ops, *, names=(), places=()):
 
     **The speaker must have spoken this beat.** Knowledge does not cross a room
     because two bodies were in it. If nobody said anything, nothing was told --
-    the same grounding `apply_plan_ops` demands before a plan can exist.
+    the grounding the retired reactive-plan rung demanded before a plan could
+    exist (a basis in its actor's own words this beat).
 
     **They must be in the same room.** A telling is a thing that happens
     somewhere.

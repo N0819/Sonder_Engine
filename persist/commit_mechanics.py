@@ -246,43 +246,33 @@ def commit_transit_sweep(ctx, nonce, *, prepared=None):
 
         # Living world, approach B: mint this resolution's declared fuses.
         #
-        # MINT EVERY DECLARED FUSE; THE SETTING GATES THE SURFACE (A82,
-        # review 2026-09-07). The mint used to be gated by the chat's own
-        # `scheduled_consequence` depth, which defaults to OFF -- while the
-        # prose author's sheet asks for `state_diff.consequences` on every
-        # beat, gated by nothing (chunk 22 has no gate key). So the default
-        # story spent tokens declaring what the world was about to owe and
-        # the commit threw all of it away with a warning. That is the exact
-        # inversion approach D states one screen below: layer-1 truth
-        # accumulates, settings gate surfaces. A fuse is Director-adjudicated
-        # causality -- it happened, and turning the mechanism on later must
-        # not mean the world forgot the causes it already had.
+        # MINT EVERY DECLARED FUSE (A82, review 2026-09-07). The mint used to
+        # be gated by the chat's own `scheduled_consequence` depth, which
+        # defaulted to OFF -- while the prose author's sheet asks for
+        # `state_diff.consequences` on every beat, gated by nothing (chunk 22
+        # has no gate key). So the default story spent tokens declaring what
+        # the world was about to owe and the commit threw all of it away with
+        # a warning. Layer-1 truth accumulates: a fuse is Director-adjudicated
+        # causality -- it happened, and the world must not forget the causes
+        # it already had.
         #
-        # The setting gates the surface instead, at the two READS that put a
-        # fired fuse's own `what` on the page: the walk-in notice
+        # NOR IS THE SURFACE GATED, since 2026-09-20: the two READS that put a
+        # fired fuse's own `what` on the page -- the walk-in notice
         # (`mechanics._fire_due_events`) and the re-entry residue read
-        # (`routines.residue_for`). Both consult this chat's own depth.
+        # (`routines.residue_for`) -- consult no setting, and the depth they
+        # once read was deleted with the living-world ladder on 2026-11-01. A
+        # cause set for a day that does not land on it is not a cause.
         #
-        # There is a THIRD place a fired fuse's prose can be learned and it
-        # is deliberately left ungated: the carrier rail
-        # (`story/carriers.py`, `advance_carriers`) hands a located
+        # The THIRD place a fired fuse's prose can be learned is the carrier
+        # rail (`story/carriers.py`, `advance_carriers`): it hands a located
         # `world_events` row's `witnessed` surface to a body physically
-        # standing in that room, which is the presence-gated acquisition
-        # LIVING_WORLD.md describes. It is presence, not the menu, that
-        # decides -- so with `scheduled_consequence` off a story still never
-        # meets a fuse through the two notice reads, but a character who
-        # happens to be standing where one fires may still carry what they
-        # saw. Ungating the mint widened WHICH fuses reach that rail, not
-        # whether it was reachable: charter- and ladder-minted consequence
-        # rows (`world/charter_runtime._scheduled_row`, kind 'consequence'
-        # with a witnessed surface, no `living_world_allows` call in that
-        # file) already reached it ungated -- measured on chat 114, 52 rows
-        # minted with the setting off, 46 witnessed, 19 acquirable by a
-        # standing body across 8 rooms. The Director-declared fuse now joins
-        # them. Whether that rail should honour the setting at all is the
-        # owner's call, and if it should, the gate keys on the fuse's ORIGIN
-        # (a Director-declared fuse has no charter in its payload), not on
-        # the kind, or it would also silence the charter's own surfaces.
+        # standing in that room, the presence-gated acquisition
+        # LIVING_WORLD.md describes. Presence decides, never a menu.
+        # Charter-minted consequence rows (`world/charter_runtime.
+        # _scheduled_row`, kind 'consequence' with a witnessed surface)
+        # reached that rail ungated before the Director's fuse did --
+        # measured on chat 114, 52 rows minted while the setting was off, 46
+        # witnessed, 19 acquirable by a standing body across 8 rooms.
         consequences_minted = 0
         # ONE SAVEPOINT FOR THE BLOCK IT WARNS ABOUT. The mint, the per-row
         # INSERTs and the obligations record shared one warn-and-carry-on

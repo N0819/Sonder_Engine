@@ -99,7 +99,7 @@ def offscreen_interpretation(cast_rows, scene):
     present = _present_cast_bodies(scene or {}, cast_rows or [])
     return {
         "kind": "interpret",
-        "ledgers": [], "causal_ledger": [], "obligations": [],
+        "ledgers": [], "causal_ledger": [],
         "ledger_notes": "", "changes_asserted": [],
         "sequence": [], "speech": "", "speech_volume": "normal",
         "private_thought": "", "action": "", "actions": [],

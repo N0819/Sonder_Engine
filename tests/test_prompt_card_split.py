@@ -49,7 +49,15 @@ LANGUAGES = ("en", "ja")
 #: BOTH lost the same file. It moves when a prompt or fragment is added, and
 #: the move belongs in the same commit as the addition.
 #: 111 at the split (2026-08-29); 112 since `card_person_note` (2026-08-30).
-PART_COUNT = 308   # +1 (2026-10-28): `prose_contract.layout_lore`, the
+PART_COUNT = 304   # -3 (2026-11-01): `prompts.offscreen_profile`,
+                   # `offscreen_agent_attempt` and `offscreen_agent_adjudicate`,
+                   # deleted with the paid off-screen tiers that fetched them
+                   # (world/offscreen.py; unreachable since 2026-09-20).
+                   # -1 (2026-11-01): `encoder.obligations`, deleted with the
+                   # obligations ledger it taught the encoder to write (the
+                   # owner: "obligations caused hyperfixation"; its decision
+                   # question went 2026-10-02).
+                   # +1 (2026-10-28): `prose_contract.layout_lore`, the
                    # architect choosing which of the story's lore entries
                    # the layout tier's calls read (agents/director_layout.py
                    # `architect_lore`). +1 (2026-10-28): `prose_contract.
@@ -399,8 +407,10 @@ def test_the_card_still_loads_and_publishes_every_prompt(language):
     # fill's planting sketch. 38
     # since 2026-10-07: `conversation_thread`. 38 since 2026-09-27:
     # `character_bare`, the bare character card; 37 the same day,
-    # `character`, the full card, deleted with its contract.
-    assert len(card["prompts"]) == 42
+    # `character`, the full card, deleted with its contract. 39 since
+    # 2026-11-01: `offscreen_profile`, `offscreen_agent_attempt` and
+    # `offscreen_agent_adjudicate` went with the paid off-screen tiers.
+    assert len(card["prompts"]) == 39
     # The five hands survive as channel order (and the spatial hand's room
     # chunks); their cores went with the causal Director on 2026-09-27.
     assert len(card["specialists"]) == 5

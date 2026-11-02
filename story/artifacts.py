@@ -36,8 +36,9 @@ THE CEILING IS PRESENTATION, NEVER INFORMATION. `schedule_artifact_wording`
 mints the bill's actual wording -- the proclamation's formality, the woodcut
 caption -- with one small out-of-band call, off the player's critical path,
 landed onto the artifact only if it still stands when the job returns (the
-`land_profile_ticks` rollback discipline). What a reader ACQUIRES is always
-the claim envelope; the authored `text` is what the narrator may quote. With
+base-turn rollback discipline every out-of-band job keeps). What a reader
+ACQUIRES is always the claim envelope; the authored `text` is what the
+narrator may quote. With
 no model configured the floor is whole: the artifact posts, reads, and tears
 down exactly the same, and the text stays empty.
 
@@ -520,12 +521,10 @@ def schedule_artifact_wording(ctx):
     None.
 
     Called from the commit tail, AFTER the turn's facts are durable, on the
-    `schedule_profile_ticks` terms: a failure is a warning, never a
-    rollback, and a turn starting never cancels the job. Gated on the
-    story's stochastic off-screen ceiling -- physical information is core,
-    while model-authored wording remains optional spend -- and on the artifact
-    still lacking text with attempts left, so a dead provider costs a
-    bounded number of cheap failures rather than a retry per beat forever.
+    terms every out-of-band job there keeps: a failure is a warning, never a
+    rollback, and a turn starting never cancels the job. Gated only on the
+    artifact still lacking text with attempts left, so a dead provider costs
+    a bounded number of cheap failures rather than a retry per beat forever.
     """
     from core import jobs
     from core.db import wget
@@ -533,9 +532,9 @@ def schedule_artifact_wording(ctx):
     frame_id = ctx.turn.frame_id
     turn_idx = int(ctx.turn.idx)
     # UNGATED 2026-09-20. This read the off-screen cognition ceiling, retired
-    # with the rest of that ladder -- and it was ON by default
-    # (`OFFSCREEN_LIFE_DEFAULT` is `stochastic`), so for every story that never
-    # touched the menu nothing changes here. A posted notice with no words on it
+    # with the rest of that ladder (deleted 2026-11-01) -- and it was ON by
+    # default (the ladder's default rung was `stochastic`), so for every story
+    # that never touched the menu nothing changed here. A posted notice with no words on it
     # is a physical object the world says nothing about; the wording is what
     # makes it readable, and it was never an off-screen COGNITION question.
     # The spend is still bounded by `_WORDING_ATTEMPT_CAP` below and still runs
@@ -664,7 +663,7 @@ def mint_wording(artifact, roster):
 def land_artifact_wording(cid, uid, text, error, *, base_turn):
     """Write a minted wording, unless the wall changed underneath it.
 
-    The `land_profile_ticks` discipline: the job ran against turn N, and by
+    The base-turn discipline: the job ran against turn N, and by
     the time it lands the player may have rewound past the posting, torn
     the bill down, or branched into an era that never had it. The artifact
     must still EXIST, still STAND, and still be blank -- anything else

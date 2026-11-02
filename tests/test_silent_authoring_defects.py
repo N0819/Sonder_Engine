@@ -22,8 +22,6 @@ from agents.common import _appearance_as_prose
 from story.character_schema import (
     authored_bool,
     character_card_warnings,
-    character_offscreen_agent,
-    normalize_character_data,
 )
 from story.scene import appearance_of
 
@@ -34,7 +32,10 @@ BASE = "A tall figure in a grey travelling coat, hood raised."
 class TestATextBooleanMeansWhatItSays:
     """`bool("false")` is True, so the string opted a character IN to the
     paid off-screen ceiling -- real model calls, for a character the author
-    had switched off."""
+    had switched off. That opt-in (`simulation.offscreen_agent`) was retired
+    with its tier on 2026-11-01, and the three tests that drove it through
+    the card reader went with it; `authored_bool` itself still reads every
+    authored boolean that arrives as text (`spatial_fov`, `spatial_senses`)."""
 
     @pytest.mark.parametrize("written", ["false", "False", "FALSE", "no",
                                          "off", "0", " false ", ""])
@@ -56,24 +57,6 @@ class TestATextBooleanMeansWhatItSays:
         assert authored_bool([]) is False
         assert authored_bool(None) is False
         assert authored_bool(None, default=True) is True
-
-    def test_the_card_reader_no_longer_opts_a_character_in(self):
-        sheet = {"identity": {"name": "Reya"},
-                 "simulation": {"offscreen_agent": "false"}}
-        assert character_offscreen_agent(sheet) is False
-
-    def test_the_legacy_normalize_branch_is_no_safer_and_is_covered(self):
-        """The legacy branch applied the same `bool()`, so it was not the
-        safe path the first reading of it suggested."""
-        legacy = {"name": "Reya", "appearance": "tall",
-                  "offscreen_agent": "false"}
-        normalized = normalize_character_data(legacy)
-        assert normalized["simulation"]["offscreen_agent"] is False
-
-    def test_a_real_opt_in_still_works(self):
-        sheet = {"identity": {"name": "Reya"},
-                 "simulation": {"offscreen_agent": True}}
-        assert character_offscreen_agent(sheet) is True
 
 
 class TestADerivedNoteIsAClauseNotAModifier:
@@ -186,23 +169,9 @@ class TestOneEraSDiagnostics:
 
 class TestACapOfZeroReturnsNothing:
     """Both appended before checking the bound, so `cap=0` returned one --
-    and for the agent rung, one is a PAID model call the caller asked not to
-    have."""
-
-    def test_full_agent_candidates(self, monkeypatch):
-        from world import offscreen
-
-        entries = [{"id": f"c{i}", "display": f"C{i}", "char_id": i,
-                    "sheet": {}, "state": {}} for i in range(4)]
-        monkeypatch.setattr(offscreen, "dormant_subjects",
-                            lambda *a, **k: entries)
-        monkeypatch.setattr(
-            offscreen, "_active_plans_by_actor",
-            lambda *a, **k: {e["id"]: [{"status": "active"}] for e in entries},
-            raising=False)
-        for cap in (0, 1, 2):
-            got = offscreen.full_agent_candidates(1, cap=cap)
-            assert len(got) <= cap, (cap, len(got))
+    and for the agent rung, one was a PAID model call the caller asked not to
+    have. That rung's selector (`full_agent_candidates`) was retired with it
+    on 2026-11-01, and its test with it; the fuse reader below is live."""
 
     def test_fired_consequences_at(self):
         from world import living_world
@@ -265,13 +234,12 @@ class TestTheCardSaysWhatNobodyReads:
     def test_an_empty_string_is_not_authored(self):
         assert not self._warning(self._card(build="", face="   "), "no view")
 
-    def test_a_text_boolean_is_reported_to_the_author(self):
-        sheet = self._card()
-        sheet["simulation"] = {"offscreen_agent": "false"}
-        assert self._warning(sheet, "offscreen_agent")
-
-    def test_a_real_boolean_is_quiet(self):
-        for value in (True, False):
+    def test_the_retired_off_screen_opt_in_is_not_warned_about(self):
+        """A text boolean in `simulation.offscreen_agent` was reported to the
+        author until 2026-11-01, when the opt-in went with the paid tier it
+        opted into. A card still carrying it, in any shape, carries a key
+        nothing reads, and a warning about its TYPE would say it matters."""
+        for value in ("false", True, False):
             sheet = self._card()
             sheet["simulation"] = {"offscreen_agent": value}
             assert not self._warning(sheet, "offscreen_agent")

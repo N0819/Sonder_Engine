@@ -288,9 +288,9 @@ class TestLenientStrFields:
         from llm.schemas import validate_llm_output
         out, _ = validate_llm_output("director_resolve", {
             "resolved_event": "x", "dialogue_log": [], "state_diff": {},
-            "obligations": [{"id": "o1", "text": "return the letter"}]})
+            "world_pressure": [{"id": "p1", "subject": "the patrol"}]})
         assert isinstance(out["state_diff"], dict)
-        assert isinstance(out["obligations"], list)
+        assert isinstance(out["world_pressure"], list)
 
     def test_plain_strings_are_untouched(self):
         from llm.schemas import _flatten_to_text

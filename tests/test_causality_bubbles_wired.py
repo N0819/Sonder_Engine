@@ -1004,7 +1004,7 @@ class TestTheAwayPartyKeepsTheWorld:
         # Everything the parent holds, in the shape its readers expect -- the
         # split appends to `offscreen_log`, so a dict there is a TypeError
         # rather than a measurement.
-        lists = {"standing_intentions", "pending_obligations", "offscreen_log",
+        lists = {"standing_intentions", "offscreen_log",
                  "couriers", "artifacts"}
         for key in sorted(FRAME_SCOPED_WORLD_KEYS):
             if wget_for_frame(chat_id, key, None, None) in (None, {}, [], ""):

@@ -10,10 +10,10 @@ them -- measured in
 fifteen turns, nobody moved at all.
 
 What is separated here is a FREE deterministic walk from PAID off-screen
-work. The epoch gate stays exactly where it is for the rungs that cost a
-model call (`offscreen.schedule_profile_ticks`, the stochastic and dormant
-actor ticks); the walk, which has no provider seam anywhere in its module,
-now runs on the beat.
+work. The epoch gate stayed where it was for the rungs that cost a model call
+(the profile ticks, the stochastic and dormant actor ticks -- all retired on
+2026-11-01); the walk, which has no provider seam anywhere in its module, runs
+on the beat.
 """
 import threading
 import time
@@ -248,28 +248,11 @@ def test_fractional_walk_credit_accumulates_into_real_movement(temp_db,
     assert (travelled or {}).get("body_0", 0) >= 3
 
 
-def test_the_paid_offscreen_rungs_still_wait_for_a_real_epoch(temp_db,
-                                                              monkeypatch):
-    """The separation, stated as a test: the free walk runs on the beat, the
-    rungs that cost a model call keep the epoch gate they were given."""
-    from world import offscreen
-
-    cid = _chat(temp_db)
-    _seed(temp_db, cid)
-    inline = _Inline(monkeypatch)
-    temp_db.wset(cid, "dialogue_config", {"offscreen_life": "stochastic"})
-
-    _beat(temp_db, cid, 1, from_seconds=0.0, to_seconds=0.0)
-    plain = _beat(temp_db, cid, 2, from_seconds=0.0, to_seconds=120.0)
-    assert plain["charter_scheduled"] is True
-    # The paid rung refuses on the SAME beat the free walk ran on, and it
-    # refuses at the epoch gate -- before it ever reaches its own ceiling.
-    assert offscreen.schedule_profile_ticks(_ctx(cid, 2), plain) is None
-    assert "profile_opportunity" not in plain
-    assert plain["stochastic_fired"] == 0
-
-    crossed = _beat(temp_db, cid, 3, from_seconds=120.0, to_seconds=3700.0)
-    assert crossed["opportunity"] is True
+# `test_the_paid_offscreen_rungs_still_wait_for_a_real_epoch` went on
+# 2026-11-01 with the rungs it pinned: the profile and dormant-actor ticks that
+# kept the epoch gate were retired with the rest of the paid off-screen tiers.
+# The free walk's half of the separation is every other test in this file; the
+# epoch's own boundaries are `tests/test_an_epoch_is_a_boundary_the_world_crossed.py`.
 
 
 def test_a_story_with_no_charter_is_untouched(temp_db, monkeypatch):

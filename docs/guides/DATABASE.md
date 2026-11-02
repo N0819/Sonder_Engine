@@ -367,7 +367,7 @@ there rather than adding another partial sweep at a caller.
 - `wset_if_changed(chat_id, key, value)`: the same upsert, skipped when the
   stored JSON is byte-identical; returns whether a write landed. Reach for it
   where a per-beat writer re-derives a ledger that usually has not moved
-  (`known`, `lore_cache`, `active_books`, the obligation/pressure/fact
+  (`known`, `lore_cache`, `active_books`, the pressure/fact
   ledgers): an identical rewrite still costs a WAL page and still bumps the
   row's read token, which throws away every token-validated parse of it.
 - `wget_for_frame(chat_id, key, frame_id, default)` / `wset_for_frame(...)`: the
@@ -560,12 +560,12 @@ public witnessed surface plus acquisition/current locations and route. It
 therefore inherits character-state checkpoint, frame, branch, and archive
 behavior. The objective payload is never copied into this private state.
 
-`character.simulation.offscreen_agent` is author-owned configuration on the
-card (and story-card override), default false. It is not runtime state and does
-not itself schedule work. Runtime `state.offscreen_agent.last_turn` is the
-character/frame-owned landing marker used to reject repeated spend on the same
-carried evidence; it must continue to travel through the existing character
-state checkpoint/archive/branch paths.
+`character.simulation.offscreen_agent` (the card's opt-in) and runtime
+`state.offscreen_agent` (the paid tick's landing marker) are retired keys,
+read and written by nothing since the paid off-screen tiers were deleted on
+2026-11-01. An old card or character state still carries them, and they ride
+the ordinary card and character-state checkpoint/archive/branch paths as
+inert data; nothing needs migrating.
 
 Use `qtx` for a multi-statement invariant that must roll back together. Nested domain transactions become savepoints. `commit_all` supplies one outer transaction for all primary turn effects, so any exception rolls the complete turn back. Do not perform provider or embedding calls while a write transaction is open.
 
@@ -742,6 +742,20 @@ adding a key means adding it to that list too, or the check can never be built.
 The repair is not free either: a migration deleting retired keys runs on the
 owner's database at next launch, which is their call to make, not a
 housekeeping commit's.
+
+### A retired world key's rows stay too: `pending_obligations`
+
+The Director's obligations ledger was deleted on 2026-11-01 (the owner:
+"obligations caused hyperfixation"), and its world key with it: the key left
+`FRAME_SCOPED_WORLD_KEYS`, the frame split's copy and the sibling merge's
+union, and no engine code reads or writes it
+(`tests/test_the_obligations_ledger_is_gone.py` holds that). An old story keeps
+its rows -- the present's `pending_obligations` and any
+`pending_obligations<RS>fr<N>` a frame wrote -- for the reason above: deleting a
+host's data is the host's call, so no migration runs. They cost nothing and are
+the story's record. The archive exports and imports them verbatim (a
+frame-scoped one re-keyed to its new frame like any other), a checkpoint
+snapshots and restores them, and the raw world editor shows them.
 
 ## Executable causal variants
 

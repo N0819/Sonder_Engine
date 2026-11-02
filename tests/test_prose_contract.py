@@ -1247,7 +1247,9 @@ def test_obligations_are_never_a_channel_the_prose_director_writes(temp_db, monk
     and strike in its notebook, never the Director's ledger -- so
     `obligations` is no candidate, whatever the passage does, and a channel
     with no question (which `select_channels` grants unasked) cannot reach
-    the encoder through the back door."""
+    the encoder through the back door. Since 2026-11-01 the ledger is gone
+    too, and with it the debts this test used to hand the decision model
+    (`select_channels`'s `owed`, which nothing passed)."""
     from types import SimpleNamespace
     seen = []
 
@@ -1258,11 +1260,9 @@ def test_obligations_are_never_a_channel_the_prose_director_writes(temp_db, monk
 
     monkeypatch.setattr(decisions, "OVERRIDE", jev)
     ctx = SimpleNamespace(language="en", add_warning=lambda message: None)
-    owed = [{"who": "Emory Vane",
-             "what": "Slap it thick along the underside of the neck"}]
     selected, _record = director_prose.select_channels(
         ctx, "resolve", "Emory works tallow into the underside of the neck.",
-        {"identity_index": {}}, facts={}, owed=owed)
+        {"identity_index": {}}, facts={})
     assert "obligations" not in selected
     assert "obligations" not in director_prose.candidate_channels("resolve")
     assert "obligations" not in director_prose.candidate_channels("interpret")

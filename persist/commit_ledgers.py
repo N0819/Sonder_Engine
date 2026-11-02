@@ -1,5 +1,15 @@
-"""The two world-KV debt ledgers -- pending obligations and world pressure:
-same shape, same overdue/stall discipline.
+"""The world-pressure ledger: the world-KV `world_pressures`, one entry per
+ongoing process the world must advance or visibly hold.
+
+It shared this module with the pending-obligations ledger until 2026-11-01,
+when the owner retired that one ("obligations caused hyperfixation"). Its
+channel had left the Director on 2026-10-02 -- what a mind owes is that mind's
+own to keep, in its own notebook (`commit_background.owed_to`, a character's
+`still_waiting_for`) -- and once the encoder's stray writes were stripped
+(`director_prose.RETIRED_CHANNELS`, review 2026-11-01 lane L7b) nothing opened
+an entry. Its commit domain, its world key and its channel went with it; an old
+story's `pending_obligations` rows are read by nothing and ride its archive and
+checkpoints verbatim (docs/guides/DATABASE.md).
 
 Extracted verbatim from commit.py, which re-exports every name here.
 See docs/experiments/AUDIT_COMMIT.md for the split record.
@@ -11,337 +21,6 @@ from core.db import wget, wset_if_changed
 from core.pipeline_context import note_step_decision
 from persist.commit_common import _normalized_fact
 
-# ---- Obligation ledger ----
-#
-# The world-KV `pending_obligations` ledger tracks open narrative debts --
-# demands, promises, announced actions, unanswered questions -- registered by
-# director_resolve's `obligations` ops and applied here deterministically
-# (mirroring the standing_intentions machinery). Each entry:
-# {id, who, what, kind, opened_turn}. director_resolve's payload surfaces
-# pending_obligation_view, whose must_discharge_this_beat flag plus the
-# prompt's hard rule forbid re-deferring an obligation past its window.
-
-OBLIGATION_OVERDUE_AGE = 2   # beats after which an open obligation must discharge
-
-#: How many open obligations the ledger carries. Applied as `ledger[-CAP:]`,
-#: so what it drops is the OLDEST -- which is precisely what
-#: `pending_obligation_view` is likeliest to have flagged
-#: must_discharge_this_beat, because in this ledger AGE IS THE SIGNAL. A cap
-#: that deletes the oldest open debt has decided a standing fact is over by
-#: list position: a discharge nobody adjudicated and no beat narrated.
-#:
-#: The NUMBER is not defended here; it is the owner's call. What is defended
-#: is that every eviction it makes is written to the turn's decision log
-#: (`evicted_by_cap`, carrying the debtor, the debt, its age and whether it
-#: was overdue), so a reader can tell a cap eviction from a discharge or a
-#: refusal instead of finding the debt simply absent next beat.
-OBLIGATION_CAP = 12
-
-def pending_obligation_view(chat_id, turn_idx):
-    """Payload-ready view of the obligation ledger: each entry with its
-    deterministically computed age and must-discharge flag."""
-    view = []
-    for entry in (wget(chat_id, "pending_obligations", []) or [])[:OBLIGATION_CAP]:
-        if not isinstance(entry, dict):
-            continue
-        age = _beats_open(turn_idx, entry.get("opened_turn", turn_idx),
-                          chat_id=chat_id)
-        view.append({
-            "id": entry.get("id"),
-            "who": entry.get("who"),
-            "what": entry.get("what"),
-            "kind": entry.get("kind", "demand"),
-            "age_beats": age,
-            "must_discharge_this_beat": age >= OBLIGATION_OVERDUE_AGE,
-        })
-    return view
-
-def _find_obligation(ledger, op, *, exact=False):
-    """Index of the ledger entry an op targets: exact id first, then a
-    fuzzy same-debtor/overlapping-text fallback (models routinely echo the
-    text but not the id)."""
-    oid = str(op.get("id") or "").strip()
-    if oid:
-        for i, entry in enumerate(ledger):
-            if str(entry.get("id") or "") == oid:
-                return i
-        if exact:
-            return None
-    if exact:
-        # Causal rows name a specific debt, not prose to search within a
-        # larger debt. Case/spacing are identity normalization only.
-        identity = lambda value: " ".join(str(value or "").split()).casefold()
-        who, what = identity(op.get("who")), identity(op.get("what"))
-        if not what:
-            return None
-        for i, entry in enumerate(ledger):
-            if identity(entry.get("who")) == who and identity(entry.get("what")) == what:
-                return i
-        return None
-    who = _normalized_fact(op.get("who"))
-    what = _normalized_fact(op.get("what"))
-    if not what:
-        return None
-    for i, entry in enumerate(ledger):
-        entry_who = _normalized_fact(entry.get("who"))
-        entry_what = _normalized_fact(entry.get("what"))
-        if who and entry_who and who != entry_who:
-            continue
-        if entry_what and (what in entry_what or entry_what in what):
-            return i
-    return None
-
-def _beats_open(turn_idx, opened_turn, chat_id=None):
-    """How many beats an entry has stood, tolerating a missing or malformed
-    `opened_turn` the same way `pending_obligation_view` does -- a ledger
-    entry restored from an old archive must not raise inside the commit
-    lock and roll the turn back.
-
-    THIS FRAME'S BEATS, given the chat. A turn index is chat-wide, and two
-    causality bubbles interleave their turns on it, so `now - opened` counted
-    the other bubble's beats too: a debt aged twice as fast as the life that
-    owed it, "age 22 beats" on Emory's twelfth beat, and 22 "MUST be
-    discharged" warnings in one run (playerless Aldermill round 8,
-    2026-09-23). The ledger is frame-scoped, so the turns ANOTHER frame
-    played in between are not its beats, and are taken out of the count."""
-    try:
-        opened, now = int(opened_turn), int(turn_idx)
-    except (TypeError, ValueError):
-        return 0
-    if chat_id is None or now <= opened:
-        return max(0, now - opened)
-    from core.db import active_frame_id, q
-    row = q("SELECT COUNT(*) AS n FROM turns WHERE chat_id=? "
-            "AND frame_id IS NOT ? AND idx > ? AND idx <= ?",
-            (chat_id, active_frame_id.get(), opened, now), one=True)
-    elsewhere = int(row["n"]) if row else 0
-    return max(0, now - opened - elsewhere)
-
-
-def causal_obligation_ops(ctx, *, causal_program=None, with_origins=False,
-                          with_rows=False):
-    """Ordered surviving onset/resolve debts, each operation selected once.
-
-    Current outputs retain their private chronology in transform history.
-    The finalized scene program is the allowlist after causal/authority
-    guards. Its empty list is meaningful: all spans were refused. Standalone
-    domain calls use the available stage programs and explicit dispositions;
-    archived resolve outputs retain their top-level operation list.
-    ``with_origins`` additionally returns whether each operation is causal,
-    so commit can use exact debt identity without changing archive matching.
-    """
-    if causal_program is None:
-        composed = ctx.get("_composed_beat")
-        diff = getattr(composed, "diff", None)
-        if isinstance(diff, dict) and "causal_steps" in diff:
-            causal_program = diff["causal_steps"]
-    final_allowed = None if causal_program is None else {
-        (str(step.get("stage") or "resolve"), str(step.get("chrono_id")))
-        for step in causal_program if isinstance(step, dict)
-    }
-    operations = []
-    _rows_of_ops = []
-    for stage, output in (("interpret", ctx.director_interpret or {}),
-                          ("resolve", ctx.director_resolve or {})):
-        history = (output.get("orchestration") or {}).get("transform_history")
-        current = bool(output.get("ledgers")) or bool(history)
-        if not current:
-            if stage == "resolve":
-                operations.extend((op, False) for op in output.get("obligations") or []
-                                  if isinstance(op, dict))
-            continue
-        rows = {str(row.get("chrono_id")): row for row in output.get("sequence") or []
-                if isinstance(row, dict) and row.get("chrono_id") is not None}
-        state_key = "state_assertions" if stage == "interpret" else "state_diff"
-        state = output.get(state_key) or {}
-        stage_allowed = None if "causal_steps" not in state else {
-            str(step.get("chrono_id")) for step in state["causal_steps"]
-            if isinstance(step, dict)
-        }
-        blocked = {str(row.get("event_id"))
-                   for row in (ctx.director_resolve or {}).get("sequence_dispositions") or []
-                   if isinstance(row, dict) and row.get("status") == "blocked"}
-        # History is already compiled chronology; stable sort also protects
-        # restored variants which saved hands in completion order.
-        ordered = sorted((row for row in history or [] if isinstance(row, dict)),
-                         key=lambda row: int(row.get("chrono_id") or 0))
-        for transform in ordered:
-            chrono = str(transform.get("chrono_id"))
-            row = rows.get(chrono)
-            if stage == "interpret" and (
-                    not row or str(row.get("commitment") or "").casefold() != "asserted"):
-                continue
-            if final_allowed is not None and (stage, chrono) not in final_allowed:
-                continue
-            if final_allowed is None and stage_allowed is not None and chrono not in stage_allowed:
-                continue
-            if row and {str(row.get(field) or "") for field in
-                        ("event_id", "source_event_id", "from_declaration")} & blocked:
-                continue
-            operations.extend((op, True) for op in (transform.get("patch") or {}).get("obligations") or []
-                              if isinstance(op, dict))
-            if with_rows:
-                _rows_of_ops.extend(
-                    row or {} for op in (transform.get("patch") or {}).get("obligations") or []
-                    if isinstance(op, dict))
-    if with_rows:
-        return _zip_rows(operations, _rows_of_ops)
-    return operations if with_origins else [op for op, _current in operations]
-
-
-def _zip_rows(operations, rows):
-    """Each (op, current) with the ledger row it came from, in order; an
-    archived op (not current) carries no row."""
-    out, cursor = [], 0
-    for op, current in operations:
-        row = {}
-        if current and cursor < len(rows):
-            row = rows[cursor]
-            cursor += 1
-        out.append((op, current, row))
-    return out
-
-
-def _fold_words(text):
-    return " ".join(str(text or "").replace("’", "'").split()).casefold().strip(" .,!?\"'")
-
-
-def _demand_unheard_by(ctx, who, row):
-    """True when `row` is a spoken line and the one who would owe on it has a
-    view this beat that does not hold it.
-
-    A DEBT IS OPENED BY A DEMAND THAT REACHED ITS DEBTOR. Measured on the
-    playerless Aldermill run, round 4 (2026-09-23): a question put to Sal was
-    refused to her by perception, and the ledger still held her owing its
-    answer for nine beats, re-deferred past its window every one of them.
-    Conservative in the direction that keeps today's behaviour: a debtor with
-    no view (a charter body, an unknown name), a row that is not a line, or a
-    line whose words the view does carry, all leave the debt to open."""
-    if not isinstance(row, dict) or "speech" not in (row.get("categories") or []):
-        return False
-    # The beat's sequence row carries the line as its `note`; a ledger row as
-    # its `event`. Reading one field alone read an empty line on every beat
-    # of round 5 and exempted all of them as too short to judge.
-    words = _fold_words(row.get("event") or row.get("note") or row.get("text"))
-    if len(words) < 8:
-        return False
-    views = (ctx.get("perception_outcome") or {}).get("views") or {}
-    folded_who = " ".join(str(who or "").split()).casefold()
-    pid = None
-    # THE PLAYERS HAVE VIEWS TOO, and the debtor was looked up among the cast
-    # alone: a background figure's question that reached no view opened a debt
-    # for the player's own character, re-deferred past its window beat after
-    # beat (chat 122 replay, 2026-09-28: "Hinami still owes 'answer whether
-    # Matsuzumijima should go look'" for a line perception said reached no
-    # one). The player's view is keyed `player`, an extra player's
-    # `extra:<persona_id>`.
-    try:
-        from story.scene import is_player_speaker
-        if who and is_player_speaker(str(who), ctx.chat):
-            pid = "player"
-    except Exception:
-        pid = None
-    for extra in (getattr(ctx, "extra_players", None) or []) if pid is None else ():
-        if " ".join(str((extra or {}).get("name") or "").split()).casefold() == folded_who:
-            pid = f"extra:{extra.get('persona_id')}"
-            break
-    for row_c in (ctx.cast or []) if pid is None else ():
-        try:
-            from story.character_schema import character_name_from_text
-            if character_name_from_text(row_c["sheet"]).casefold() == folded_who:
-                pid = str(row_c["id"])
-                break
-        except Exception:
-            continue
-    if pid is None or pid not in views or not views.get(pid):
-        return False
-    return words[:40] not in _fold_words(views[pid])
-
-
-def commit_obligations(ctx, nonce, *, causal_program=None):
-    """Apply surviving causal obligation ops to the pending_obligations
-    ledger. Deterministic: open appends (deduped -- re-demanding an open
-    debt is not a second debt), discharge/refuse removes. The commit-side
-    reminder: any entry still open past OBLIGATION_OVERDUE_AGE after this
-    beat's ops was re-deferred against the prompt's hard rule -- warn, and
-    leave it flagged for the next beat's payload."""
-    cid = ctx.chat.id
-    turn = ctx.turn
-    ops = causal_obligation_ops(ctx, causal_program=causal_program,
-                                with_origins=True, with_rows=True)
-    ledger = [
-        dict(entry)
-        for entry in (wget(cid, "pending_obligations", []) or [])
-        if isinstance(entry, dict) and entry.get("what")
-    ]
-
-    opened = discharged = 0
-    for op, current, row in ops:
-        if not isinstance(op, dict):
-            continue
-        op_kind = str(op.get("op") or "").strip().lower()
-        if op_kind == "open":
-            what = str(op.get("what") or "").strip()
-            if not what or _find_obligation(ledger, op, exact=current) is not None:
-                continue
-            if current and _demand_unheard_by(ctx, op.get("who"), row):
-                note_step_decision(
-                    "obligation_ledger", "%s owes %s" % (op.get("who"), what),
-                    "not_opened",
-                    "the line that would open it never reached %s's view"
-                    % op.get("who"))
-                continue
-            ledger.append({
-                "id": f"obl:{turn.idx}:{opened}",
-                "who": str(op.get("who") or "").strip(),
-                "what": what,
-                "kind": str(op.get("kind") or "demand").strip() or "demand",
-                "opened_turn": turn.idx,
-            })
-            opened += 1
-        elif op_kind in ("discharge", "refuse"):
-            idx = _find_obligation(ledger, op, exact=current)
-            if idx is None:
-                ctx.add_warning(
-                    f"obligation {op_kind} matched no open ledger entry: "
-                    f"{(op.get('id') or op.get('what') or '')!r}"
-                )
-                continue
-            ledger.pop(idx)
-            discharged += 1
-
-    # NO OVERDUE PRESS (the owner, 2026-10-02): an obligation is the mind's
-    # that owes it, kept and struck in its own notebook. The Director no
-    # longer reads this ledger, and nothing here demands it be discharged --
-    # "MUST be discharged or explicitly refused on-page next beat" was
-    # pressed every beat on debts only the player could settle.
-    overdue = [entry for entry in ledger
-               if _beats_open(turn.idx, entry.get("opened_turn", turn.idx),
-                              chat_id=cid) >= OBLIGATION_OVERDUE_AGE]
-
-    if len(ledger) > OBLIGATION_CAP:
-        # The oldest debts leave here, and leaving here is not the same event
-        # as being discharged or refused -- nothing adjudicated them and no
-        # prose says they ended. Recorded per entry so the decision log can
-        # tell the two apart; see OBLIGATION_CAP.
-        for entry in ledger[:-OBLIGATION_CAP]:
-            age = _beats_open(turn.idx, entry.get("opened_turn"), chat_id=cid)
-            note_step_decision(
-                "obligation_ledger",
-                "%s owes %s" % (entry.get("who") or "someone",
-                                entry.get("what") or "?"),
-                "evicted_by_cap",
-                "ledger held %d open obligations against cap %d; this was the "
-                "oldest. id=%s kind=%s opened_turn=%s age=%d beats%s -- "
-                "neither discharged nor refused, and no longer tracked."
-                % (len(ledger), OBLIGATION_CAP, entry.get("id"),
-                   entry.get("kind"), entry.get("opened_turn"), age,
-                   " (WAS OVERDUE)" if age >= OBLIGATION_OVERDUE_AGE else ""))
-        ledger = ledger[-OBLIGATION_CAP:]
-    wset_if_changed(cid, "pending_obligations", ledger)
-    return {"opened": opened, "discharged": discharged,
-            "open": len(ledger), "overdue": len(overdue)}
-
 # ---- World pressure (F5 -- THE WORLD ACTS) ----
 
 # Consecutive beats a pressure may sit HELD (explicitly or by silence) before
@@ -351,8 +30,8 @@ def commit_obligations(ctx, nonce, *, causal_program=None):
 # default. 2 held beats -> the 3rd beat's payload demands a tick.
 WORLD_PRESSURE_STALL_AGE = 2
 
-#: How many open pressures the ledger carries. Same shape and same hazard as
-#: OBLIGATION_CAP: `ledger[-CAP:]` drops the oldest, and the oldest is the
+#: How many open pressures the ledger carries. Applied as `ledger[-CAP:]`,
+#: which drops the oldest, and the oldest is the
 #: one whose held-streak has had longest to grow, so the entry the next
 #: payload would have flagged must_tick_this_beat is the first one deleted --
 #: the Enterprise Array failure (a probed artifact nothing ever answered)
@@ -421,7 +100,7 @@ def _positioned_body_named(scene, subject):
 def _find_pressure(ledger, op):
     """Index of the ledger entry an op targets: exact id first, then a fuzzy
     overlapping-subject fallback (models routinely echo the subject but not
-    the id) -- the same convention as _find_obligation."""
+    the id)."""
     oid = str(op.get("id") or "").strip()
     if oid:
         for i, entry in enumerate(ledger):

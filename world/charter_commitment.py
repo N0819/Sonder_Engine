@@ -5,8 +5,10 @@ events treated them.  They do *not* establish universal legal or moral
 validity.  Each Charter keeps its own recognised projection and each record
 names who inside that Charter has actually received evidence of it.
 
-This is intentionally separate from ``pending_obligations`` (a two-beat prose
-debt) and ``place_obligations`` (history owed to an unvisited location).
+This is intentionally separate from ``place_obligations`` (history owed to an
+unvisited location). It also stood apart from the Director's two-beat prose
+debt ledger, which was deleted on 2026-11-01 (the owner: "obligations caused
+hyperfixation").
 """
 
 from __future__ import annotations

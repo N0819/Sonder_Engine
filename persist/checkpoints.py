@@ -590,10 +590,11 @@ def _cancel_jobs_the_restore_discards(chat_id, idx):
     # so an in-flight job can now overlap a restore -- and a summary computed
     # from rows this restore is about to roll back must not land afterward.
     # Cooperative and NARROW: only the jobs whose result outlives the beat
-    # they were computed from are asked to stop. The offscreen ticks beside
-    # them are deliberately left running (a turn starting must never cancel
-    # them -- see commit.py's tail), and their writes are provisional at
-    # landing, which consolidation's are not.
+    # they were computed from are asked to stop. The charter catch-up beside
+    # them is deliberately left running (a turn starting must never cancel
+    # it), and its landing re-checks its own beat and base turn, which
+    # consolidation's does not. (The paid off-screen ticks that also ran
+    # here were retired on 2026-11-01.)
     # Auto-promotion joined the list with review 2026-09-07's C10, which moved
     # the sheet MINT out of band. That job writes nothing (the promotion is
     # applied on the next beat's tail, in the turn thread), so this is about
@@ -1060,15 +1061,13 @@ SETTING_PROVENANCE = {
     # anyone but the player (world/survival.py). The pair was split when
     # `survival_enabled` joined this list; the same argument covers both.
     "survival_track_npcs": SET_BY_HAND,
-    # What the world does on its own -- routine residue, scheduled
-    # consequences, place obligations, the antagonist ladder
-    # (world/living_world.py). Same family as `background_config` one entry
-    # up: the dial is the host's, while everything it CAUSES (a fired fuse, a
-    # minted consequence, an owed-history row) is diegetic and rolls back,
-    # exactly as vitals roll back while `survival_enabled` stands. This dial
-    # changes what the fiction does, which makes it look ambiguous -- but so
-    # does every ceiling here, and the precedent is settled: the position of
-    # the dial is authoring, its effects are the story's.
+    # The retired living-world ladder's row -- routine residue, scheduled
+    # consequences, place obligations, the antagonist ladder. Nothing reads
+    # or writes it since 2026-11-01 (the ladder was deleted with the paid
+    # off-screen tiers; what it gated is unconditional or superseded), but an
+    # old story still holds one, and it stays classified as the host's dial
+    # it was so a rewind leaves it as the host left it. Keys go after their
+    # readers (`DESIGN_OFFSCREEN_SUPERSEDED.md` §4), not with them.
     "living_world": SET_BY_HAND,
     # The dial a story's whole premise can rest on (`Design.md` hard mode):
     # how much of the world the player may author. Its route refuses rather

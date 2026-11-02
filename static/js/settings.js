@@ -310,16 +310,14 @@ $("#b-dlg").onclick = async () => {
     const n = parseFloat(input.value);
     return Number.isFinite(n) ? n : fallback;
   };
-  // Institutions (docs/design/DESIGN_INSTITUTIONS_AND_UPKEEP.md). There is now
+  // Institutions (docs/design/DESIGN_INSTITUTIONS_AND_UPKEEP.md). There is
   // exactly ONE way a defined institution can be inert, and it is not a
   // setting: `charter_runtime.schedule_charter_ticks` is ungated, so a story
   // that has a charter runs it. The clamp line this panel used to carry --
-  // "off-screen life at inert caps it" -- was removed 2026-09-04 with the gate
-  // it described, because a ladder rung that reads as a spend ceiling was
-  // silencing work that spends nothing.
+  // "off-screen life at inert caps it" -- went 2026-09-04 with the gate it
+  // described, and the empty element that held it went 2026-11-01 with the
+  // off-screen ladder itself.
   const charterItems = Object.entries((ch.charters || {}).items || {});
-  const charterClamp = el("div", { class: "small dim" });
-  const refreshCharter = () => charterClamp.textContent = "";
   const countOf = o => Object.keys(o || {}).length;
   const charterRows = charterItems.map(([key, item]) => {
     const st = item.state || {};
@@ -384,7 +382,6 @@ $("#b-dlg").onclick = async () => {
       title: "Generate a lived-in location from story lore"
     });
   } }, "Generate a lived-in location from lore");
-  refreshCharter();
 
   modal("Dialogue config", b => b.append(
     el("div", { class: "small dim", style: "margin-bottom:10px" },
@@ -469,7 +466,6 @@ $("#b-dlg").onclick = async () => {
         ? el("table", { class: "grid", style: "margin-top:6px" }, charterRows)
         : el("div", { class: "small dim", style: "margin-top:6px" },
             "None defined for this story."),
-      charterClamp,
       (ch.warnings || []).map(w => el("div",
         { class: "small", style: "color:var(--warn);margin-top:2px" }, w))),
     el("div", { class: "card", style: "margin-top:10px" },

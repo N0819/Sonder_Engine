@@ -27,19 +27,18 @@ model-priced rung for two releases -- a bounded call that wrote a 2-3 sentence
 ``summary`` over the skeleton -- and both production callers asked it not to
 run, so it never once executed. It was superseded rather than forgotten, and
 by its own two paragraphs above: a stored SENTENCE is the shape that produced
-the "quiet office", and the answer is a record. Its replacement is
-``offscreen.profile_summary_record`` -- the same one bounded call over this
-same skeleton, out of band where section 1.0.2 requires a model-priced rung to
-live, with the same retry-once-then-fall-back and the same room gate, but a
-model half of STATE FIELDS (``doing``/``at``/``manner``) rather than prose.
-The ladder comment in ``story/scene.py`` names it as the medium tier by name.
+the "quiet office", and the answer is a record. Its replacement was the
+off-screen profile rung -- the same one bounded call over this same skeleton,
+out of band, writing STATE FIELDS (``doing``/``at``/``manner``) rather than
+prose -- and that rung was retired with the rest of the paid off-screen tiers
+on 2026-11-01 (``world/offscreen.py``'s docstring). A model now meets an
+absent subject's gap only where an absent character's own thread or return
+reads it.
 
-THE LOW RUNGS MAY DESCRIBE, NEVER COMMIT (section 1.0.1). ``deltas`` stays
-empty at both rungs built here, and the medium prompt is shaped so a
-consequence has no field to land in. Only the full-agent rung -- built in
-``offscreen.schedule_agent_ticks``, Director-adjudicated -- may change the
-world, and it does so through ``living_world.mint_consequences`` like every
-other fuse.
+THIS RECORD DESCRIBES, IT NEVER COMMITS (section 1.0.1). ``deltas`` stays
+empty. What changes the world off screen is a Director-adjudicated beat -- an
+absent character's own bubble, or a consequence fuse through
+``living_world.mint_consequences`` -- never a reader of this skeleton.
 
 WHAT THE SKELETON READS: fired mechanics rows are promoted into the
 checkpointed, frame-scoped ``world_events`` spine and gaps consume that
@@ -199,9 +198,9 @@ def _skeleton(cid, scene, subject, since, until, frame_id=None):
                 # substring sweep this replaces matched payload prose, so
                 # another room's event that merely NAMED the subject rode
                 # into their gap with its room id -- a mention is somebody
-                # else's event (offscreen._intention_owned_by's rule, on
-                # the read side). A row with no structured owner is
-                # nobody's content.
+                # else's event (the ownership rule the retired seeded tick
+                # draw kept, on the read side). A row with no structured
+                # owner is nobody's content.
                 owner = str(payload.get("entity_id") or "").strip().casefold()
                 needles = {subject["id"].casefold()}
                 if subject.get("display"):
@@ -263,8 +262,10 @@ def _skeleton(cid, scene, subject, since, until, frame_id=None):
     # ABOUT the subject's ignorance phrased with knowledge the subject
     # lacks -- and delivering it into the subject's own gap hands the mind
     # a fact that reached it through no channel. Dropped, and the drop is
-    # noted (offscreen._intention_owned_by's ownership rule, on the read
-    # side: prose that cannot prove its provenance is nobody's content).
+    # noted (the seeded rung's ownership rule, on the read side: prose that
+    # cannot prove its provenance is nobody's content). The seeded rung itself
+    # was retired 2026-11-01; its batches, and the bubbles' own, stay
+    # readable here.
     ledgers.append("offscreen_log")
     names = {subject["id"].casefold()}
     if subject.get("display"):
@@ -314,8 +315,8 @@ def gap_for(cid, subject_kind, subject_id, since_turn, until_turn,
     Returns the section 1.2 record, always -- an ask that cannot be answered
     returns ``basis: "unavailable"`` with a reason, never raises and never
     returns nothing. Deterministic and free at every tier: this is the
-    skeleton, and a caller that wants a model over it buys one where model
-    spend belongs (``offscreen.profile_summary_record``, out of band).
+    skeleton, and a caller that wants a model over it buys one out of band,
+    off the turn path, where model spend belongs.
     """
     if scene is None:
         scene = _read_key(cid, "scene", {}, frame_id) or {}

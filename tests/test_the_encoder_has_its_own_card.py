@@ -228,9 +228,16 @@ def test_the_owners_sheet_is_half_what_it_was():
     28, "Aaah... D-do I taste good?") from `normal` to `whisper`; with the
     illustration back, 0 of 44 lines moved. A reduction is real only if it
     still says what the children said, and this one did not; it stands at
-    10,424 characters, under the ceiling."""
+    10,424 characters, under the ceiling.
+
+    Three of the four since 2026-11-01: the `obligations` chunk was deleted
+    with the ledger it taught the encoder to write (the owner: "obligations
+    caused hyperfixation"), so the pasted sheet's first channel no longer
+    exists to grant. The sheet measured here went from 20,788 to 19,326
+    characters on the en card; the ceiling stays where it was, which makes
+    the comparison stricter -- the 32,543 still counts the old chunk."""
     sheet = prompts.unified_specialist_prompt(
-        ["obligations", "entities", "sensory_events", "poses"], parts=[])
+        ["entities", "sensory_events", "poses"], parts=[])
     assert len(sheet) < 32543 * 0.64, len(sheet)
 
 

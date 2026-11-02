@@ -258,9 +258,9 @@ def chat_character_sheet(chat_id, char_id):
 
 
 #: The two states `chat_chars.status` has, and the only two an attached
-#: character can be in: in the live scene, or out of it. `offscreen.py` reads
-#: `dormant` as the away roster, so these are not labels -- they decide which
-#: simulation a mind is in.
+#: character can be in: in the live scene, or out of it. The skip stage reads
+#: `dormant` as the away roster (`agents/skip_stage.py`), so these are not
+#: labels -- they decide which simulation a mind is in.
 CAST_STATUS_PRESENT = "active"
 CAST_STATUS_ABSENT = "dormant"
 
@@ -2401,181 +2401,6 @@ def is_player_speaker(speaker, chat):
                 return True
     return False
 
-# What the cast is allowed to do while nobody is looking, as a ceiling for the
-# whole chat.
-#
-# The rungs are `schemas.BehaviorController`'s, unchanged and in its order.
-# That enum and `docs/design/OFFSCREEN_LIFE_DESIGN.md` have specified this ladder
-# since before anything read either -- the document's step 2 is "wire
-# BehaviorController; nothing ticks yet, the ladder just becomes real and
-# settable" -- so inventing a second, friendlier vocabulary here would have
-# produced two spellings of one idea that diverge and then disagree. The enum
-# is per-CHARACTER; this is the chat-level ceiling over it, which is why the
-# same names are the right names.
-#
-# A CEILING, not an instruction. Nothing is obliged to act at any level; the
-# level says what is permitted, and the engine still spends nothing on a beat
-# that earns nothing. That is the architecture's cost thesis and this setting
-# does not get to break it: cost scales with dramatic density, not story
-# length, so turn 2000 in a quiet room must still cost what turn 2 cost.
-#
-# Ordered, so a level permits everything below it:
-#
-#   inert            Nothing happens off screen. A dormant character is exactly
-#                    where you left them, and any gap is generated at
-#                    re-contact or not at all. Free.
-#   deterministic    Scheduled effects only -- timed arrivals, expiry, dock
-#                    edges, news latency. This is `mechanics.py`: built, always
-#                    running, and free. The rung names the floor.
-#   reactive         The above, plus firing a bounded, already-adjudicated
-#                    stage from a typed character-owned plan when its time or
-#                    event trigger lands. No model call and no new invention.
-#   stochastic       The above, plus seeded ticks for dormant actors at a
-#                    frame-scoped world epoch, bounded by
-#                    `max_offscreen_actors` and written
-#                    to `offscreen_log`. One sentence each, no plan, no world
-#                    writes, no memory.
-#
-#                    This is the DEFAULT because it is what the engine did
-#                    unconditionally before the setting existed: turning a
-#                    setting on must not silently change a running story.
-#                    As of the background-life work it is the rung the design
-#                    document actually specified: a seeded draw against
-#                    standing intentions with NO model call
-#                    (`offscreen.stochastic_ticks` — same seed, same ticks,
-#                    replayable). The earlier shipped behaviour was a prose
-#                    sketch riding the mapping_commit model call whose
-#                    `tick_seed` no RNG ever consumed; that divergence was
-#                    recorded in `docs/UNBUILT.md` §2.8 and is now closed.
-#                    This level also permits the out-of-band PROFILE ticks
-#                    (`offscreen.schedule_profile_ticks`): one bounded model
-#                    call for the few subjects importance x distance scores
-#                    medium, structurally unable to commit a consequence —
-#                    the same contract this rung's model ticks always had,
-#                    now bounded by spend instead of by cast size.
-#   character_agent  The above, plus real agent ticks advancing a plan and
-#                    writing consequences into the world record -- the villain
-#                    with a clock you can fail to beat.
-#
-#                    Permission AND behaviour, since the full rung landed
-#                    (`offscreen.schedule_agent_ticks`): an explicitly
-#                    opted-in dormant character with a private reason gets
-#                    one reduced turn per world epoch -- ONE character call
-#                    over the fail-closed `offscreen.agent_context`, ONE
-#                    Director adjudication, one atomic landing. The
-#                    knowledge firewall that `docs/design/OFFSCREEN_LIFE_DESIGN.md`
-#                    decision 2 insists on is structural, not prompted: a
-#                    ticking character advances on ITS OWN knowledge --
-#                    sheet, memories, beliefs, plans, carried reports --
-#                    never the player's location or recent actions, or the
-#                    result is the spookily prescient antagonist this
-#                    architecture exists to avoid. Only the Director half of
-#                    the tick may declare a consequence, and it lands
-#                    through the same validator every other fuse passes.
-#
-# This ladder is the ONE authority ceiling for everything off screen, the
-# living-world mechanisms included: `living_world.LIVING_WORLD_REQUIRES`
-# maps each mechanism depth to the rung it spends at, and
-# `living_world.effective_depth` clamps to it at read time — so `inert`
-# genuinely means nothing happens, rather than "nothing except whatever a
-# second dropdown separately permitted".
-OFFSCREEN_LIFE_LADDER = (
-    "inert", "deterministic", "reactive", "stochastic", "character_agent",
-)
-
-# The rung the engine behaved as before the setting existed.
-OFFSCREEN_LIFE_DEFAULT = "stochastic"
-
-OFFSCREEN_LIFE_DESCRIPTIONS = {
-    "inert": "Nothing happens off screen",
-    "deterministic": "Scheduled effects only — arrivals, expiry, news latency",
-    "reactive": "…plus firing authored plan stages on typed triggers",
-    "stochastic": "…plus seeded ticks for dormant actors at world epochs",
-    "character_agent": "…plus opted-in characters advancing their own plans",
-}
-
-# Which rungs actually do something today, for the UI to mark. Kept beside the
-# ladder rather than in the UI so an unbuilt rung cannot quietly start reading
-# as built when it ships and nobody updates the menu. `character_agent` landed
-# with `offscreen.schedule_agent_ticks`: one reduced, Director-adjudicated
-# off-screen turn per world epoch for opted-in dormant minds with a private
-# reason to act.
-OFFSCREEN_LIFE_BUILT = frozenset({
-    "inert", "deterministic", "reactive", "stochastic", "character_agent",
-})
-
-
-#: THE HOST-FACING QUESTION, and since 2026-09-04 the only one. The five-rung
-#: ladder above survives as the MECHANISM -- the four `living_world` approaches
-#: are written against its rungs, and `provision_story(offscreen_life=...)` is a
-#: published extension contract -- but a host answers one thing: may a mind
-#: nobody is watching think and act.
-#:
-#: The two rungs it maps to are not a taste. They are where the code already
-#: spends: over `world/offscreen.py`, `advance_epoch`, `advance_reactive_plans`,
-#: `apply_plan_ops` and `stochastic_ticks` hold no model seam at all, while
-#: `schedule_profile_ticks` composes through `profile_summary_record` and
-#: `schedule_agent_ticks` through `agent_proposal`. `reactive` is therefore the
-#: highest rung at which nothing off screen costs anything and no dormant mind
-#: acts on its own -- so it is what OFF means, and OFF still leaves the world
-#: moving: charter (ungated entirely), scheduled consequences, arrivals, expiry,
-#: news latency, and the villain ladder's floor, which is deliberately kept
-#: reachable because that ladder stays as a placeholder.
-COGNITION_OFF_RUNG = "reactive"
-COGNITION_ON_RUNG = "character_agent"
-
-#: ON, because that is what the ladder already did. `OFFSCREEN_LIFE_DEFAULT` is
-#: `stochastic`, which permits both spending paths, so defaulting the toggle to
-#: True is the no-change answer for every story that never opened the panel.
-OFFSCREEN_COGNITION_DEFAULT = True
-
-_COGNITION_FALSE = frozenset({"0", "off", "false", "no", "none"})
-_COGNITION_TRUE = frozenset({"1", "on", "true", "yes"})
-
-
-def normalize_offscreen_cognition(value):
-    """Coerce a stored or submitted answer to a bool, defaulting to the default.
-
-    Falls to the DEFAULT rather than to False, for the reason
-    `normalize_offscreen_life` gives one function down: a value the reader
-    cannot parse must not quietly switch a story's off-screen life off.
-    """
-    if isinstance(value, bool):
-        return value
-    text = str(value if value is not None else "").strip().casefold()
-    if text in _COGNITION_FALSE:
-        return False
-    if text in _COGNITION_TRUE:
-        return True
-    return OFFSCREEN_COGNITION_DEFAULT
-
-
-def cognition_rung(allowed):
-    """The ladder rung one answer to the toggle means."""
-    return COGNITION_ON_RUNG if allowed else COGNITION_OFF_RUNG
-
-
-def cognition_from_rung(level):
-    """Does a stored rung permit off-screen cognition. The read half of the
-    migration: an existing chat keeps the rung it stored and the toggle is
-    DERIVED from it, so nothing changes behaviour on the deploy that lands
-    the collapse.
-    """
-    return offscreen_life_allows(level, "stochastic")
-
-
-def normalize_offscreen_life(value):
-    """Coerce a stored or submitted level to a rung, defaulting to the default.
-
-    Unknown values fall to the DEFAULT rather than to the floor. A typo must
-    not silently turn a story's off-screen life off — that is the failure this
-    codebase keeps meeting from the other direction, where a value an enum
-    could not read fell to the mildest reading and inverted the setting.
-    """
-    level = str(value or "").strip().casefold()
-    return level if level in OFFSCREEN_LIFE_LADDER else OFFSCREEN_LIFE_DEFAULT
-
-
 # HOW FAR A CHARACTER MAY WALK BEFORE THEIR LIFE GOES ON IN A THREAD OF ITS
 # OWN, in rooms walked, a whole stair counting as one room
 # (`spatial_routing.rooms_walked_within`). The owner's numbers, 2026-10-13:
@@ -2605,6 +2430,13 @@ def normalize_bubble_radius(value):
     except (TypeError, ValueError, OverflowError):
         return BUBBLE_RADIUS_DEFAULT
 
+
+#: Keys a `dialogue_config` blob may still hold from the retired off-screen
+#: ladder (deleted 2026-11-01). Neither `dialogue_config` nor the panel's PUT
+#: reports or stores them; a stored `max_offscreen_actors` is read once more,
+#: as the `max_bubbles` it was renamed to.
+RETIRED_DIALOGUE_KEYS = ("offscreen_life", "offscreen_cognition",
+                         "max_offscreen_actors")
 
 DEFAULT_INTERACTION_CONFIG = {
     "style": "natural",
@@ -2665,13 +2497,6 @@ DEFAULT_INTERACTION_CONFIG = {
     "bubble_radius": BUBBLE_RADIUS_DEFAULT,
 }
 
-def offscreen_life_allows(level, rung):
-    """Does `level` permit what `rung` needs. Ordered comparison on the ladder."""
-    level = normalize_offscreen_life(level)
-    if rung not in OFFSCREEN_LIFE_LADDER:
-        return False
-    return OFFSCREEN_LIFE_LADDER.index(level) >= OFFSCREEN_LIFE_LADDER.index(rung)
-
 DEFAULT_REACTION_CONFIG = {
     "enabled": True,
     "max_reactors": 6,
@@ -2714,23 +2539,10 @@ def dialogue_config(chat_id):
     for key, value in derived.items():
         if key not in stored:
             config[key] = value
-    # ONE QUESTION, TWO SPELLINGS, and the toggle wins where both are stored.
-    # A chat written before 2026-09-04 has only the rung, so its answer is read
-    # OUT of the rung and its behaviour is untouched; a chat the panel has
-    # saved since has the toggle, and the rung is derived from it so every
-    # reader written against the ladder keeps working unchanged.
-    # An explicitly STORED rung wins over both: it is either a story written
-    # before the collapse, or an extension setting the ladder through the
-    # contract it is published under, and neither may be overwritten by a
-    # default. Otherwise the toggle decides and the rung follows it, so the
-    # two never disagree about a story nobody has configured.
     # HOW MANY BUBBLES MAY BE OPEN. A stored `max_offscreen_actors` is read as
     # this, because it is the dial this one replaces and a story configured
     # before 2026-09-20 asked the same question about the same cost: how many
-    # absent threads am I paying for. The retired ladder keys
-    # (`offscreen_life`, `offscreen_cognition`) are not read at all -- they
-    # rationed a tier Charter and the Writers' Room superseded, and a stored
-    # value for one is a holdover, not a setting.
+    # absent threads am I paying for.
     try:
         # STORED first, either spelling, then the default. Reading `config`
         # here would always find the default this dict was seeded with, so the
@@ -2741,20 +2553,18 @@ def dialogue_config(chat_id):
         config["max_bubbles"] = 3
     config["bubble_radius"] = normalize_bubble_radius(
         stored.get("bubble_radius", BUBBLE_RADIUS_DEFAULT))
-    # THE RETIRED LADDER KEYS STAY IN THE DICT AND GATE NOTHING. Measured
-    # 2026-09-20 when they were deleted outright: 120 readers index
-    # `offscreen_life` directly, several inside the commit path, so the turn
-    # rolled back with `offscreen_plans: 'offscreen_life'`. They are not an
-    # inert holdover -- the IDEAS are superseded (Charter and the Writers'
-    # Room, `docs/design/DESIGN_OFFSCREEN_SUPERSEDED.md`) and the plumbing is
-    # woven through the engine and the published extension contract
-    # (`provision_story(offscreen_life=...)`). That doc's §4 says the readers
-    # come out first and the keys after; doing it the other way round is what
-    # the measurement above is. Until then the keys are present, defaulted and
-    # unread, and `max_bubbles` is the only dial anybody sets.
-    config["offscreen_life"] = OFFSCREEN_LIFE_DEFAULT
-    config["offscreen_cognition"] = OFFSCREEN_COGNITION_DEFAULT
-    config["max_offscreen_actors"] = 0
+    # THE RETIRED LADDER KEYS ARE NOT PART OF THE CONFIG. `offscreen_life`,
+    # `offscreen_cognition` and `max_offscreen_actors` rationed the paid
+    # off-screen tiers, which Charter and the Writers' Room superseded and
+    # which were deleted on 2026-11-01 (`world/offscreen.py`). Until then they
+    # were FORCED to their defaults here, because on 2026-09-20 120 readers
+    # still indexed `offscreen_life` and deleting the keys first rolled turns
+    # back -- `DESIGN_OFFSCREEN_SUPERSEDED.md` §4: readers first, keys after.
+    # The readers are gone, so a stored value is dropped from what this
+    # returns rather than reported as a setting; the one that meant something
+    # was carried into `max_bubbles` above.
+    for key in RETIRED_DIALOGUE_KEYS:
+        config.pop(key, None)
     return config
 
 def reaction_config(chat_id):

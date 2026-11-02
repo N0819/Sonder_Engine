@@ -65,8 +65,7 @@ def test_a_raw_card_and_its_normalization_agree_on_the_semantics():
         assert phrase in normalized_text
 
 
-def test_a_textual_flag_is_still_reported_on_the_raw_card():
-    text = " ".join(character_card_warnings(
-        {"identity": {"name": "Kit"},
-         "simulation": {"offscreen_agent": "yes"}}))
-    assert "offscreen_agent" in text
+# `test_a_textual_flag_is_still_reported_on_the_raw_card` went on 2026-11-01:
+# the flag it asked about, `simulation.offscreen_agent`, was retired with the
+# paid off-screen tier it opted into, and so was the warning
+# (`tests/test_silent_authoring_defects.py` pins that it stays quiet).

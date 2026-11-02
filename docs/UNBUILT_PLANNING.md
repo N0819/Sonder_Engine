@@ -708,10 +708,6 @@ offscreen hand retired). What it deliberately does not do:
   and Phase B (the Writers' Room's just-in-time job) are the answer. Until
   then a need stays `open` on the frame's ledger and falls off after
   `PLANNING_NEEDS_CAP` newer ones.
-- **The reactive-plan rung is inert.** `offscreen.apply_plan_ops` reads
-  `offscreen_plan_ops` from a character's own result, and no character
-  prompt or schema writes that field yet; the Director's diff no longer
-  carries the channel. The character frames are the intended writer.
 - **Couriers and crowds are ops on the social hand, not charter's.** Charter
   simulates both, but raising a crowd or sending a rider is still a Director
   op the social hand encodes; a charter-owned dispatch (a body walking a

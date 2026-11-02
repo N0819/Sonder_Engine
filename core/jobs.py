@@ -198,7 +198,8 @@ def submit_latest(chat_id, key, fn, base_turn=None):
 #: whose variants are already persisted. Left in place, a background
 #: consolidation streams tokens into the player's finished turn tagged
 #: `key="commit"`, and an abort kills the jobs that commit just scheduled.
-#: `offscreen.py`'s `_produce` argued exactly this before the copy existed.
+#: The paid off-screen tick producer (`world/offscreen.py`, retired
+#: 2026-11-01) argued exactly this before the copy existed.
 def _clear_turn_scoped_context():
     """Clear the turn-scoped vars from a job's inherited context.
 

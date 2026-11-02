@@ -22,7 +22,7 @@ means a body's within-room position, and a second spelling of a live word is
 how this repo gets hurt.
 
 Shapes are plain dicts with normalizers rather than dataclasses, matching
-``living_world.normalize_living_world`` and ``attire.normalize_regions`` -- the
+``attire.normalize_regions`` -- the
 state has to survive a JSON round trip into ``world`` storage without a second
 representation to keep in step.
 """
@@ -708,8 +708,9 @@ def normalize_charter(stored, reservation=None):
         "ties": normalize_ties(
             stored.get("ties"), bodies=bodies, judgments=judgments,
             politics=stored.get("politics"), served_beside=served_beside),
-        # Locally recognised social commitments, distinct from both the
-        # beat-level pending-obligations ledger and place owed-history.
+        # Locally recognised social commitments, distinct from place
+        # owed-history (and from the beat-level obligations ledger, while
+        # there was one: deleted 2026-11-01).
         "commitments": normalize_commitments(stored.get("commitments")),
         # Aggregate lots/markets and the institution's bounded agenda/order
         # state.  Empty input remains a strict no-op for old Charters.

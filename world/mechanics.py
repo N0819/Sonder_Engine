@@ -780,7 +780,8 @@ def _fire_due_events(scene, elapsed, frame_id, pending, *, turn_idx=None,
                 # The base-revision check at fire time: a fuse minted from a
                 # turn the story no longer contains describes a future whose
                 # cause un-happened. Cancelled loudly, never fired — the
-                # land_profile_ticks discipline, applied to the delay line.
+                # base-turn discipline every out-of-band landing keeps
+                # (`jobs.story_rewound_past`), applied to the delay line.
                 event_ops.append(("status", row["event_id"], "cancelled"))
                 continue
             event_ops.append(("status", row["event_id"], "fired"))

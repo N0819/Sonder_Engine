@@ -1,6 +1,15 @@
 # Completing the illusion of an off-screen world
 
-Status: **8.0 development roadmap.** **Direction amended 2026-08-21 — read
+Status: **8.0 development roadmap; its paid off-screen tiers RETIRED
+2026-11-01, superseded by the Charter and the Writers' Room** (the owner:
+"living world is supposed to be superseded by charter and writers room"). The
+seeded tick draw, the profile ticks, the reactive plans and the
+`character_agent` rung this roadmap marks BUILT (the antagonist ladder, the
+paid tick tail, `offscreen_life` honesty in the UI) were unreachable from
+2026-09-20 and were deleted on 2026-11-01 with the ladder over them; an absent
+character now lives a causality bubble of their own
+(`agents/offscreen_beat.py`). The carriers, the fuses and the `world_events`
+spine it built still run. **Direction amended 2026-08-21 — read
 this first.** The ordering below was written when fidelity above the
 deterministic spine was understood to be bought with model calls. It is now
 bought with code: see

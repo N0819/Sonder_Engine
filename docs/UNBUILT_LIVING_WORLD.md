@@ -1906,86 +1906,6 @@ each a decision rather than a defect:
     authorship has no binding and no standing, so their orders are requests.
     Giving a persona a body to ride is the promotion seam's question.
 
-<a id="unbuilt-1-105"></a>
-
-### 1.105 The off-screen ladder should collapse to one toggle, and it has five rungs
-
-**Ruled by the owner 2026-09-04**, in three parts. The first landed with the
-ruling; the other two are what is left.
-
-**Corrected 2026-11-01 (`world_offscreen_time` F11, `story_scene_schema`
-F14): the toggle and the rung this entry describes are gone, and the
-machinery it says the toggle enables cannot run.** Since 7140b9cc
-(2026-09-20, "Absent threads: one dial replaces the off-screen ladder") the
-panel's question is `max_bubbles`, and `scene.dialogue_config` forces
-`offscreen_life` to `OFFSCREEN_LIFE_DEFAULT`, `offscreen_cognition` to its
-default and `max_offscreen_actors` to 0 on every read -- the retired keys stay
-in the dict and gate nothing, because 120 readers index them. And
-`living_world.LIVING_WORLD_APPROACHES = ()`, so `living_world_allows` is
-False for every approach and depth: `offscreen.schedule_profile_ticks`,
-`schedule_agent_ticks` and the rest of the paid rungs (about 1,700 lines of
-`world/offscreen.py`) are unreachable. Whether to retire them or revive them
-is §1.256. The paragraphs below are kept as the history of the ruling; where
-they say "derives the rung", "still enables" or "sits at
-`character_agent`", read the correction.
-
-**Charter is unconditional, and that is done.** `schedule_charter_ticks` no
-longer reads the `offscreen_life` ceiling. Charter is where an unwatched body
-lives rather than a mechanism a rung may switch off, its advance path holds no
-provider seam at all, and the ladder is a SPEND gate -- so the rung was
-withholding free work, and a host lowering it to save money froze the town
-instead of saving anything. The only reason the tick does not run is
-`charter_skip: "no_charters"`.
-
-**The host-facing collapse landed 2026-09-04**, with the owner's ruling that
-the villain ladder stays as a placeholder. The panel asks one question, *allow
-off-screen cognition*, and `dialogue_config` derives the rung: `reactive` off,
-`character_agent` on. The five rungs survive as the MECHANISM, because
-`living_world`'s four approaches are written against them and
-`provision_story(offscreen_life=...)` is a published extension contract -- so
-nothing that reads the ladder had to change, including
-`artifacts.schedule_artifact_text` and the two tick schedulers.
-
-**The other half of the ruling: the toggle should enable the playerless
-causality bubbles. THE BUBBLES LANDED 2026-09-17** (`world/spatial_bubbles.py`
-plus the couple drivers in `world/spatial_frames.py`,
-`docs/design/DESIGN_OFFSCREEN_SUPERSEDED.md` § 3 / § 4.1): a major character
-who walks into a zone with no human in it gets a frame, a live comm channel
-fuses that frame with the player's for as long as the call lasts, and walking
-back ends the separation. **The TOGGLE has not moved and the ladder has not
-retired.** Today it still enables the machinery the bubbles replace --
-`offscreen.schedule_profile_ticks` and `schedule_agent_ticks` -- and a bubble
-fires on the zone rule alone, under no toggle at all, exactly as a party split
-always has. Moving the toggle's meaning is § 4.2-4.4 and § 5 of that note, and
-those wait on a play run: nothing in the corpus has run a bubble yet.
-
-**One behaviour change, stated because it is easy to miss.** A chat that never
-opened the panel used to sit at `stochastic`; it now rides the toggle's default
-and sits at `character_agent`. Nothing new fires from that alone: an agent tick
-additionally needs the card's `simulation.offscreen_agent`, the antagonist
-ladder at `ceiling` (default off), dormant status, a non-zero
-`max_offscreen_actors` and a private reason. A chat that STORED a rung keeps
-it, so no configured story moved.
-
-**On-screen voicing is already default and already bounded by a count, and
-the panel does not say so.** A charter body in the player's room reaches the
-ordinary per-presence path -- `with_charter_presences` merges derived charter
-identities into the presence set before the demand gate, at every `scene_life`
-level including `off` -- so it speaks when the beat demands it, capped by
-`background_config.max_reactors` (default 1, hard ceiling 3). What `scene_life`
-buys is a different thing entirely: ONE batched call voicing several presences
-coherently. `ambient` is firewall-safe by construction, since the manager's
-context holds only what every managed presence legitimately shares.
-
-**The open decision, and it is the owner's:** should `scene_life` default to
-`ambient` rather than `off`? It is the only remaining sense in which on-screen
-voicing is not default. It costs one batched call on beats with a demand set,
-against N per-presence calls today, so it is plausibly cheaper as well as more
-coherent. `full` is a separate question and does not follow: it hands the
-manager directed lines tagged with their audience, which relaxes an
-information rule, and by the standing invariant a leak must be an engine
-failure rather than a model's.
-
 <a id="unbuilt-1-108"></a>
 
 ### 1.108 What the Living World audit found
@@ -2052,10 +1972,10 @@ looks like when it is wrong.
 **Docstrings that overstate, each now contradicted by the guide.** Fix the
 docstring or fix the code; do not leave both.
 
-- "five approaches" in `world/living_world.py`'s module docstring and
-  `web/app.py` — `LIVING_WORLD_APPROACHES` had four when this was written
-  (Approach C became core carrier physics) and has NONE since 2026-09-20
-  (7140b9cc); see §1.105's correction and §1.256.
+- ~~"five approaches" in `world/living_world.py`'s module docstring and
+  `web/app.py`~~ — **landed by deletion, 2026-11-01**: the ladder, its
+  docstring and the `living_world` routes went with the paid off-screen tiers
+  (`world/offscreen.py`'s docstring says what replaced them).
 - ~~`pick_background_reactors` returning `[]` as "the common case"~~ —
   **withdrawn, and worth recording as a method note.** The audit reasoned from
   the code that `dialogue_turns` is a standalone qualifying signal and records
@@ -2939,36 +2859,6 @@ needs the commit to drop the entity's scene rows
 (`persist/commit_scene_state.py`), or the next lease step re-leases it from
 the stale rows.
 
-<a id="unbuilt-1-256"></a>
-
-### 1.256 The paid off-screen tiers cannot run: retire them or revive them (2026-11-01 review)
-
-`world_offscreen_time` F11, confirmed; skipped by review lane L12c on
-instruction, nothing deleted. `living_world.LIVING_WORLD_APPROACHES = ()`
-(since 7140b9cc, 2026-09-20) makes `living_world_allows` False for every
-approach and depth, `LIVING_WORLD_BUILT = {}`, and `scene.dialogue_config`
-forces `offscreen_life`, `offscreen_cognition` and `max_offscreen_actors = 0`
-unconditionally. Dead in production in `world/offscreen.py` (2,319 lines):
-`stochastic_ticks`, `apply_plan_ops` (and no writer of `offscreen_plan_ops`),
-`advance_reactive_plans`, `compose_tick`, `_ProfileFallback` (never raised
-or caught), `full_agent_candidates`, `profile_candidates`,
-`schedule_profile_ticks`, `land_profile_ticks`, `agent_context`,
-`land_agent_tick`, `schedule_agent_ticks` and their helpers; in
-`world/living_world.py`, `LIVING_WORLD_DESCRIPTIONS`, `LIVING_WORLD_REQUIRES`,
-`normalize_living_world` (always `{}`), `effective_depth`,
-`living_world_levels`. Still live and to keep: `epoch_reasons`,
-`advance_epoch` (stamps the charter's `beat_id` every beat),
-`_reactive_due_crossed`, and living_world's `mint_consequences`,
-`fired_consequences_at`, `record_obligations`, `owed_history`,
-`attach_owed_history`. The published extension contract
-`provision_story(offscreen_life=..., living_world=...)` refuses its own
-guide's example and stores a value nothing reads (§1.276 on the platform
-side). **The owner's call** (REVIEW_2026_11_01 § 6.1 item 7): retire the
-tiers -- readers first, keys after (`DESIGN_OFFSCREEN_SUPERSEDED.md` §4) --
-or revive them. Until then `Design.md`, `AGENTS.md` and
-`docs/guides/LIVING_WORLD.md` say they are unreachable where they used to
-describe them as live.
-
 <a id="unbuilt-1-257"></a>
 
 ### 1.257 A resident knows its own region's rooms, and a site's regions are flat (2026-11-01 review)
@@ -3046,8 +2936,11 @@ IMPORTANCE override (`simulation.offscreen_importance`, read by
 `offscreen.importance_for`) rather than a per-character RUNG — deliberately: the
 ladder answers what a character MAY do, importance answers how much they matter,
 and one vocabulary answering both is the `flow.reactors` defect re-minted. The
-rung opt-in that step 4 wanted now exists as `simulation.offscreen_agent`
-(`world/offscreen.py`), so that residual is closed too.
+rung opt-in that step 4 wanted existed as `simulation.offscreen_agent`. **All of
+it except the gap generator was retired on 2026-11-01** -- the ladder, the
+seeded draw, the reactive plans, the agent rung, the importance override and
+the card opt-in -- superseded by the Charter, the Writers' Room and causality
+bubbles (`world/offscreen.py`'s docstring); nothing is left to unbuild here.
 
 **The negative result.** Verified 2026-08-19 and re-verified 2026-09-04:
 `reactivation`, `negotiat` and `refusal_budget` return **zero** hits across
@@ -3067,13 +2960,14 @@ most of the cast needs no tick because the gap is generated at re-contact — wa
 retired 2026-09-04: charter moves an unwatched population continuously, so the
 question is no longer whether to tick but what the ticks may know.
 
-**Almost all of it has landed** and the record is in `CHANGELOG.md` and
-`Design.md`: the `offscreen_life` ladder as a chat-level ceiling, a model-free
-seeded `stochastic` rung, out-of-band profile ticks on a frame-scoped
-`offscreen_epoch`, `world_events` as the objective spine (schema v27, with
-checkpoint/archive/branch/migration), carrier delivery and couriers, caravans
-and artifact carriers, and typed `reactive` plans that require a same-beat
-declared basis. `character_agent` is marked built in the UI.
+**Almost all of it landed** and the record is in `CHANGELOG.md` and
+`Design.md`: a frame-scoped `offscreen_epoch`, `world_events` as the objective
+spine (schema v27, with checkpoint/archive/branch/migration), carrier delivery
+and couriers, caravans and artifact carriers. The `offscreen_life` ladder, its
+seeded `stochastic` rung, the out-of-band profile ticks, the typed `reactive`
+plans and the `character_agent` rung landed too and were RETIRED on
+2026-11-01, unreachable since 2026-09-20 and superseded by the Charter, the
+Writers' Room and causality bubbles (`world/offscreen.py`'s docstring).
 
 **One bullet is open, and it verifies.**
 
@@ -3337,6 +3231,29 @@ Most of the rest of §3 shipped in alpha 4.0. What did not:
 - **The prompt fix for §3.8** — a blurb tell should be available colour, not a
   required beat.
 
+**`scene_life`'s default -- moved here from §1.105 on 2026-11-01**, when that
+entry was deleted with the off-screen ladder it was about. These two paragraphs
+were never about the ladder:
+
+**On-screen voicing is already default and already bounded by a count, and
+the panel does not say so.** A charter body in the player's room reaches the
+ordinary per-presence path -- `with_charter_presences` merges derived charter
+identities into the presence set before the demand gate, at every `scene_life`
+level including `off` -- so it speaks when the beat demands it, capped by
+`background_config.max_reactors` (default 1, hard ceiling 3). What `scene_life`
+buys is a different thing entirely: ONE batched call voicing several presences
+coherently. `ambient` is firewall-safe by construction, since the manager's
+context holds only what every managed presence legitimately shares.
+
+**The open decision, and it is the owner's:** should `scene_life` default to
+`ambient` rather than `off`? It is the only remaining sense in which on-screen
+voicing is not default. It costs one batched call on beats with a demand set,
+against N per-presence calls today, so it is plausibly cheaper as well as more
+coherent. `full` is a separate question and does not follow: it hands the
+manager directed lines tagged with their audience, which relaxes an
+information rule, and by the standing invariant a leak must be an engine
+failure rather than a model's.
+
 <a id="unbuilt-6-8"></a>
 
 ### 6.8 Living world — [`DESIGN_LIVING_WORLD.md`](design/DESIGN_LIVING_WORLD.md)
@@ -3344,8 +3261,9 @@ Most of the rest of §3 shipped in alpha 4.0. What did not:
 Phase 1 (branch `living-floors`) built the deterministic floors of A
 (`world/routines.py`), B (`living_world.mint_consequences` +
 `mechanics._fire_due_events`) and D (`place_obligations` +
-`attach_owed_history`), plus the settings ladder for all five approaches
-(`LIVING_WORLD_BUILT` is the declared/built authority). Held for phase 2,
+`attach_owed_history`), plus a settings ladder over the approaches. The
+floors are unconditional since 2026-09-20 and the ladder was deleted on
+2026-11-01 with the paid off-screen tiers it rationed. Held for phase 2,
 which starts when the epistemic-leak audit branch merges:
 
 - **C, the rumor ledger floor** — deliberately NOT the document's §3
@@ -3361,18 +3279,17 @@ which starts when the epistemic-leak audit branch merges:
   claims-lane producer and reputation rules remain as stated.*
 - ~~**E, the antagonist ladder** — rungs 1 and 3 per §5; waits on C because a
   race lost without an information trail reads as the engine cheating.~~ —
-  landed: the reactive floor fires authored stages, and the adaptive ceiling
-  (`offscreen.schedule_agent_ticks`) adapts only from character-owned carrier
-  evidence, C's trail having landed first.
+  landed (a reactive floor firing authored stages, an adaptive ceiling
+  adapting only from character-owned carrier evidence), then superseded by
+  causality bubbles on 2026-09-20 and deleted on 2026-11-01: an absent
+  antagonist now lives a thread of their own, from their own perception.
 - **The ceilings of A, B, D** — ensemble tick, consequence chaining
   (needs a significance flag *computed from event properties*, never the
   subject — §9.3), obligation-aware pre-generation. All documented as
-  extension points only; `LIVING_WORLD_BUILT` marks these three unbuilt and
-  `effective_depth` runs a requested ceiling as the floor. When one lands,
-  it lands behind the rung `LIVING_WORLD_REQUIRES` already declares
-  (`stochastic` for the A-D ceilings, `character_agent` for both depths of
-  E): the off-screen ladder is the one authority ceiling, and a mechanism
-  must never acquire authority the ladder did not grant.
+  extension points only. There is no ladder left to land one behind (it was
+  deleted on 2026-11-01): a ceiling that lands now either runs in every
+  story, as the floors do, or carries its own named setting -- the owner's
+  call, made when one is built.
 - **Obligation retirement at honour time** — `attach_owed_history` still
   annotates a place's lore hits after the place has been generated (accrual
   stops structurally; attachment does not), and nothing yet marks a debt

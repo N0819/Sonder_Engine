@@ -59,11 +59,13 @@ def test_english_is_an_installed_complete_default_pack():
     assert packs["en"].translation_status == "native"
     assert packs["en"].card("compositor")["ordinal_words"]["2"] == "second"
     # A FLOOR, not an equality, so a prompt going MISSING still fails here
-    # while a deliberate retirement is one edit. Two have been retired:
-    # `move_repeat_screen` with the quality re-ask it existed to gate, and
-    # `gap_medium` with the gap generator's second rung (superseded by
-    # `offscreen.profile_summary_record`, which makes the same bounded call
-    # out of band and into state fields rather than prose).
+    # while a deliberate retirement is one edit. Five have been retired:
+    # `move_repeat_screen` with the quality re-ask it existed to gate,
+    # `gap_medium` with the gap generator's second rung (superseded by the
+    # off-screen profile rung, which made the same bounded call out of band
+    # and into state fields rather than prose), and on 2026-11-01 that rung's
+    # `offscreen_profile` with `offscreen_agent_attempt` and
+    # `offscreen_agent_adjudicate`, deleted with the paid off-screen tiers.
     #
     # Counted over what the pack PUBLISHES. Until 2026-09-27 that was the
     # stored prompts plus the seven causal Director sheets assembled from

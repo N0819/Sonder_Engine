@@ -170,8 +170,11 @@ def _extension_channels(stage=None):
 
 #: Engine channels the prose Director never writes. `obligations` (the owner,
 #: 2026-10-02): what a mind owes is that mind's to keep and strike in its own
-#: notebook, never a Director ledger pressed as must-discharge -- see
-#: the note in `director.director_resolve`'s payload and `commit_ledgers.commit_obligations`.
+#: notebook (`commit_background.owed_to`, a character's `still_waiting_for`),
+#: never a Director ledger pressed as must-discharge. The ledger the channel
+#: wrote, its commit domain and its owner entry were deleted on 2026-11-01
+#: (the owner: "obligations caused hyperfixation"); the name stays here so a
+#: write the encoder makes anyway is still dropped out loud.
 RETIRED_CHANNELS = frozenset({"obligations"})
 
 
@@ -181,10 +184,12 @@ def without_retired_channels(events):
 
     RETIRED, NOT ONLY UNASKED. `candidate_channels` skips a retired channel,
     so its chunk never ships; but an encoder that wrote one anyway was
-    dispatched to the channel's owner -- `obligations` is still the social
-    owner's -- and committed, without a word (audit of 2026-11-01,
+    dispatched to the channel's owner -- `obligations` was then still the
+    social owner's -- and committed, without a word (audit of 2026-11-01,
     `agents_director_prose_movement_rooms` F16). A write the prose Director
-    retired reaches no owner and is said, as one no owner holds is."""
+    retired reaches no owner and is said, as one no owner holds is. (The
+    obligations channel has no owner, chunk or ledger at all since
+    2026-11-01; the name stays retired so a stray write is still said.)"""
     retired, out = set(), []
     for event in events or []:
         if not isinstance(event, dict) or not event.get("transforms"):
@@ -605,11 +610,11 @@ def aim_by_their_view(inputs, prose, places, people, perceived, ask,
 
 # ---- 2. the decision model picks the tools -------------------------------
 
-def _jev_state(prose, model_payload, owed=None, before=None, where=None):
+def _jev_state(prose, model_payload, before=None, where=None):
     """What Jev judges: the passage, plus the facts a channel question can
     turn on and prose alone may not settle -- who the people are, which
-    places already exist (a room question asks about a NEW place), what is
-    already OWED, and the part of the day it was before the passage
+    places already exist (a room question asks about a NEW place), and the
+    part of the day it was before the passage
     (``before``, a `day_cycle.PHASE_NAMES` word; absent when the story's day
     has no anchor).
 
@@ -619,12 +624,12 @@ def _jev_state(prose, model_payload, owed=None, before=None, where=None):
     way against a clock at 15:50, and nothing in the passage alone says
     which.
 
-    The obligations question asks whether someone "fulfil[s] or refuse[s]
-    one already owed", and nothing told Jev what was: the miller's "slap it
-    thick along the underside of the neck" was carried out by Emory at idx
-    18, 20 and 22, the channel was never selected, and the debt was deferred
-    seven times, fifteen beats old at the end (playerless Aldermill round 7,
-    2026-09-23). A fact the question needs, handed to the one answering it.
+    A fact a question needs is handed to the one answering it. (The first
+    was what was already OWED, for the obligations question: the miller's
+    "slap it thick along the underside of the neck" was carried out by Emory
+    at idx 18, 20 and 22 with the channel never selected -- playerless
+    Aldermill round 7, 2026-09-23. The question retired with its channel on
+    2026-10-02 and the ledger on 2026-11-01, and the debts with them.)
 
     So is where each person is before the passage (``where``,
     `where_each_is`): the positions question asks whether a body ends it
@@ -642,10 +647,6 @@ def _jev_state(prose, model_payload, owed=None, before=None, where=None):
         lines.append("WHERE EACH PERSON IS BEFORE THE PASSAGE: " + "; ".join(where))
     if rooms:
         lines.append("PLACES ALREADY KNOWN: " + ", ".join(rooms))
-    debts = [f"{row.get('who')}: {row.get('what')}" for row in (owed or ())
-             if isinstance(row, dict) and row.get("who") and row.get("what")]
-    if debts:
-        lines.append("ALREADY OWED: " + "; ".join(debts))
     if before:
         lines.append("TIME OF DAY BEFORE THE PASSAGE: " + str(before))
     return "\n".join(lines)
@@ -692,12 +693,9 @@ def walks_in_flight(model_payload):
 
 
 def select_channels(ctx, stage, prose, model_payload, facts=None, planned=None,
-                    owed=None, scene=None):
+                    scene=None):
     """`(selected, record)`. Fails OPEN: if the decision model cannot answer,
     every candidate is granted -- a larger sheet, never a lost change.
-    ``owed`` is no longer passed by the Director (obligations retired,
-    2026-10-02, `RETIRED_CHANNELS`); a caller that passes debts still has
-    them shown to Jev.
 
     The same one call also asks, for each PLANNED room in reach (the
     Writers' Room's stubs, `planned_room_brief`), whether the passage enters
@@ -784,7 +782,7 @@ def select_channels(ctx, stage, prose, model_payload, facts=None, planned=None,
         record["where"] = list(where)
     try:
         answers = decisions.decide(
-            _jev_state(prose, model_payload, owed, before, where), battery)
+            _jev_state(prose, model_payload, before, where), battery)
     except Exception as exc:
         record.update(failed=str(exc), seconds=round(time.time() - t0, 3))
         ctx.add_warning(f"{stage}: decision model unavailable, every channel "

@@ -140,15 +140,6 @@
     "import_persona_reinterpret": {
       "$text": "prompts/import_persona_reinterpret.txt"
     },
-    "offscreen_profile": {
-      "$text": "prompts/offscreen_profile.txt"
-    },
-    "offscreen_agent_attempt": {
-      "$text": "prompts/offscreen_agent_attempt.txt"
-    },
-    "offscreen_agent_adjudicate": {
-      "$text": "prompts/offscreen_agent_adjudicate.txt"
-    },
     "artifact_wording": {
       "$text": "prompts/artifact_wording.txt"
     },
@@ -201,8 +192,7 @@
         "contradicted_claims",
         "charter_ops",
         "claim_dispositions",
-        "consequences",
-        "obligations"
+        "consequences"
       ]
     },
     "contact": {
@@ -567,9 +557,6 @@
     },
     "consequences": {
       "$text": "encoder/consequences.txt"
-    },
-    "obligations": {
-      "$text": "encoder/obligations.txt"
     },
     "contact_ops": {
       "$text": "encoder/contact_ops.txt"

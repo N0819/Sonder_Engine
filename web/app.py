@@ -87,14 +87,11 @@ from story.character_schema import (
     persona_name,
 )
 from story.scene import (background_config, dialogue_config, interaction_limits,
-                   cognition_rung, normalize_offscreen_life,
-                   normalize_offscreen_cognition, player_authority,
+                   player_authority,
                    set_player_authority, PLAYER_AUTHORITY_GRANTS,
                    PLAYER_AUTHORITY_MODES,
                    style_guide, normalize_style_guide,
-                   OFFSCREEN_COGNITION_DEFAULT,
-                   OFFSCREEN_LIFE_BUILT, OFFSCREEN_LIFE_DEFAULT,
-                   OFFSCREEN_LIFE_DESCRIPTIONS, OFFSCREEN_LIFE_LADDER,
+                   RETIRED_DIALOGUE_KEYS,
                    STYLE_GUIDE_FIELDS, BUBBLE_RADIUS_CEILING,
                    BUBBLE_RADIUS_DEFAULT, BUBBLE_RADIUS_FLOOR)
 from story.importers import (
@@ -6312,20 +6309,10 @@ def style_guide_put(cid: int, body: dict = Body(...)):
 
 @app.get("/api/chats/{cid}/dialogue_config")
 def dlg_get(cid: int):
-    config = dialogue_config(cid)
-    # The ladder rides with the config so the UI renders the rungs the engine
-    # actually has, in the engine's order, rather than a copy of them that
-    # drifts the first time one is added.
-    config["offscreen_life_levels"] = [
-        {"value": level,
-         "description": OFFSCREEN_LIFE_DESCRIPTIONS[level],
-         # Marked by the engine, not by the menu: an unbuilt rung must not
-         # quietly start reading as built when it ships and nobody remembers
-         # to edit the UI.
-         "built": level in OFFSCREEN_LIFE_BUILT}
-        for level in OFFSCREEN_LIFE_LADDER
-    ]
-    return config
+    # The off-screen ladder's rungs (`offscreen_life_levels`) rode here until
+    # 2026-11-01, when the tiers they described were deleted; the panel had
+    # stopped rendering them on 2026-09-20.
+    return dialogue_config(cid)
 
 @app.put("/api/chats/{cid}/dialogue_config")
 def dlg_put(cid: int, body: dict = Body(...)):
@@ -6386,20 +6373,6 @@ def dlg_put(cid: int, body: dict = Body(...)):
             # would be theatre rather than a setting.
             "promote_after_addressed": max(
                 0, min(99, int(submitted("promote_after_addressed", 0)))),
-            # MAY A MIND NOBODY IS WATCHING THINK AND ACT. The one question
-            # the panel asks since 2026-09-04; `dialogue_config` derives the
-            # ladder rung from it, and the rung stays writable below for the
-            # extension contract and for archives that carry one. Normalized
-            # rather than rejected, like the rung: an unreadable value falls to
-            # the default, never to the floor, so a typo cannot quietly switch
-            # a story's off-screen life off.
-            "offscreen_cognition": normalize_offscreen_cognition(
-                submitted("offscreen_cognition", OFFSCREEN_COGNITION_DEFAULT)),
-            # 0 means no ticks however high the level is set -- the bound and
-            # the permission are separate answers, and a cap of zero is a
-            # legitimate way to say "not right now" without losing the level.
-            "max_offscreen_actors": max(
-                0, min(12, int(submitted("max_offscreen_actors", 3)))),
             # THE TWO ABSENT-THREAD DIALS the panel renders. `max_bubbles` was
             # sent by the panel since 2026-09-20 and never stored here: a save
             # of 1 read back 3 (measured 2026-10-13). Its stored fallback is the
@@ -6419,60 +6392,22 @@ def dlg_put(cid: int, body: dict = Body(...)):
 
     config["max_lines"] = max(config["min_lines"], config["max_lines"])
 
-    # A CALLER WHO NAMED THE RUNG MEANT THE RUNG. `provision_story` publishes
-    # `offscreen_life` and archives carry it, so a body that sends one is
-    # answering the ladder directly and its answer outranks the toggle's
-    # derivation; `dialogue_config` then reads the toggle back out of it. A
-    # body that sends neither is the ordinary panel save, and the rung it
-    # implies is STORED beside the toggle rather than derived on every read --
-    # an archive, an extension and the living-world slice all read this blob
-    # directly, and a key that exists only in `dialogue_config`'s return value
-    # would be missing from all three.
-    if "offscreen_life" in body:
-        config["offscreen_life"] = normalize_offscreen_life(
-            body.get("offscreen_life"))
-        config.pop("offscreen_cognition", None)
-    else:
-        config["offscreen_life"] = cognition_rung(config["offscreen_cognition"])
+    # THE RETIRED LADDER'S KEYS ARE NOT STORED AGAIN. `offscreen_life`,
+    # `offscreen_cognition` and `max_offscreen_actors` set the paid off-screen
+    # tiers deleted on 2026-11-01; a body or a stored blob still carrying one
+    # is answered by dropping it, on the save that carried `max_bubbles` over
+    # from the old cap above. Everything else the blob holds still rides
+    # through untouched.
+    for key in RETIRED_DIALOGUE_KEYS:
+        config.pop(key, None)
 
     wset(cid, "dialogue_config", config)
     return config
 
-@app.get("/api/chats/{cid}/living_world")
-def living_world_get(cid: int):
-    """The living-world ladder: five approaches, each off / floor / ceiling.
-
-    The approaches ride with the config (the ``offscreen_life_levels``
-    convention) so the UI renders what is on, what it costs, and what is
-    merely declared from the engine's own tables -- an unbuilt tier is
-    marked by the engine, not by a menu that drifts. ``approaches`` is
-    computed against the chat's off-screen authority ceiling (folded in at
-    read time by ``living_world_config``; never stored), so ``effective``
-    and each depth's ``requires``/``permitted`` state the clamp the engine
-    will actually apply; the reported ``living_world`` stays the stored
-    mechanisms alone — the ceiling's one durable spelling is
-    ``dialogue_config``'s.
-    """
-    from world.living_world import (living_world_config, living_world_levels,
-                              normalize_living_world)
-
-    config = living_world_config(cid)
-    return {"living_world": normalize_living_world(config),
-            "approaches": living_world_levels(config)}
-
-
-@app.put("/api/chats/{cid}/living_world")
-def living_world_put(cid: int, body: dict = Body(...)):
-    """Set the ladder. Normalized rather than rejected, and the normalized
-    config is returned so what actually stuck is visible immediately --
-    here the default IS off, so this is the surface where a typo shows."""
-    from world.living_world import LIVING_WORLD_KEY, normalize_living_world
-
-    _chat_or_404(cid)
-
-    config = normalize_living_world(body.get("living_world", body))
-    wset(cid, LIVING_WORLD_KEY, config)
-    return {"ok": True, "living_world": config}
+# `GET`/`PUT /api/chats/{cid}/living_world` served the four-approach ladder
+# until 2026-11-01. It had held no approach since 2026-09-20 and the panel had
+# stopped calling it; the ladder was deleted with the paid off-screen tiers
+# (`world/living_world.py`'s docstring), and an old caller now gets a 404.
 
 
 @app.get("/api/chats/{cid}/charters")
@@ -6702,9 +6637,9 @@ def viewers_get(cid: int):
 def player_authority_get(cid: int):
     """This story's player-authority mode, its ladder, and its change record.
 
-    The ladder is served by the engine rather than copied into the menu, for
-    the reason the offscreen-life route gives: a mode list maintained in two
-    places is one that disagrees with itself the first time a rung moves.
+    The ladder is served by the engine rather than copied into the menu: a
+    mode list maintained in two places is one that disagrees with itself the
+    first time a rung moves.
     """
     current = player_authority(cid)
     current["modes"] = [
@@ -6717,12 +6652,11 @@ def player_authority_get(cid: int):
 def player_authority_put(cid: int, body: dict = Body(...)):
     """Choose the mode. Refused rather than normalized, unlike its neighbours.
 
-    `offscreen_life` falls back to its default on an unreadable value because
-    the cost of guessing wrong there is a story with slightly more or less
-    happening off screen. Here the cost is the player silently keeping or
-    losing authorship of the world, and a typo that lands on `world_author`
-    when `actor_only` was meant is exactly the failure the whole feature
-    exists to prevent.
+    A neighbour that normalizes can do so because guessing wrong costs a
+    story a little more or less of something. Here the cost is the player
+    silently keeping or losing authorship of the world, and a typo that lands
+    on `world_author` when `actor_only` was meant is exactly the failure the
+    whole feature exists to prevent.
     """
     mode = str(body.get("mode", "")).strip().lower()
     if mode not in PLAYER_AUTHORITY_MODES:

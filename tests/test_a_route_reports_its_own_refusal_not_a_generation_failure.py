@@ -53,7 +53,8 @@ def test_a_lore_plan_in_an_unknown_language_is_a_bad_request(temp_db):
     ("bg_cfg_put", {"scene_life": "off"}),
     ("frames_create", {"label": "Before"}),
     ("dlg_put", {}),
-    ("living_world_put", {}),
+    # `living_world_put` stood here until 2026-11-01, when the route went with
+    # the off-screen ladder it set.
     ("pph_put", {"entries": []}),
     ("naming_profile_put", {}),
 ])

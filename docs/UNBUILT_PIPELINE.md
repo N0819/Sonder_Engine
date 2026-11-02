@@ -131,7 +131,9 @@ of these things; nothing on the prose path does yet.
    was the causal Director's field and nothing on the prose path writes it,
    so every beat that carries an actor-less `event` claim warns
    "Unadjudicated player-asserted fact", adjudicated in the prose or not
-   (`tests/test_director_obligations.py`, strict xfail). Either the verdict
+   (`tests/test_a_player_asserted_event_is_adjudicated.py`, strict xfail;
+   moved out of `test_director_obligations.py` when the obligations ledger
+   that file was named for was deleted, 2026-11-01). Either the verdict
    moves onto the prose path (a decision-model question is the obvious
    shape) or the warning retires with the field.
 8. **A line the Director originates reaches no view, and one it invents for

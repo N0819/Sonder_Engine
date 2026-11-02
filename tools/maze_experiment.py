@@ -1275,7 +1275,7 @@ def install_scripted_models(name, walls):
             cell = next(c for c in walls if _rid(c) == here)
             nxt = rng.choice(sorted(walls[cell]))
             return {"resolved_event": f"{name} walks on.", "summary": "A step.",
-                    "dialogue_log": [], "obligations": [],
+                    "dialogue_log": [],
                     "changes_asserted": [], "fact_adjudications": [],
                     "state_diff": {"positions": {name: _rid(nxt)}}}
         return {}

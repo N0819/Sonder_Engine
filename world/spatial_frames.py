@@ -1302,7 +1302,7 @@ def perform_split(chat_id, parent_frame_id, turn_idx, away_zone=None, *,
         # child takes the parent's own `ordinal` -- so the town on the other
         # side of the hill is the same town, and a party that walks to it has
         # not left the world, only the room. What is per-PARTY (what they
-        # know, their clock, their intentions, their obligations, their log)
+        # know, their clock, their intentions, their log)
         # is theirs and is copied here; what is the WORLD's -- the town's
         # institutions, crowds, roads and notices, the map's regions -- and
         # what is the AUTHOR's -- the Room's mandates, bible and packages --
@@ -1317,7 +1317,6 @@ def perform_split(chat_id, parent_frame_id, turn_idx, away_zone=None, *,
         # forecourt in the other (playerless Aldermill, 2026-09-23).
         for key, default in (
             ("known", {}), ("simulation_clock", {}), ("standing_intentions", []),
-            ("pending_obligations", []),
             ("shadow_profile", ""), ("background_presences", {}), ("offscreen_log", []),
             # Where the charter's bodies stood at the split: the snapshot
             # this frame's "what moved" is measured against. Without it the
@@ -1842,10 +1841,10 @@ def _merge_circles_home(chat_id, parent_frame_id, child_frame_id, returning):
     wset_for_frame(chat_id, CIRCLES_KEY, parent, parent_frame_id)
 
 
-#: The party ledgers a sibling merge unions: what each side intends, owes,
-#: has met and has joined. Each bubble answered for different people, so a
+#: The party ledgers a sibling merge unions: what each side intends, has met
+#: and has joined. Each bubble answered for different people, so a
 #: key both hold is one subject seen twice, and the survivor's row stands.
-_SIBLING_UNION_KEYS = (("standing_intentions", []), ("pending_obligations", []),
+_SIBLING_UNION_KEYS = (("standing_intentions", []),
                        ("background_presences", {}), ("knowledge_circles", {}))
 
 

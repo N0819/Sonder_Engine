@@ -1,16 +1,28 @@
-"""The living world: settings for five approaches and their built floors.
+"""The living world's two deterministic floors: the consequence fuse and the
+place that owes a history.
 
-Approach A's pure functions live in ``routines.py``; C's physical witnessed
-carrier envelopes live in ``carriers.py``; E's reactive executor lives in
-``offscreen.py``. This module owns the shared config, B's fuse mint, and D's
-obligation ledger.
+Approach B's fuse mint (`mint_consequences`) turns a Director-adjudicated
+`state_diff.consequences` declaration into a `scheduled_events` row that the
+mechanics sweep fires on the story clock (`mechanics._fire_due_events`), and
+the residue assembler reads what fired at a room being re-entered
+(`fired_consequences_at`, `routines.residue_for`). Approach D's obligation
+ledger (`record_obligations`, `owed_history`, `attach_owed_history`) keeps
+what fired at a lore place nobody has generated yet, for the mapping seam to
+hand to the place when it becomes rooms. Approach A's pure functions live in
+``routines.py``; physical carriers in ``carriers.py`` and ``couriers.py``.
 
-``docs/design/DESIGN_LIVING_WORLD.md`` is the argument; §9 there records the
-author's constraints verbatim. The floors landed here are deterministic,
-seeded where they draw, and free at rest — every model-assisted ceiling is
-declared in the ladder below and deliberately unbuilt, exactly as
-``scene.OFFSCREEN_LIFE_BUILT`` already does for the offscreen ladder: the
-declared/built split is stated by the engine, not by a menu that drifts.
+NO SETTING GATES EITHER. This module used to carry the author-selectable
+ladder over five approaches -- `off`/`floor`/`ceiling` per approach, clamped by
+the `offscreen_life` ceiling -- and the rung tables the off-screen tiers spent
+at. The ladder was emptied on 2026-09-20 (7140b9cc): a world whose fires do not
+burn down, whose causes do not land and whose unvisited places owe nothing is
+not coherent at any setting, so B and D became unconditional and the
+antagonist ladder was superseded by causality bubbles. The empty tables, the
+config reader and the gates over them were RETIRED on 2026-11-01 with the paid
+off-screen tiers they served (the owner: "living world is supposed to be
+superseded by charter and writers room"); see ``world/offscreen.py``'s
+docstring for what replaced the tiers. ``docs/design/DESIGN_LIVING_WORLD.md``
+is the argument; §9 there records the author's constraints verbatim.
 
 WHO MAY LEARN WHAT, AND BY WHAT ROUTE (the epistemic contract, enforced
 structurally — each rule names the structure that holds it):
@@ -19,7 +31,7 @@ structurally — each rule names the structure that holds it):
     at a clock time, whether or not anyone was there to see it. The row is
     Director-caused (``state_diff.consequences`` is adjudicated output) and
     deterministically fired, so it carries ``disposition: resolved_fact`` —
-    the provenance tier that phase 2's invented gossip will NOT carry.
+    the provenance tier that invented gossip will NOT carry.
   * Nobody LEARNS of a fired fuse merely because it is true. The firing
     writes no notice unless the player is standing at its location when it
     fires (walking in on it — §0.2's in-progress surface). Every other
@@ -37,8 +49,8 @@ structurally — each rule names the structure that holds it):
   * Nothing here privileges the player. A fuse's fields are properties of
     the EVENT — what, where, when, who caused it, what was publicly visible
     — never of who it might matter to. There is no priority, importance or
-    reputation field, and phase 2's propagation must compute interest from
-    the event's own properties (the author's constraint: the player earns
+    reputation field, and propagation must compute interest from the
+    event's own properties (the author's constraint: the player earns
     reputation downstream of propagation, or is correctly nobody).
 
 CARRIER-READY BY SHAPE. Information moves by carriers along routes, never by
@@ -46,303 +58,16 @@ timer alone. Every fuse payload and obligation row therefore
 already carries {what, where, a time, origin, originator, witnessed,
 disposition} — the pickup surface a courier needs — and the payloads are
 JSON, so a route-bound {carrier, route} pair extends them without
-migration. The built C floor emits only a non-empty witnessed surface to a
-registered character physically present when it lands; that envelope follows
-the holder's actual scene movement and only their private agent reads it.
-Anonymous crowd/message carriers and copy-time degradation remain later layers.
+migration. A non-empty witnessed surface reaches a body physically present
+when it lands (or arriving while it still stands); that envelope follows the
+holder's actual scene movement and only their private agent reads it.
 """
 
 from __future__ import annotations
 
 import json
 
-from core.logging_utils import logger
 from world.mechanics import stable_event_key
-
-# ---------------------------------------------------------------------------
-# The settings ladder: author-selectable world-generation approaches.
-# ---------------------------------------------------------------------------
-
-#: Ordered: a depth permits everything below it. ``ceiling`` is the
-#: model-assisted tier of the SAME mechanism, off the critical path — not a
-#: second mechanism (design doc, preamble to §1).
-LIVING_WORLD_DEPTHS = ("off", "floor", "ceiling")
-
-#: Rumour transport is no longer an optional approach. It is core epistemic
-#: physics owned by Charter people and the shared physical carrier rail; a
-#: setting that can disable witnessing, speech or letters makes the world
-#: incoherent. The remaining keys are author-selectable generation policies.
-#: RETIRED 2026-09-20, and the reason is the one that retired rumour transport
-#: one paragraph above: a world whose fires do not burn down, whose causes do
-#: not land and whose unvisited places owe nothing is not coherent at any
-#: setting. These were never information rules -- the panel said so itself --
-#: and a generation policy the world needs is not a policy, it is the world.
-#:
-#:   * `routine_residue` and `scheduled_consequence` are now UNCONDITIONAL.
-#:     Their gates are gone from `agents/director.py`, `world/routines.py` and
-#:     `world/mechanics.py`; what they gated always ran for a story that had
-#:     them on and was simply missing for one that did not.
-#:   * `antagonist_ladder` is superseded by causality bubbles: a character who
-#:     walks away gets their own frame and their own beats
-#:     (`docs/design/DESIGN_OFFSCREEN_SUPERSEDED.md`), which is the thing the
-#:     ladder was an approximation of. `max_bubbles` is the dial that replaced
-#:     its ceiling, and it caps how many threads EXIST rather than how many
-#:     advance -- see `agents/offscreen_beat.OFFSCREEN_BEATS_ARE_UNCAPPED` for
-#:     why those are not the same cap.
-#:
-#: NOTHING SURVIVES, and the last one out was the ANTAGONIST LADDER (the owner,
-#: 2026-09-20: "Antagonist ladder is the lesser version of the causality
-#: bubbles. It is a redundancy."). The ladder gave a named few authored plans
-#: that advanced on a schedule, acting only on what had reached them. A
-#: causality bubble gives an absent character a frame of their own, their own
-#: perception composed from their own scene, a real character call from their
-#: own private state, and a Director that resolves what they attempt -- which is
-#: the same claim with nothing approximated. Two mechanisms for "what an absent
-#: character is doing" could only disagree, and the weaker one was the one with
-#: a switch.
-#:
-#: Its machinery goes with it: `offscreen_plan_ops`, `advance_reactive_plans`
-#: and the `character_agent` tick tier are the ladder, not neighbours of it --
-#: reactive plans fire off plans the ladder authors, so they have no subject
-#: once it is gone. `docs/design/DESIGN_OFFSCREEN_SUPERSEDED.md` §4.3 asked for
-#: them to be given a home first; a bubble IS that home.
-#:
-#: The other three were not holdovers and did not need a switch either:
-#:
-#:   * `routine_residue` and `scheduled_consequence` are UNCONDITIONAL. A world
-#:     whose fires do not burn down while nobody watches, and whose causes do
-#:     not land on the day they were set for, is not coherent at any setting --
-#:     the argument that retired rumour transport one paragraph above.
-#:   * `place_obligations` is unconditional for the same reason: a place you
-#:     have never been owes what happened there whether or not a menu says so,
-#:     and the Writers' Room now plans that history directly (`draft_history`,
-#:     `wants_history`, `horizon_hours`).
-#:
-#: The tuple stays, empty, so every reader that walks it keeps working and the
-#: settings surface renders nothing rather than erroring.
-LIVING_WORLD_APPROACHES = ()
-
-#: Which depths actually DO something today. Kept beside the ladder, like
-#: ``scene.OFFSCREEN_LIFE_BUILT``, so an unbuilt tier cannot quietly start
-#: reading as built when it ships and nobody updates a menu. Physical carrier
-#: behavior is core and therefore absent from this table. E's floor
-#: advances only Director-adjudicated stages authored from a character's own
-#: on-screen declaration; its adaptive ceiling is built on the core carrier
-#: network
-#: (``offscreen.schedule_agent_ticks``): an opted-in dormant mind with a
-#: private reason gets one reduced turn — fail-closed private context, one
-#: character call, one Director adjudication, one atomic landing.
-LIVING_WORLD_BUILT = {}
-
-#: What each approach and depth buys, and what it costs — served to the UI
-#: with the config so the menu renders the engine's own ladder rather than
-#: a copy that drifts (the ``offscreen_life_levels`` convention).
-LIVING_WORLD_DESCRIPTIONS = {
-    "routine_residue": {
-        "label": "Routine and residue",
-        "floor": "Rooms drift on the clock while unwatched — fires burn "
-                 "down, crowds thin and swell — and re-entering delivers "
-                 "the difference as present state, never a report.",
-        "ceiling": "Familiar places also advance their social life between "
-                   "visits (who is feuding, what the barkeep is short of).",
-        "cost": "floor: free — no model calls; ceiling: ~1 call per "
-                "familiar place per scene boundary, off the turn path",
-    },
-    "scheduled_consequence": {
-        "label": "Scheduled consequence",
-        "floor": "This beat's causes set offscreen effects on the clock — "
-                 "the patrol doubles in three days, the river gate closes "
-                 "in a week — and they genuinely happen, seen or "
-                 "not.",
-        "ceiling": "A significant consequence can mint a second-order one "
-                   "when it lands (fire, then prices, then the bread "
-                   "queue).",
-        "cost": "floor: free — rows on the existing event clock; ceiling: "
-                "~1 call per significant fired consequence, off the turn "
-                "path",
-    },
-    "place_obligations": {
-        "label": "Places that owe a history",
-        "floor": "Somewhere you have never been still accrues what "
-                 "happened there; first arrival finds the aftermath "
-                 "already in place, in the present tense.",
-        "ceiling": "A place you are clearly heading toward is generated "
-                   "early, off the path, so first arrival is instant and "
-                   "owes its history better.",
-        "cost": "floor: free while unvisited — arrival costs what arrival "
-                "already cost; ceiling: the same generation call, paid "
-                "early",
-    },
-    "antagonist_ladder": {
-        "label": "Antagonist ladder",
-        "floor": "A named few advance authored plans on schedule, acting "
-                 "only on what has actually reached them — a race you can "
-                 "genuinely lose.",
-        "ceiling": "Those few think between visits: declaration, "
-                   "adjudication, and a remembered week at re-contact.",
-        "cost": "floor: ~2 calls per dramatic event; ceiling: ~2–4 calls "
-                "per turn amortized at 2–3 tracked actors, all off the "
-                "turn path",
-    },
-}
-
-#: The offscreen-life rung each depth spends at. The two settings are two
-#: axes of ONE question — ``scene.OFFSCREEN_LIFE_LADDER`` answers how much
-#: authority off-screen work may have, this module answers which machinery
-#: does it — and before this table nothing said which governed: B's floor
-#: minted fuses that genuinely fired while the ladder said ``inert``
-#: ("nothing happens off screen"). The assignments are the ladder's own
-#: descriptions, not new policy: the floors are clock-work, and the
-#: ``deterministic`` rung's text names them verbatim ("scheduled effects
-#: only — arrivals, expiry, news latency"); the ceilings are model-assisted
-#: invention without plans, the ``stochastic`` tier's authority; and E is
-#: the ``character_agent`` rung wearing this module's vocabulary — the
-#: design doc §5 names E's rungs 2 and 3 ``reactive`` and
-#: ``character_agent`` outright, so gating E anywhere lower would be the
-#: two-vocabularies drift the ladder comment in ``scene.py`` warns against.
-LIVING_WORLD_REQUIRES = {
-    "routine_residue": {"floor": "deterministic", "ceiling": "stochastic"},
-    "scheduled_consequence": {"floor": "deterministic",
-                              "ceiling": "stochastic"},
-    "place_obligations": {"floor": "deterministic", "ceiling": "stochastic"},
-    "antagonist_ladder": {"floor": "reactive",
-                          "ceiling": "character_agent"},
-}
-
-#: All off. The engine never did any of this before the setting existed, and
-#: a merge must not silently change a running story — the same reasoning
-#: that made ``stochastic`` the offscreen default (what the engine already
-#: did) makes ``off`` the default here (it did nothing).
-LIVING_WORLD_DEFAULT = "off"
-
-#: World-KV key for the per-chat config.
-LIVING_WORLD_KEY = "living_world"
-
-#: The key the off-screen ceiling rides on INSIDE a config dict handed
-#: around this module. It is never stored under ``LIVING_WORLD_KEY`` —
-#: ``normalize_living_world`` strips it from anything written back, so the
-#: ceiling has exactly one durable spelling (``dialogue_config``'s) and
-#: can never shadow it from a second row. Absent, it reads as the ladder
-#: default, exactly as ``scene.normalize_offscreen_life`` treats an
-#: unreadable level.
-OFFSCREEN_CEILING_KEY = "offscreen_life"
-
-
-def normalize_living_world(stored):
-    """Coerce a stored or submitted config to {approach: depth}, total.
-
-    Unknown approaches are dropped; an unreadable depth falls to the
-    DEFAULT. Here — unlike ``scene.normalize_offscreen_life``, whose
-    default is the live middle of its ladder — the default IS off, so a
-    typo does silence a feature; the PUT route returns the normalized
-    config so what stuck is visible immediately rather than fifty turns
-    later. Dropping unknown keys is also what keeps the STORED config
-    pure: ``OFFSCREEN_CEILING_KEY`` (folded in by ``living_world_config``
-    at read time) never survives a write, so the ceiling cannot acquire a
-    second durable spelling that shadows ``dialogue_config``'s.
-    """
-    out = {}
-    stored = stored if isinstance(stored, dict) else {}
-    for approach in LIVING_WORLD_APPROACHES:
-        depth = str(stored.get(approach) or "").strip().casefold()
-        out[approach] = depth if depth in LIVING_WORLD_DEPTHS \
-            else LIVING_WORLD_DEFAULT
-    return out
-
-
-def living_world_config(cid):
-    """The chat's mechanism config with the off-screen authority ceiling
-    folded in ON THE WAY IN (the ``canonical_url`` rule): every gate that
-    fetches a config composes both axes without remembering to call a
-    second helper — ``commit_transit_sweep``'s mint gate, the Director's
-    residue gate and the mapping seam all compose because the dict they
-    already hold carries the ceiling. The ceiling's durable home stays
-    ``dialogue_config``; it rides here only between read and use.
-    """
-    from core.db import wget
-    from story.scene import dialogue_config
-
-    config = normalize_living_world(wget(cid, LIVING_WORLD_KEY, None) or {})
-    config[OFFSCREEN_CEILING_KEY] = dialogue_config(cid)["offscreen_life"]
-    return config
-
-
-def effective_depth(config, approach):
-    """The depth that actually RUNS: the requested depth, lowered to the
-    highest depth at or below it that is both BUILT and within the story's
-    off-screen authority ceiling (``LIVING_WORLD_REQUIRES``). Two clamps,
-    one convention: setting an unbuilt ceiling behaves as the floor and
-    MARKS the story as wanting the ceiling — the ``character_agent``
-    convention, so landing a ceiling later is opt-in on a chat that
-    already asked rather than a surprise in every story — and a depth the
-    ladder does not permit is capped the same visible way, never silently
-    run: the ladder is the single answer to how much off-screen work MAY
-    do, and these mechanisms answer only which machinery does it.
-    """
-    from story.scene import normalize_offscreen_life, offscreen_life_allows
-
-    raw = config if isinstance(config, dict) else {}
-    ceiling = normalize_offscreen_life(raw.get(OFFSCREEN_CEILING_KEY))
-    requested = normalize_living_world(raw).get(approach,
-                                                LIVING_WORLD_DEFAULT)
-    built = LIVING_WORLD_BUILT.get(approach, frozenset())
-    for depth in reversed(
-            LIVING_WORLD_DEPTHS[:LIVING_WORLD_DEPTHS.index(requested) + 1]):
-        if depth == "off":
-            return depth
-        if depth in built and offscreen_life_allows(
-                ceiling, LIVING_WORLD_REQUIRES[approach][depth]):
-            return depth
-    return "off"
-
-
-def living_world_allows(config, approach, depth="floor"):
-    """Does the config's EFFECTIVE depth for ``approach`` permit ``depth``.
-
-    Ordered comparison, like ``scene.offscreen_life_allows``. Unknown
-    approaches and depths permit nothing — a spend gate must fail toward
-    not spending.
-    """
-    if approach not in LIVING_WORLD_APPROACHES \
-            or depth not in LIVING_WORLD_DEPTHS:
-        return False
-    have = LIVING_WORLD_DEPTHS.index(effective_depth(config, approach))
-    return have >= LIVING_WORLD_DEPTHS.index(depth)
-
-
-def living_world_levels(config=None):
-    """The ladder as the UI renders it: what is on, what it costs, what is
-    merely declared, and what the off-screen ceiling caps — per approach,
-    from the engine's own tables. ``requires``/``permitted`` ride along so
-    a mechanism set above the ceiling displays as clamped rather than
-    silently ignored: the clamp the menu shows is the clamp
-    ``effective_depth`` will apply, never a copy that drifts."""
-    from story.scene import normalize_offscreen_life, offscreen_life_allows
-
-    raw = config if isinstance(config, dict) else {}
-    ceiling = normalize_offscreen_life(raw.get(OFFSCREEN_CEILING_KEY))
-    values = normalize_living_world(raw)
-    composed = {**values, OFFSCREEN_CEILING_KEY: ceiling}
-    out = []
-    for approach in LIVING_WORLD_APPROACHES:
-        desc = LIVING_WORLD_DESCRIPTIONS[approach]
-        out.append({
-            "approach": approach,
-            "label": desc["label"],
-            "value": values[approach],
-            "effective": effective_depth(composed, approach),
-            "cost": desc["cost"],
-            "depths": [
-                {"value": depth,
-                 "description": desc.get(depth, ""),
-                 "built": depth in LIVING_WORLD_BUILT[approach],
-                 "requires": LIVING_WORLD_REQUIRES[approach][depth],
-                 "permitted": offscreen_life_allows(
-                     ceiling, LIVING_WORLD_REQUIRES[approach][depth])}
-                for depth in LIVING_WORLD_DEPTHS if depth != "off"
-            ],
-        })
-    return out
 
 
 # ---------------------------------------------------------------------------
@@ -501,8 +226,8 @@ def fired_consequences_at(cid, room_id, since_seconds, until_seconds,
         what = str(payload.get("what") or "").strip()
         if not what:
             continue
-        # Bound first -- see `offscreen.full_agent_candidates`. `cap=0`
-        # returned one item.
+        # Bound first: appending and then checking returned one item for
+        # `cap=0` (the `[-0:]` class `crowds.talk_view` also closed).
         if len(out) >= max(0, int(cap)):
             break
         out.append(what)
@@ -531,10 +256,9 @@ def record_obligations(cid, fired_rows):
     """Fold fired consequence rows at ungenerated places into the ledger.
 
     Called from the commit sweep with this beat's fired fuses. Recorded
-    WHENEVER a fuse fires at a place — not gated by the D setting — because
-    this is layer-1 truth accumulating, and settings gate surfaces, never
-    truth: switching D on mid-story must find the history already there.
-    Deliberately no turn-counted TTL: an unvisited place's clock is exactly
+    WHENEVER a fuse fires at a place, because this is layer-1 truth
+    accumulating whether or not anybody is ever told. Deliberately no
+    turn-counted TTL: an unvisited place's clock is exactly
     the countdown amendment 7 warns must pause while nobody is near
     (``CLAIM_TTL_TURNS`` eating truth about subjects the player never met);
     the store cap is the only forgetting.
@@ -608,25 +332,21 @@ def owed_history(cid, entry_uid, cap=OBLIGATION_HONOR_CAP):
     return out
 
 
-def attach_owed_history(cid, lore_hits, config=None):
+def attach_owed_history(cid, lore_hits):
     """Annotate location lore hits with what the place owes, for mapping.
 
-    Returns copies; never mutates the input. UNCONDITIONAL since 2026-09-20
-    (see the comment below): no setting gates this surface. Attached to
-    location entries with an ``entry_uid``. Accrual stops by construction
-    once a place is generated (``resolve_subject`` then answers ``room``,
-    so new fuses land on the room id) — but old obligations stay attached
-    until the ledger row is superseded; the mapping prompt scopes them to
-    the generation moment.
+    Returns copies; never mutates the input. NO SETTING GATES THIS SURFACE:
+    a place you have never been owes what happened there whether or not a
+    menu says so, and the debt was always recorded either way
+    (`record_obligations` is ungated) -- the `place_obligations` switch only
+    ever decided whether anybody was TOLD. It went unconditional on
+    2026-09-20, and the `config` parameter that outlived it was retired with
+    the ladder on 2026-11-01. Attached to location entries with an
+    ``entry_uid``. Accrual stops by construction once a place is generated
+    (``resolve_subject`` then answers ``room``, so new fuses land on the room
+    id) — but old obligations stay attached until the ledger row is
+    superseded; the mapping prompt scopes them to the generation moment.
     """
-    # UNCONDITIONAL since 2026-09-20. A place you have never been owes what
-    # happened there whether or not a menu says so, and the debt was always
-    # recorded either way (`record_obligations` is ungated) -- the switch only
-    # decided whether anybody was TOLD, which is the same shape of thing the
-    # `scheduled_consequence` surface gate turned out to be. `config` is kept in
-    # the signature because callers pass it and because the parameter is how the
-    # test suite reaches this without a chat.
-    _ = config
     out = []
     for hit in lore_hits or []:
         hit = dict(hit)

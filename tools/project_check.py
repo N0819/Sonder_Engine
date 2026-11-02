@@ -290,8 +290,9 @@ def check_cross_file_duplicate_definitions(errors: list[str]) -> None:
 #: cannot be imported and shared -- defining one in each module that needs it
 #: is the only way to have one at all -- so "one of them owns it and the rest
 #: should import it" is advice that cannot be followed. `story/importers.py`
-#: and `world/offscreen.py` both carry the same four-line compat shim for
-#: `_COMPAT_PROMPT_IDS`, correctly.
+#: carries a four-line compat shim for `_COMPAT_PROMPT_IDS`, correctly, and
+#: `world/offscreen.py` carried the same one until its paid tiers were
+#: deleted (2026-11-01).
 _PER_MODULE_HOOKS = frozenset({"__getattr__", "__dir__"})
 
 #: Below this many lines a same-name, same-body definition is as likely to be
@@ -2783,9 +2784,8 @@ BACKGROUND_SAFE_CONTEXTVARS = {
     "active_frame_id":
         "the frame a turn is played in; every job producer that writes for a "
         "frame sets its own and resets it in `finally` "
-        "(`persist/commit_memory_write.py`, `persist/commit_background.py`, "
-        "`world/offscreen.py`) -- the reasoning core/jobs.py's own audit of "
-        "2026-08-19 records",
+        "(`persist/commit_memory_write.py`, `persist/commit_background.py`) "
+        "-- the reasoning core/jobs.py's own audit of 2026-08-19 records",
     "answered_by":
         "an OUTPUT slot: `llm_quality._accepted` writes it on every validated "
         "answer, and its one reader (`director_prose`'s encoder call) sets it "
@@ -3302,7 +3302,6 @@ MEMORY_WRITERS = {
     "persist/commit_memory_write.py":
         "calls delete_turn_memories(turn.id) before the batch",
     "story/greetings.py": "keys on a sha1 of the seed's content",
-    "world/offscreen.py": "keys on a chat-scoped agent/epoch identity",
     "persist/commit_background.py": "keys on the charter's own identity",
     "world/charter_history.py":
         "keys on stable charter/body plus the re-derived evidence source id",

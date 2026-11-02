@@ -470,7 +470,7 @@ REPORTS = [
     # still has to hold what it nails up.
     (["artifact_ops"], True),
     (["crowd_ops"], False),
-    (["introductions", "obligations"], False),
+    (["introductions", "cast_changes"], False),
     (["positions", "entities"], False),
 ])
 def test_reports_ride_only_with_a_channel_that_names_a_held_report(ctx, channels, rides):

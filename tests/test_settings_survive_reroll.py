@@ -116,9 +116,10 @@ def test_the_dials_the_audit_left_undecided_survive_reroll(temp_db):
     Three are dials by the docstring's own test -- a preference the host set,
     not a fact the fiction produced:
 
-    * `living_world` -- what the world does on its own. Same family as
-      `background_config`; the CONSEQUENCES it mints are diegetic and still
-      roll back, exactly as vitals roll back while `survival_enabled` stands.
+    * `living_world` -- the retired living-world ladder's row (deleted with
+      the paid off-screen tiers, 2026-11-01; read and written by nothing
+      since). An old story still holds one, and it stays the host's dial it
+      was: a rewind leaves it as the host left it.
     * `player_authority` -- the dial a story's whole premise can rest on
       (`Design.md` hard mode). Switch to `actor_only` at turn 40, reroll
       turn 40, and getting `world_author` back with no notice is the exact

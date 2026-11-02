@@ -692,9 +692,10 @@ def _specialist_payload(name, ctx, sc, view, extras):
         # the objects owner's and needs the poster's reports as much as a
         # telling does, and here it could only have had them by accident.
         payload.update({
-            # Existing debts and evident public roles constrain the social
-            # consequence of a routed act. They are standing context only;
-            # receiving them grants no new output channel or invented act.
+            # Evident public roles constrain the social consequence of a
+            # routed act. Standing context only; receiving them grants no new
+            # output channel or invented act. (Existing debts rode beside
+            # them until 2026-10-02; the ledger went on 2026-11-01.)
             "social_standing": extras.get("social_standing") or {},
             "crowds": extras.get("crowds") or [],
             "couriers": extras.get("couriers") or [],
@@ -909,7 +910,7 @@ def _stage_container(out, stage, channel):
     which the interpret contract spells `contact_assertions` (the same ops,
     validated by `_validated_player_contact_assertions` downstream exactly
     as a model-authored copy would be)."""
-    if channel == "obligations" or (stage == "resolve" and channel == "public_evidence"):
+    if stage == "resolve" and channel == "public_evidence":
         return out, channel
     if stage == "interpret" and channel == "contact_ops":
         return out, "contact_assertions"

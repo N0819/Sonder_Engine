@@ -302,8 +302,9 @@ READER_FACING_TABLES = {
     # JS string sweep. A promise about a table that is not there is the same
     # shape as the one this comment block exists to prevent.
     "agents/runtime.py": {"STEP_LABELS"},
-    "world/living_world.py": {"LIVING_WORLD_DESCRIPTIONS"},
-    "story/scene.py": {"OFFSCREEN_LIFE_DESCRIPTIONS"},
+    # `world/living_world.py`'s `LIVING_WORLD_DESCRIPTIONS` and
+    # `story/scene.py`'s `OFFSCREEN_LIFE_DESCRIPTIONS` were here until
+    # 2026-11-01, deleted with the off-screen ladder they described.
     "mind/affect.py": {"CAPACITY_DESCRIPTIONS"},
 }
 

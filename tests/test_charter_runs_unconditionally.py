@@ -4,9 +4,11 @@ Ruled by the owner 2026-09-04: charter defaults on and cannot be turned off.
 The only reason it does not run is that this story has no charter yet.
 
 The gate that is gone read the `offscreen_life` ceiling and refused below
-`deterministic`. That ceiling is a SPEND gate -- `living_world.effective_depth`
-says so outright, and `story/artifacts.py` uses it to withhold model-authored
-wording. Charter's advance path spends nothing: `world/charter_runtime.py`
+`deterministic`. That ceiling was a SPEND gate -- `living_world.effective_depth`
+said so outright, and `story/artifacts.py` once used it to withhold
+model-authored wording (both readers, and the ladder, were deleted on
+2026-11-01; a story may still STORE a rung, which is what the parametrized
+test below writes). Charter's advance path spends nothing: `world/charter_runtime.py`
 contains no provider seam at all, and `advance_snapshot` is a deterministic walk
 of a copied registry. So the ceiling was withholding free work, and a host who
 set the ladder to `inert` for cost reasons silently froze the town instead.

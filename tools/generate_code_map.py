@@ -79,7 +79,7 @@ MODULE_PURPOSES = {
     "persist.commit_room_registry": "Room identity across frames: registry projection, mint dedup, renames, retirement, exit pruning.",
     "persist.commit_attire": "The mutable clothing ledger: attire notes, shed/worn garment entities, the validated attire diff.",
     "persist.commit_entities": "world_entities projection of the scene commit, awareness gate, disguise supersession.",
-    "persist.commit_ledgers": "Pending-obligation and world-pressure debt ledgers.",
+    "persist.commit_ledgers": "The world-pressure ledger.",
     "persist.commit_mapping": "Lore/book mapping commit: book ops, lore ops, canon fallback ops, offscreen-event normaliser.",
     "persist.commit_background": "Background presences: tracking, identity folding, the reactor gate, promotion to cast.",
     "persist.commit_scene_state": "The prepared post-turn scene: pre-lock build, scene commit domain, book anchoring, ground advance.",

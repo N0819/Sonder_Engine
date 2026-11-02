@@ -20,7 +20,7 @@ from world.spatial import _merge_entity, _merge_room
 # Ordered-operation ledgers preserve every entry. Object maps instead preserve
 # every transform in ``history`` while exposing the latest compiled snapshot.
 LIST_CHANNELS = frozenset({
-    "cast_changes", "introductions", "public_evidence", "obligations",
+    "cast_changes", "introductions", "public_evidence",
     "crowd_ops", "courier_ops", "telling_ops", "charter_ops",
     "ratified_claims", "contradicted_claims", "contact_ops",
     "contact_action_ops", "substance_ops", "remove_entities",

@@ -24,10 +24,11 @@ being fixed twice and drifting a third time.
 Two things this is deliberately not:
 
   * **Not a replacement for `core/jobs.py`**, which solves the same two
-    problems for offscreen ticks, artifact generation and memory
-    consolidation. It has LANDED -- `world/offscreen.py`, `story/artifacts.py`,
+    problems for charter catch-up, artifact generation and memory
+    consolidation. It has LANDED -- `story/artifacts.py`,
     `persist/checkpoints.py` and `persist/commit_memory_write.py` all import
-    it -- so "it is not merged, importing it is not available", which this
+    it (`world/offscreen.py` did too, until its paid tiers were retired on
+    2026-11-01) -- so "it is not merged, importing it is not available", which this
     paragraph used to say, is no longer why the two are separate. Nothing
     replaced this module when jobs.py arrived, and the two are still the same
     shape on purpose: terminal work leaves the active table, cancellation is

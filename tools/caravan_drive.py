@@ -170,7 +170,7 @@ def make_R():
         for key, value in over.pop("diff", {}).items():
             diff[key] = value
         out["resolved_event"] = prose
-        for key in ("changes_asserted", "dice", "obligations",
+        for key in ("changes_asserted", "dice",
                     "fact_adjudications", "dialogue_log", "dialogue_order"):
             out.setdefault(key, [])
         out.update(over)

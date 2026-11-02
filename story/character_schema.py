@@ -764,7 +764,7 @@ def default_character_data(name: str = "Unnamed") -> dict:
         },
         "initial_outfit": {"wearing": [], "state": [], "regions": {}},
         "simulation": {"tier": "mid", "temperature": 0.8, "sampler": {},
-                       "curiosity": 0.5, "offscreen_agent": False},
+                       "curiosity": 0.5},
         "embodiment": {
             # `needs_light` and `equivalent` are the two fields that make
             # sight AUTHORABLE (A87): a sense that says it does not need
@@ -1695,7 +1695,6 @@ def normalize_character_data(value: dict) -> dict:
             "tier": str(value.get("tier") or "mid"),
             "temperature": _float_or(value.get("temperature"), 0.8),
             "sampler": copy.deepcopy(value.get("sampler") or {}),
-            "offscreen_agent": authored_bool(value.get("offscreen_agent", False)),
         },
         "embodiment": {
             "senses": _legacy_senses(value.get("senses")),
@@ -2069,8 +2068,9 @@ def authored_bool(value, default=False):
     an import, a hand edit or a third-party generator can put the STRING
     "false" in a field the schema declares as a boolean. Every reader that
     spelled this `bool(...)` therefore read that card as opted IN -- measured
-    on `simulation.offscreen_agent`, where the consequence is paid model calls
-    for a character the author switched off.
+    on `simulation.offscreen_agent` (the paid off-screen opt-in, retired with
+    its tier on 2026-11-01), where the consequence was paid model calls for a
+    character the author switched off.
 
     A real bool passes through. A string is read as a word, which is the whole
     point: "false", "no", "off" and "0" are how a human writes False and none
@@ -2090,12 +2090,6 @@ def authored_bool(value, default=False):
         if word in ("true", "yes", "on", "1"):
             return True
     return bool(value)
-
-
-def character_offscreen_agent(sheet: dict) -> bool:
-    """Author-owned opt-in for the paid off-screen character ceiling."""
-    return authored_bool(normalize_character_data(sheet).get(
-        "simulation", {}).get("offscreen_agent", False))
 
 
 def cast_entity_id(sheet: dict, char_id) -> str:
@@ -2727,19 +2721,11 @@ def character_card_warnings(sheet):
             "appearance summary, or into the face/hair/eyes fields, which "
             "are delivered."
         )
-    # A BOOLEAN THAT ARRIVED AS TEXT. `authored_bool` now reads the word, so
-    # the card behaves as written; the author should still be told, because a
-    # field the schema declares as a checkbox holding a string means something
-    # upstream is writing this card by hand.
-    simulation = _section(raw.get("simulation"))
-    if "offscreen_agent" in simulation and not isinstance(
-            simulation.get("offscreen_agent"), bool):
-        warnings.append(
-            "simulation.offscreen_agent holds %r rather than a true/false "
-            "value. It is read as a word, so the card behaves as written — "
-            "but whatever produced this sheet is not writing booleans."
-            % (simulation.get("offscreen_agent"),)
-        )
+    # `simulation.offscreen_agent` was warned about here when it held text
+    # instead of a boolean. The opt-in went with the paid off-screen tier it
+    # opted into (2026-11-01); a card still carrying it carries a key nothing
+    # reads, and a warning about a field's TYPE would tell the author it
+    # matters.
     # AUTHORED AND DROPPED. A station with no name is no handle -- nothing can
     # route to it, so `_normalize_interior` drops it -- and an author who typed
     # a description into it has every reason to think the room exists.

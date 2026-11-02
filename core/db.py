@@ -106,7 +106,11 @@ FRAME_SCOPED_WORLD_KEYS = {
     # in one era survived a rewind or a branch and could be sent onward by
     # `couriers.run_couriers` from an era that never produced it.
     "persona_carrier_state",
-    "pending_obligations",
+    # `pending_obligations` stood here until 2026-11-01, when its ledger was
+    # deleted (the owner: "obligations caused hyperfixation"). An old story
+    # keeps its rows, present and frame-scoped, as its record: nothing reads
+    # them, archives and checkpoints carry them verbatim, and no migration
+    # deletes them (docs/guides/DATABASE.md).
     "shadow_profile", "lore_cache", "active_books",
     # {subject_id: {turn, room, elapsed_seconds}} -- who was co-present with
     # the player, per era like the scene it is read from. Written by

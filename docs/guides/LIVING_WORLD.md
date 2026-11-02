@@ -1,18 +1,51 @@
 # The Living World
 
-What happens when nobody is looking, and every switch that decides how much of
-it happens. Every claim here is against source — `world/living_world.py`,
-`world/offscreen.py`, the forty-one `world/charter_*.py` modules,
+What happens when nobody is looking. Every claim here is against source — the
+forty-one `world/charter_*.py` modules, `agents/offscreen_beat.py` with the
+spatial bubble code, `world/living_world.py`, `world/offscreen.py`,
 `agents/background.py` with `persist/commit_background.py`, and
-`story/scene.py`'s two ladders.
+`story/scene.py`'s `dialogue_config` and `background_config`.
 
-**Nothing here is one feature.** Four subsystems with overlapping names are
-governed by six independent settings that must AGREE before anything happens,
-and every one of them defaults to doing less than a reader expects. That
-composition is what this guide exists to state; it cannot be derived from any
-single module, and no error is raised when it is unsatisfied.
+**The paid off-screen tiers were retired on 2026-11-01.** The owner: "living
+world is supposed to be superseded by charter and writers room." This guide
+used to state a switchboard: a four-approach living-world ladder
+(`off`/`floor`/`ceiling` per approach), the five-rung `offscreen_life`
+authority ceiling over it, an actor cap, and three paid tiers that spent at
+those rungs — a seeded `stochastic` tick draw, out-of-band `profile` ticks, the
+`character_agent` rung, plus the antagonist ladder's `reactive` plans. None of
+it could run after 7140b9cc (2026-09-20), when the approach list was emptied and
+`dialogue_config` forced the actor cap to 0, and the owner's database never
+stored a batch from any of them (review 2026-11-01, `world_offscreen_time` F11).
+It is deleted rather than left switched off: about 2,100 lines of
+`world/offscreen.py`, the ladder in `world/living_world.py` and
+`story/scene.py`, the `/api/chats/{id}/living_world` routes, three prompts per
+language pack and the card's `simulation.offscreen_agent` opt-in.
+`tests/test_the_living_world_tiers_are_gone.py` pins that no engine module
+binds a retired name again.
 
-Related: [`design/DESIGN_LIVING_WORLD.md`](../design/DESIGN_LIVING_WORLD.md),
+**What does their work.** The Charter moves an unwatched population every beat,
+deterministically and without a model call (§3). The Writers' Room plans what
+happens out of view and reaches into the Charter to make it so
+(`agents/story_planner.py`, `story/plot_packages.py`, `world/charter_ops.py`). A
+character who walks out of reach lives a causality bubble: a frame of their
+own, their own perception, a real character call from their own private state,
+and a Director that resolves it (`agents/offscreen_beat.py`,
+`docs/design/DESIGN_OFFSCREEN_SUPERSEDED.md`). And four floors run in every
+story with no setting over them: consequence fuses fire on the story clock
+(`living_world.mint_consequences`, `mechanics._fire_due_events`), an unvisited
+place accrues the history it owes (`record_obligations`, `attach_owed_history`),
+a room re-entered shows what changed (`routines.residue_for`), and the carriers
+move what was witnessed body to body (`story/carriers.py`,
+`story/couriers.py`, `story/artifacts.py`).
+
+**What is left of `world/offscreen.py`** is the off-screen EPOCH: every beat
+`advance_epoch` stamps a stable beat identity on the frame's `offscreen_epoch`
+row — the token the Charter advances on and is idempotent against — and when a
+beat crosses a boundary (`epoch_reasons`: the opening, a change of top-level
+location, a crossed in-world hour, a due event) it records an epoch beside it.
+
+Related: [`design/DESIGN_OFFSCREEN_SUPERSEDED.md`](../design/DESIGN_OFFSCREEN_SUPERSEDED.md)
+for why the tiers went, [`design/DESIGN_LIVING_WORLD.md`](../design/DESIGN_LIVING_WORLD.md),
 [`design/OFFSCREEN_LIFE_DESIGN.md`](../design/OFFSCREEN_LIFE_DESIGN.md) and
 [`design/BACKGROUND_LIFE_DESIGN.md`](../design/BACKGROUND_LIFE_DESIGN.md) for the
 arguments; [`EXTENSIONS.md`](EXTENSIONS.md) for the integration boundary;
@@ -29,149 +62,82 @@ share no setting, no pipeline step and no ledger.
 | Name | What it is | What it is **not** |
 |---|---|---|
 | **Charter** | The institution simulator: people, duties, upkeeps, beliefs, goods, reporting lines. Forty-one `world/charter_*.py` modules behind `world/charter.py`. A *thing that runs*. | Not a setting. Nothing named `charter` turns Charter on. |
-| **Living World** | Four author-selectable **policies** deciding which world-generation machinery runs, each `off`/`floor`/`ceiling`. `world/living_world.py`. | Not a simulator. It is the switchboard, not the thing switched. |
-| **off-screen life** | The chat-level **authority ceiling** over all of the above, five rungs. `story/scene.py` (`OFFSCREEN_LIFE_LADDER`). | Not an instruction that anything must happen — only a cap on what may. |
+| **Living World** | The deterministic floors that make the world keep its own causes: consequence fuses (B) and places that owe a history (D) in `world/living_world.py`, routine and residue (A) in `world/routines.py`, the carriers (C). | Not a switchboard any more. Its approach ladder was emptied 2026-09-20 and deleted 2026-11-01; every floor runs in every story. |
+| **off-screen life** | What an ABSENT registered character does: a causality bubble of their own, opened when they walk out of reach (`max_bubbles`, `bubble_radius`). `agents/offscreen_beat.py`, `world/spatial_bubbles.py`. | Not a ladder. The five-rung `offscreen_life` ceiling and its paid tiers were deleted 2026-11-01. |
 | **background life** | Voicing unregistered people who are **present in the room**, during the turn. `agents/background.py`. | Not off-screen anything. Its subjects are on screen. |
 
 **The boundary sentence, if you remember one thing.** Background life voices
 bodies that are PRESENT IN THE SCENE and UNREGISTERED (no `chat_chars` row,
 tracked only in `background_presences`), during the turn, inside the
 `background_react` step. Off-screen life advances bodies that are ABSENT FROM
-THE SCENE and REGISTERED (`chat_chars.status='dormant'`, with sheets), between
-turns, inside `world/offscreen.py`.
+THE SCENE and REGISTERED, in a frame of their own, one beat of theirs per
+committed beat of the player's, out of band (`schedule_offscreen_beats`). A
+townsperson nobody promoted is neither: the Charter moves them.
 (`persist/commit_background.py`'s `track_background_presences`,
-`world/offscreen.py`'s `dormant_subjects`.)
-
-### Two things called "ceiling"
-
-They are different, they interact, and confusing them is the most common way to
-mis-configure a story.
-
-- **A depth ceiling** is the top of one Living World approach's own ladder —
-  the model-assisted tier of *the same mechanism* whose `floor` is
-  deterministic. `world/living_world.py` (`LIVING_WORLD_DEPTHS`).
-- **The off-screen ceiling** is the chat's `offscreen_life` rung acting as an
-  authority cap *over all four approaches at once*. It rides inside a
-  living-world config dict under `OFFSCREEN_CEILING_KEY`, in memory only,
-  between read and use. `world/living_world.py` (`OFFSCREEN_CEILING_KEY`).
-
-Its one durable home is `dialogue_config["offscreen_life"]`.
-`normalize_living_world` builds its output solely from
-`LIVING_WORLD_APPROACHES`, so `offscreen_life` cannot acquire a second stored
-spelling under the living-world key — it is dropped on every write
-(`world/living_world.py`, `normalize_living_world`).
+`agents/offscreen_beat.py`'s `live_bubbles`.)
 
 ### Other collisions worth knowing before you grep
 
 | Term | Here it means | Elsewhere it means |
 |---|---|---|
-| `place_obligations` | an **approach** key in the ladder | also the **world-KV key** of the obligation ledger (`OBLIGATION_KEY`, `world/living_world.py`) — same string, different namespace |
+| `place_obligations` | the **world-KV key** of approach D's ledger (`OBLIGATION_KEY`, `world/living_world.py`) — what an unvisited place owes | not the Director's debt ledger, `pending_obligations`, deleted 2026-11-01; and no longer an approach key, since the ladder went |
 | `post` | a Charter duty slot | `scene.stations` is a body's within-room position; the model docstring names this the one naming trap (`world/charter_model.py`'s module docstring) |
 | `registry` | the frame-scoped `charters` KV blob | `room_registry` is the cross-frame room-identity ledger |
-| `character_agent` | top rung of the per-chat ladder | `schemas.BehaviorController` uses the identical five names **per character** (`llm/schemas.py`, `BehaviorController`) |
 | `route` | a character-history topology decision (`story/history_routing.py`) | a spatial edge in `world/spatial.py` |
 | `structure` | a planted, prose-free town skeleton in `world/structure.py`, composed into the live scene on demand | not a Charter primitive; it holds rooms, not people |
 | `gap` | "what changed about subject X between turn N and now" (`world/gaps.py`), model-free | not an off-screen tick; it *reads* `offscreen_log`, it does not write it |
+| `epoch` | a boundary the world crossed, recorded beside the beat stamp on `offscreen_epoch` | not a turn, and since 2026-11-01 not a spend gate: nothing is scheduled off it |
 
 ---
 
-## 1. Every gate
+## 1. Every setting
 
-**Corrected 2026-11-01 (`world_offscreen_time` F11): three of these six gate
-nothing today.** Since 7140b9cc (2026-09-20) `scene.dialogue_config` forces
-`offscreen_life` to its default and `max_offscreen_actors` to 0 on every read
-(a stored `max_offscreen_actors` is read as `max_bubbles`, the dial the
-Dialogue Config UI sets now), and `living_world.LIVING_WORLD_APPROACHES = ()`,
-so no `living_world.<approach>` survives a write (`normalize_living_world`
-always answers `{}`) and `living_world_allows` -- asked only inside
-`world/offscreen.py` -- is False for every approach and depth. So the paid
-rungs below cannot run, and the floors this guide describes as gated -- the
-consequence fuses, place obligations, routine residue -- run in every story.
-Retire or revive is UNBUILT_LIVING_WORLD §1.256; the tables below keep the
-ladder as it was built.
+Five, and none of them can switch the world's own causes off.
 
-Six axes. All of them must permit a behaviour before it occurs.
-
-| Gate | Values | Default | Stored | Set by | Unknown value |
+| Setting | Values | Default | Stored | Set by | Unreadable value |
 |---|---|---|---|---|---|
-| `offscreen_life` | `inert`, `deterministic`, `reactive`, `stochastic`, `character_agent` | `stochastic` | `dialogue_config`, chat-global | nobody since 2026-09-20: `dialogue_config` forces the default on every read | falls to the **default**, not the floor (`story/scene.py`, `normalize_offscreen_life`) |
-| `living_world.<approach>` | `off`, `floor`, `ceiling` × four approaches | `off` | world KV `living_world`, per chat | `PUT /api/chats/{id}/living_world` (stores nothing since 2026-09-20: `LIVING_WORLD_APPROACHES = ()`) | unknown **depth** → default `off`; every **approach key** is dropped, since none is known |
-| `max_offscreen_actors` | `0`–`12` | `0`, forced | `dialogue_config` | nobody: a stored value is read as `max_bubbles` (default 3) | clamped (`story/scene.py`, `dialogue_config`) |
+| `max_bubbles` | `0`–`12` | `3` | `dialogue_config`, chat-global | the Dialogue Config panel's Absent threads card | the default (`story/scene.py`, `dialogue_config`); a stored `max_offscreen_actors` from before 2026-09-20 is read as this |
+| `bubble_radius` | `1`–`12` rooms walked | `3` | as above | as above | the default, never the floor (`story/scene.py`, `normalize_bubble_radius`) |
 | `background_config.scene_life` | `off`, `ambient`, `full` | `off` | world KV `background_config` | `PUT .../background_config` | treated as `off`, silently — there is no `normalize_scene_life` |
 | `background_config.max_reactors` | `1`–`3` | `1` | as above | as above | clamped in the stage, not in the config reader |
-| `simulation.offscreen_agent` | bool | `false` | the character card | card editor | see the trap in §7 |
+| `background_config.max_managed` | `1`–`8` | `6` | as above | as above | clamped only on the HTTP route (`web/app.py`'s `bg_cfg_put`) |
 
-Two of these have a second, quieter axis beside them:
-`background_config.max_managed` (1–8, clamped only on the HTTP route,
-`web/app.py`'s `bg_cfg_put`), and `simulation.offscreen_importance`, the manual
-importance override — which ranks the **free** profile rung and can never opt
-anything in (`world/offscreen.py`, `OVERRIDE_FIELD`).
+**`max_bubbles` caps how many threads EXIST, never how many advance.** At the
+cap the next character to walk away simply does not get a thread, and the
+refusal is reported; an open thread is never paused to make room
+(`agents/offscreen_beat.OFFSCREEN_BEATS_ARE_UNCAPPED`, the owner's ruling of
+2026-09-17). `0` means none.
 
-### The two ladders, side by side
-
-`offscreen_life` rungs are **cumulative** — at `character_agent` a single epoch
-runs the free seeded draw *and* schedules profile ticks *and* schedules agent
-ticks, three producers over the same dormant cast, each capped independently by
-the same `max_offscreen_actors` number (`world/offscreen.py`: `advance_epoch`,
-`schedule_profile_ticks`, `schedule_agent_ticks`).
-
-| Approach | What its floor does | Ceiling built? | Floor needs | Ceiling needs |
-|---|---|---|---|---|
-| `routine_residue` | the world's default motion; payload-side only, persists nothing | no | `deterministic` | `stochastic` |
-| `scheduled_consequence` | surfaces a fired consequence fuse (the walk-in notice, the re-entry residue read). Minting and firing are ungated since 2026-09-07 — see below | no | `deterministic` | `stochastic` |
-| `place_obligations` | surfaces a place's accrued owed history | no | `deterministic` | `stochastic` |
-| `antagonist_ladder` | fires authored plan stages on typed triggers | **yes** | `reactive` | `character_agent` |
-
-Three of the four have no built ceiling: setting them to `ceiling` marks intent
-and runs the floor (`LIVING_WORLD_BUILT`, `world/living_world.py`). Only
-`antagonist_ladder` has one.
-
-**`effective_depth` never errors.** It lowers a requested depth to the highest
-depth at or below it that is both BUILT and within the off-screen ceiling
-(`world/living_world.py`, `effective_depth`). Ask for something unavailable
-and you get something quieter, silently. Read `effective`, never `value`, when you want to
-know what will run — the API returns both for exactly this reason
-(`world/living_world.py`, `living_world_levels`).
+**Retired, and dropped where met.** `offscreen_life`, `offscreen_cognition` and
+`max_offscreen_actors` in `dialogue_config` (`scene.RETIRED_DIALOGUE_KEYS`:
+`dialogue_config` reports none of them and the panel's PUT stores none of them
+again), the `living_world` world-KV row (read and written by nothing; kept
+classified as a hand-set dial so a rewind leaves an old story's row alone), and
+the card's `simulation.offscreen_agent` and `simulation.offscreen_importance`
+(read by nothing; an old card keeps the keys).
 
 ---
 
 ## 2. "I want X to happen"
 
-The payload. Each row is a conjunction: **every** requirement must hold.
-
-| Goal | Requirements |
+| Goal | What it takes |
 |---|---|
-| Nothing at all off screen | `offscreen_life = inert` **and** all four approaches `off`. Note `inert` alone is not enough — see §7. No off-screen NOTICE reaches the page; a declared consequence is still recorded and still fires on its clock, as accrued truth nobody is told about — with the one exception §7's asymmetry paragraph names, a body physically standing where a fuse lands, which the carrier rail may still hand what it saw. |
-| Scheduled effects only (arrivals, expiry, news latency) | `offscreen_life = deterministic` |
-| A consequence fired later from an adjudicated declaration | nothing — every declared fuse is minted and fires on its clock (2026-09-07). What the settings decide is whether anyone MEETS it: the walk-in notice and the re-entry residue read need `offscreen_life ≥ deterministic` **and** `scheduled_consequence = floor` |
-| A place carrying its owed history into a scene | `offscreen_life ≥ deterministic` **and** `place_obligations = floor` |
-| An authored antagonist advancing a plan unwatched | `offscreen_life ≥ reactive` **and** `antagonist_ladder ≥ floor` |
-| A named absent character advancing their **own** plans | `offscreen_life = character_agent` **and** `antagonist_ladder = ceiling` **and** the card's `simulation.offscreen_agent = true` **and** `max_offscreen_actors > 0` **and** that character's `chat_chars` status is `dormant` **and** the beat minted an epoch **and** that mind has a *private reason* |
-| An institution **catching up** — its people, duties, markets and gossip advancing over elapsed time | A charter in the registry, and nothing else. Ungated since 2026-09-04: charter is where an unwatched body lives, not a mechanism a ladder rung may switch off, and its advance path spends no model call. |
-| A room showing what changed while it was unwatched | `routine_residue ≥ floor` **and** `offscreen_life ≥ deterministic` **and** a declared movement — but Charter incidents reach the same payload slot ungated, and are prepended ahead of routine texture (`agents/director.py`, the `destination_residue` block of `director_resolve`) |
-| An unregistered presence speaking in the room | none of the above — this is `background_react`, gated only by `pick_background_reactors` and `max_reactors` |
+| Nothing at all off screen | Not available, by design. The Charter, the fuses, the place ledger, the residue and the carriers are how the world works rather than features; `max_bubbles = 0` stops new threads for absent characters; it and `bubble_radius` are the only off-screen dials. |
+| A consequence fired later from an adjudicated declaration | nothing — every declared fuse is minted and fires on its clock. A notice reaches the page only when the player stands where it fires (`mechanics._fire_due_events`); otherwise it is met at re-entry (`routines.residue_for`) or carried by a body that was there. |
+| A place carrying its owed history into a scene | nothing — `record_obligations` accrues it as fuses fire and `attach_owed_history` hands it to the place's generation alone, never to a mind. |
+| A room showing what changed while it was unwatched | a declared movement into a room seen before. Charter incidents reach the same payload slot and are prepended ahead of routine texture (`agents/director.py`, the `destination_residue` block of `director_resolve`). |
+| A named absent character advancing their **own** plans | a causality bubble: the character walks more than `bubble_radius` rooms from the party and out of the building the party stands in, while fewer than `max_bubbles` threads are open. Their beats run out of band, one per committed beat of the player's, from their own perception and private state (`agents/offscreen_beat.py`). |
+| An authored antagonist advancing a plan unwatched | the Writers' Room plans it — plot packages, scheduled events and Charter operations (`story/plot_packages.py`, `world/charter_ops.py`) — or the antagonist is a character, and lives a bubble. |
+| An institution **catching up** — its people, duties, markets and gossip advancing over elapsed time | A charter in the registry, and nothing else. Ungated since 2026-09-04: charter is where an unwatched body lives, and its advance path spends no model call. |
+| An unregistered presence speaking in the room | `background_react`, gated only by `pick_background_reactors` and `max_reactors` |
 | A creature hunting a town off screen — kills, raids, spoor, tribute, and the watch called out | A charter carrying `creature` in the registry (ungated, as above) (`world/charter_creature.py`); the catch-up then steps every charter TOGETHER with a predation round between windows (`world/charter_predation.run_registry`, `charter_runtime.advance_snapshot`'s together arm). A registry with no creature never enters that arm. The town answers through `charter_decide.mobilisation_calls` when a post with `mobilise` authority holds a threat claim above its credence |
 | A whole location's populace voiced in one call | `background_config.scene_life = ambient` or `full` |
 
-**The paid-tick row is the one people get wrong**, and `AGENTS.md`'s
-paid-off-screen-tick row ("Three gates compose") is correct as a conjunction
-but incomplete as a checklist. The code adds an epoch-opportunity gate, a
-non-empty-epoch-id gate, the actor cap and a dormant-status gate
-(`world/offscreen.py`'s `schedule_agent_ticks` and `full_agent_candidates`).
-Satisfy only the three named gates and you still get nothing on most beats —
-correctly.
-
-A **private reason** is the firewall-safe justification a paid tick requires:
-an owned plan with status `active`, or a carried report acquired later than
-that subject's own last paid tick (`world/offscreen.py`'s `dormant_subjects`).
-Importance ranks nothing here; truncation is by `chat_chars.char_id` ascending
-in the same function.
-
-An **epoch** is one frame-scoped off-screen opportunity, minted at most once
-per beat when `epoch_reasons()` is non-empty, carrying one `epoch_id` that
-seeds and idempotence-stamps every tick derived from it
+An **epoch** is one frame-scoped boundary the world crossed, recorded at most
+once per beat when `epoch_reasons()` is non-empty, with one `epoch_id`
 (`world/offscreen.py`, `epoch_reasons`). It is not a turn — many turns of
-conversation can pass inside one epoch, which is the point.
+conversation can pass inside one epoch. Since 2026-11-01 nothing spends on it:
+the Charter advances on the BEAT stamped beside it, every beat.
 
 ---
 
@@ -236,13 +202,13 @@ it. Direct sibling imports work. That is not permission.
 
 | What | Where | Frame-scoped |
 |---|---|---|
-| Living World config | world KV `living_world` | no |
-| off-screen ceiling | `dialogue_config.offscreen_life` | no (chat-global) |
+| absent-thread dials (`max_bubbles`, `bubble_radius`) | `dialogue_config` | no (chat-global) |
 | Charter registry | world KV `charters` | **yes** |
-| obligation ledger | world KV `place_obligations` | **no** — chat-global across every era |
+| place-obligation ledger (approach D) | world KV `place_obligations` | **no** — chat-global across every era |
 | planted town skeletons | world KV `structures` (`world/structure.py`) | **no** — chat-global |
-| off-screen epoch / plans | world KV, per frame | **yes** |
-| `offscreen_log` — the append-only tick ledger | world KV, per frame | **yes** |
+| off-screen epoch and beat stamp | world KV `offscreen_epoch`, per frame | **yes** |
+| `offscreen_log` — the append-only tick ledger (bubbles append; old stories hold retired-tier batches `world/gaps.py` still reads) | world KV, per frame | **yes** |
+| the retired ladder's rows, read by nothing: `living_world`, an old story's `offscreen_plans` | world KV | `offscreen_plans` **yes**, `living_world` no |
 | background presences | world KV `background_presences` | **yes** |
 | fired consequences, Charter incidents | `scheduled_events` → `world_events` | rows carry `frame_id` |
 
@@ -278,16 +244,17 @@ it goes in world KV or one of those tables, **and** is enumerated in
 **Not carried, and this is the sharp edge.** Spatial frames are a different
 mechanism from the five above, and Charter does not cross them:
 
-- A frame **split** seeds the away frame from exactly seven parent keys —
-  `known`, `simulation_clock`, `standing_intentions`, `pending_obligations`,
-  `shadow_profile`, `background_presences`, `offscreen_log`
+- A frame **split** seeds the away frame from eight parent keys —
+  `known`, `simulation_clock`, `standing_intentions`, `shadow_profile`,
+  `background_presences`, `offscreen_log`, `charter_last_places` and
+  `knowledge_circles` — plus each cast member's `relationships:<id>`
   (`world/spatial_frames.py`, `perform_split`). `charters`, `offscreen_epoch`
-  and `offscreen_plans` are **not** among them.
+  and `offscreen_plans` are **not** among them; the registry is the era's,
+  shared rather than copied.
 - A frame **merge** reconciles only `simulation_clock`, `known`,
   `relationships:<id>` and `scene` (`world/spatial_frames.py`,
-  `perform_merge`). Nothing a Charter, a plan or a standing intention did in
-  the away frame comes back;
-  those rows are orphaned.
+  `perform_merge`), with knowledge circles unioned back. Nothing a standing
+  intention did in the away frame comes back; those rows are orphaned.
 - `create_frame` writes no world rows at all (`core/frames.py`), so a newly
   created past/future/other era has no `charters` row and every catch-up tick
   there records `charter_skip: "no_charters"` until one is generated.
@@ -303,16 +270,15 @@ first paragraph as a reading of the mechanism, not as a guarantee.
 
 | Route | Does |
 |---|---|
-| `GET/PUT /api/chats/{id}/living_world` | read/write the four-approach config; the PUT returns the normalized result so a dropped key is visible immediately |
 | `GET/PUT /api/chats/{id}/charters` | read/write the frame-scoped registry |
 | `GET /api/chats/{id}/charters/diagnostics` | inspect belief, judgment and planning state; `?body=` selects one body |
 | `POST /api/chats/{id}/charters/generate` | generate one lore-grounded lived location; the body's `population` (an integer) is a closure input the closer lands within `POPULATION_TOLERANCE`, and the result's `closure` record says what was asked, planned and closed, which head posts were held to one holder, and which berths were split |
 
 The three `charters` routes take a `frame_id` query parameter, and the
 mutating ones call `_require_frame_idle` first — a turn in flight refuses a
-Charter write with a 409. **`PUT /living_world` does neither**: it takes no
-frame and holds no guard, which is coherent (the ladder is chat-global) and
-worth knowing before you assume the four behave alike. `GET /charters` returns the registry plus `character_history_routes`,
+Charter write with a 409. (`GET`/`PUT /living_world` sat beside them until
+2026-11-01; it went with the ladder it set, and an old caller gets a 404.)
+`GET /charters` returns the registry plus `character_history_routes`,
 `character_journey_histories` and `registry_warnings`; `GET
 /charters/diagnostics` returns beliefs, judgments, provenance, obligations and
 decisions, and `?body=` unlocks the per-body belief fields. Those two are the
@@ -326,29 +292,24 @@ WITHHELD, and `apply_presence_conduct` refuses with
 
 ### From Python
 
-Four hooks, behind two capability names. Importing `world.charter_runtime`
+Three hooks, one behind a capability name. Importing `world.charter_runtime`
 directly is still outside the boundary; these are the supported path.
 
 | Surface | Capability | Does |
 |---|---|---|
-| `story_view(...)["living_world"]` | none — the key is always present | the ladder as stored **and as it will actually run**, the off-screen ceiling and actor cap, the background config, a row per institution, and `registry_warnings` |
+| `story_view(...)["living_world"]` | none — the key is always present | `max_bubbles`, the background config, a row per institution, and `registry_warnings` (schema 5; schema 4 carried the retired ladder here instead) |
 | `story_view(..., charters="full")` | as above | the complete registry — the same bytes `GET /charters` serves |
-| `provision_story(..., offscreen_life=, living_world=)` | `living_world_provisioning` | set the ladder inside the same transaction that creates the story; the result carries the effective ladder back |
 | `api.generate_lived_location(...)` / `api.living_world_job(...)` | `living_world_generation` | add an inhabited place, and see whether a previous attempt was interrupted |
 
-Two things about that table are load-bearing.
-
-**Read `effective`, never `value`.** The provisioning result and the slice both
-carry `approaches`, which is `living_world_levels`' own output — so `value`
-(what was asked for) and `effective` (what will run) come from the same
-`effective_depth` the gates use and cannot drift. A caller that reads back only
-its own request learns nothing, because the clamp is silent.
-
-**The arguments are refused, not normalized** — the opposite of the HTTP
-routes, and deliberate. A host typing into a panel sees the normalized answer
-come straight back and can correct it. A campaign sees nothing, and
-`normalize_offscreen_life` falls to the DEFAULT rather than the floor, so a
-typo would buy *more* off-screen life than was asked for.
+**`provision_story(..., offscreen_life=, living_world=)` is retired, and
+accepted.** Its capability name `living_world_provisioning` left
+`api.capabilities` on 2026-11-01 with the ladder the two arguments set. `ext_api`
+stays 1, so every rung, approach and depth either argument ever accepted is
+still accepted, provisions nothing, and is reported three ways: a
+`DeprecationWarning`, a line on the extension's log, and a sentence in the
+result's `deprecations`. A value the ladder never had is still refused before
+the archive is touched (`extension_runtime/api.py`,
+`RETIRED_LIVING_WORLD_APPROACHES`).
 
 A lived-location request may name characters by `resource_uid` — the identity
 that survives an archive — instead of by this install's row ids, which is what
@@ -363,11 +324,10 @@ interrupted **after** it began planting rooms is refused rather than repeated,
 because `_remap_generated_town` reads live state and replaying it would plant
 the same town twice; `GET /charters/job` reports it and `DELETE` clears it.
 
-The ladders **are** served to the UI as data — `offscreen_life_levels`
-(`web/app.py`, `dlg_get`) and `LIVING_WORLD_DESCRIPTIONS` ride with the config,
-on the stated reasoning that a menu should render the engine's own ladder rather than
-a copy that drifts. Any future developer-facing surface should extend that
-rather than restate these tables.
+The retired ladders were served to the UI as data (`offscreen_life_levels`,
+`LIVING_WORLD_DESCRIPTIONS`), on the stated reasoning that a menu should render
+the engine's own ladder rather than a copy that drifts. The reasoning stands
+for whatever dial comes next.
 
 ---
 
@@ -409,19 +369,17 @@ process is detected exactly, with no staleness timeout to tune.)
 Each of these is a place where the code does something other than what a
 reasonable reading of a name, a default or a docstring predicts.
 
-**`inert` does not mean nothing happens.** It stops new minting. Already-minted
-scheduled events keep firing — `commit_transit_sweep` and `mechanics_sweep`
-have no `offscreen_life` gate anywhere in the path
-(`persist/commit_mechanics.py`'s `commit_transit_sweep` says so explicitly). A
-story set to `inert` keeps delivering the arrivals, news and consequences it already scheduled.
+**No setting stops the world's own causes, and none ever did once they ran.**
+Already-minted scheduled events fire whatever any dial says —
+`commit_transit_sweep` and `mechanics_sweep` read no setting anywhere in the
+path (`persist/commit_mechanics.py`'s `commit_transit_sweep` says so) — and
+since 2026-11-01 there is no ladder left to set: arrivals, news, expiry and
+consequences land on the clock in every story.
 
-**The five rungs are no longer a host-facing setting.** Since 2026-09-04 the panel asks one question -- *allow off-screen cognition* -- and derives the rung from it: `reactive` when off, `character_agent` when on (`story/scene.py`, `COGNITION_OFF_RUNG`). The ladder survives as the MECHANISM, because the four approaches below are written against its rungs and `provision_story(offscreen_life=...)` is a published extension contract, so every table in this guide still reads true; what changed is that a host no longer picks a rung. The line falls where the code spends: `advance_epoch`, `advance_reactive_plans`, `apply_plan_ops` and `stochastic_ticks` hold no model seam, while `schedule_profile_ticks` and `schedule_agent_ticks` do.
-
-**`offscreen_life` no longer gates ANY Charter path.** It gated the catch-up
-tick until 2026-09-04, and that was the single most misleading thing about the
-ladder; the gate is now gone, so a charter in the registry advances at every
-rung including `inert`. Four other Charter paths never carried a ladder gate at
-all:
+**Nothing gates any Charter path.** The catch-up tick was gated by the
+`offscreen_life` ceiling until 2026-09-04, and that was the single most
+misleading thing about the old ladder; a charter in the registry advances every
+beat. Four other Charter paths never carried a gate at all:
 `commit_charter_observations`, an ordinary commit domain writing bodies'
 private claims from `director_resolve.public_evidence` every beat and letting
 the bodies in a figure's room see the figure (`sight_figures_in_scene`)
@@ -429,75 +387,39 @@ the bodies in a figure's room see the figure (`sight_figures_in_scene`)
 `apply_presence_conduct`, which mutates the registry from `background_react`
 output (`world/charter_runtime.py`); the arrival-residue read; and the
 planted-structure read. Charter *generation* is ungated too (`web/app.py`,
-`charters_generate`). A story set to `inert` still accrues Charter evidence, still forms beliefs, still advances its institutions, and can still
-have a whole town generated into it.
+`charters_generate`).
 
 **The carrier network is ungated in the same way, and it is large.**
-`world/crowds.py`, `story/carriers.py` and `story/couriers.py` contain zero
-`offscreen_life` and zero `living_world` references. This is what approach C
-became when it left the ladder: rumour transport is core epistemic physics, on
-the stated reasoning that a setting able to disable witnessing, speech or
-letters makes the world incoherent (`world/living_world.py`,
-`LIVING_WORLD_APPROACHES`). It is not configurable, and it does not stop.
+`world/crowds.py`, `story/carriers.py` and `story/couriers.py` read no
+setting. This is what approach C became when it left the ladder (before the
+ladder itself went): rumour transport is core epistemic physics, on the stated
+reasoning that a setting able to disable witnessing, speech or letters makes
+the world incoherent. It is not configurable, and it does not stop.
+`story/artifacts.py`'s wording mint, which read the old ceiling, is ungated
+since 2026-09-20 and bounded by its own attempt cap.
 
-(A fifth consumer of the ladder sits outside both `world/offscreen.py` and
-`world/charter_runtime.py`: `story/artifacts.py`'s `spoor_artifact` gates
-artifact wording on `offscreen_life ≥ stochastic`.)
+**A consequence's truth and its surface are different things, and neither is
+a setting.** A fired fuse's CONTENT reaches a reader in two places — the
+walk-in notice (`world/mechanics.py`, `_fire_due_events`, only where the player
+stands) and the re-entry residue read (`world/routines.py`, `residue_for`).
+Beneath them is the truth spine and the physics on top of it: a fired row is
+promoted to `world_events` like any other kind, so the gap skeleton can report
+that something of kind `consequence` happened at a place during an absence
+(the kind and the place, never the `what`), and the carrier rail may hand its
+`witnessed` surface to a body physically standing there. `record_obligations`
+accrues a place's history whether or not anybody ever arrives
+(`world/living_world.py`). Until 2026-09-07 the mint itself was gated, which
+threw away every fuse the prose author declared in the default chat; a fuse is
+Director-adjudicated causality, so it is recorded whatever happens next
+(review 2026-09-07, A82).
 
-**Turning an approach off is equally asymmetric.** Setting
-`scheduled_consequence = off` stops neither the minting nor the firing of a
-fuse: it withholds the two places a fired one's CONTENT reaches a reader —
-the walk-in notice (`world/mechanics.py`, `_fire_due_events`'s
-`surface_consequences`, read once per sweep from this chat's own depth) and
-the re-entry residue read (`world/routines.py`, `residue_for`). What stays
-ungated either way is the truth spine and the physics on top of it: a fired
-row is promoted to `world_events` like any other kind, so the gap skeleton
-can report that something of kind `consequence` happened at a place during
-an absence (the kind and the place, never the `what`), and the carrier rail
-may hand its `witnessed` surface to a body physically standing there —
-rumour transport left the ladder deliberately (above). Nor does it stop
-`record_obligations`
-accruing history — that function is ungated by the `place_obligations`
-setting entirely (`world/living_world.py`). The principle is *settings gate
-surfaces, never truth*; grep for a setting to find where a ledger is
-controlled and you will find the surface, not the accrual.
-
-Until 2026-09-07 the mint itself was gated here, which inverted that
-principle for approach B alone: the prose author is asked for
-`state_diff.consequences` on every beat, its chunk carries no gate key, and
-the default chat (`scheduled_consequence = off`) threw every declared fuse
-away with a warning. A fuse is Director-adjudicated causality, so it is
-recorded whatever the menu says, and a story that switches the mechanism on
-later finds the causes it already had (review 2026-09-07, A82).
-
-**`offscreen_life = character_agent` alone fires nothing.** Both the `reactive`
-and `character_agent` rungs are additionally gated through
-`living_world_allows('antagonist_ladder', ...)` (`world/offscreen.py`'s
-`_reactive_triggered` and `schedule_agent_ticks`), whose default is `off`. A
-chat raised to `character_agent` and nothing else runs zero reactive stages and
-zero agent ticks, silently.
-
-**And the converse.** `antagonist_ladder = ceiling` without raising
-`offscreen_life` does not turn the mechanism off — `effective_depth` clamps to
-`floor`, which still fires authored plan stages. The only fully-off states are
-`antagonist_ladder = off` or `offscreen_life = inert`.
-
-**The string `"false"` in a card opts the character IN.**
-`character_offscreen_agent` applies `bool()`, and `bool("false")` is `True`.
-The legacy branch is no safer — it applies the same `bool()`
-(`story/character_schema.py`, `character_offscreen_agent`). Only a real JSON
-boolean means what it says, so an imported or hand-edited sheet carrying
-`"offscreen_agent": "false"` buys paid model calls for that character.
-
-**`max_offscreen_actors` is one number serving three caps** — the free seeded
-draw, the profile candidates and the paid agent candidates
-(`world/offscreen.py`: `advance_epoch`, `schedule_profile_ticks`,
-`schedule_agent_ticks`). Raising it at `character_agent` multiplies paid spend in a way the name does not suggest.
-
-**The paid rung disappears when the player's room cannot be resolved.**
-`schedule_profile_ticks` returns `None` with skip reason `no_player_room`
-(`world/offscreen.py`, `schedule_profile_ticks`). This reads as the feature
-being off rather than as a missing anchor.
+**`max_bubbles` refuses at the opening, never by pausing.** A character
+refused a thread is exactly where every absent character stood before bubbles
+existed — with the Charter still moving them if they are a townsperson — and
+the refusal names the cap in a warning, so it cannot be read as the detector
+failing (`world/spatial_frames.detect_and_reconcile`). Every open bubble runs
+every beat; a cap on advancing would be a freeze wearing a number
+(`agents/offscreen_beat.OFFSCREEN_BEATS_ARE_UNCAPPED`).
 
 **`background_config` does not validate or clamp.** It merges the stored blob
 over the defaults verbatim (`story/scene.py`, `background_config`). Every
@@ -559,6 +481,6 @@ rather than dropped. Both are deliberate anti-silent-loss choices, and both
 mean an incomplete sheet produces no complaint — the same failure mode
 `CLAUDE.md` records for `psychology.drive`.
 
-**`offscreen_life` is chat-global while everything it governs is
-frame-scoped.** Changing the rung changes behaviour in every era of the chat at
-once, including ones the player is not standing in.
+**`max_bubbles` is chat-global while the threads it caps are frame-scoped.**
+Lowering it refuses the next opening in every era of the chat at once,
+including ones the player is not standing in.

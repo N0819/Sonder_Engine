@@ -950,7 +950,7 @@ def test_channel_ownership_is_disjoint_within_a_span():
         "ratified_claims", "contradicted_claims",
         # Observer evidence is stage metadata applied later to independent
         # Charter minds; it reads no scene-diff channel while assembling.
-        "public_evidence", "obligations",
+        "public_evidence",
         # `apply_comms_ops` records what the beat said and checks nothing
         # against the rooms: every prune is `normalize_scene_comms`, which runs
         # once rooms have settled. That split is deliberate and is what keeps

@@ -1,7 +1,17 @@
 # Off-screen life, reactivation, and villain ticks — design
 
-> Status: **steps 1-3 and the reactive floor built in unreleased development**
-> (step 2 in alpha 6.9, steps 1 and 3 in the
+> Status: **RETIRED 2026-11-01, superseded by the Charter and the Writers'
+> Room** (the owner: "living world is supposed to be superseded by charter and
+> writers room"). Everything this note specified except the gap generator --
+> the `offscreen_life` ceiling, the seeded `stochastic` draw, importance x
+> distance resolution, the profile rung, the `reactive` plan stages, the
+> `character_agent` rung and the card's `simulation.offscreen_agent` opt-in --
+> was unreachable from 2026-09-20 and was deleted on 2026-11-01; an absent
+> character now lives a causality bubble of their own
+> (`agents/offscreen_beat.py`, `docs/design/DESIGN_OFFSCREEN_SUPERSEDED.md`),
+> and `gaps.gap_for` with the `subject_last_seen` ledger stands. The record of
+> what was built, kept as history: **steps 1-3 and the reactive floor built in
+> unreleased development** (step 2 in alpha 6.9, steps 1 and 3 in the
 > bg-life work, 2026-08). The gap generator is `gaps.gap_for` + the
 > `subject_last_seen` ledger, read at re-contact by `agents/character.py` as
 > `while_you_were_offscreen`. `BehaviorController`'s ladder is the chat-level

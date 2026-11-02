@@ -1168,10 +1168,9 @@ class TestTheHostSaysWhatItOffers:
             "model_lanes": "add_model_lane",
             "payload_routing": "on_character_payload",
             "provision_story": "provision_story",
-            # Same method, second promise: the arguments that set how much of
-            # the world runs unwatched. Named separately because an extension
-            # can have `provision_story` on an older host without them.
-            "living_world_provisioning": "provision_story",
+            # `living_world_provisioning` promised `provision_story`'s
+            # off-screen arguments; it left the set on 2026-11-01 with the
+            # ladder they set (the call still accepts them, as no-ops).
             "living_world_generation": "generate_lived_location",
             "routes": "add_route",
             "stage_anchors": "add_stage",

@@ -3957,13 +3957,13 @@ def schedule_charter_ticks(ctx, epoch=None):
     them, so forty bodies stood still for fifteen turns
     (`docs/experiments/PLAY_2026_09_05_caravanserai.md` PB12).
 
-    THE EPOCH GATE WAS NEVER THIS PATH'S GATE. It is the rung the off-screen
-    work that COSTS MONEY hangs from -- `offscreen.schedule_profile_ticks`
-    and the dormant-actor ticks -- and it stays exactly where it is for
-    them. This walk spends nothing: there is no provider seam anywhere in
-    this module and `advance_snapshot` is a deterministic walk of a copied
-    registry, so an hour bucket was rationing free work. (The same argument
-    retired the `offscreen_life` ceiling here on 2026-09-04, one rung up.)
+    THE EPOCH GATE WAS NEVER THIS PATH'S GATE. It was the rung the paid
+    off-screen work hung from -- the profile and dormant-actor ticks, retired
+    with the rest of those tiers on 2026-11-01. This walk spends nothing:
+    there is no provider seam anywhere in this module and `advance_snapshot`
+    is a deterministic walk of a copied registry, so an hour bucket was
+    rationing free work. (The same argument retired the `offscreen_life`
+    ceiling here on 2026-09-04, one rung up.)
 
     NOT GATED OTHERWISE either, and that is deliberate (owner ruling,
     2026-09-04): the only reason this returns without scheduling is that the
@@ -3974,8 +3974,8 @@ def schedule_charter_ticks(ctx, epoch=None):
     `land_snapshot` refuses a snapshot whose beat is no longer the frame's,
     so a reroll or a rerun-from-stage of one beat cannot advance the town
     twice. A beat that IS an epoch is still one beat and still advances once
-    -- the beat is what schedules, and the epoch only decides which budget
-    it runs under and whether the paid rungs also fire.
+    -- the beat is what schedules, and which budget it runs under is the
+    beat's own `beat_context`, never the epoch.
 
     ONE WALK PER CHAT AND FRAME AT A TIME. The job key names the frame, not
     the beat, so a slow advance cannot pile up behind the next beat's: a

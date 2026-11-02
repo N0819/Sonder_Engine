@@ -121,9 +121,7 @@ from persist.commit_entities import (_is_gated_awareness, _subjects_that_moved,
     _ended_in, _with_sound_wakings, commit_world_entities,
     _can_read, _disguise_field, _seconds_or_none,
     sync_world_entities_with_scene)
-from persist.commit_ledgers import (OBLIGATION_OVERDUE_AGE, OBLIGATION_CAP,
-    pending_obligation_view, _find_obligation, causal_obligation_ops, commit_obligations,
-    _demand_unheard_by, _zip_rows,
+from persist.commit_ledgers import (
     WORLD_PRESSURE_STALL_AGE, WORLD_PRESSURE_CAP, world_pressure_view,
     _find_pressure, commit_world_pressure)
 from persist.commit_mapping import (
@@ -289,21 +287,17 @@ def commit_offscreen_epoch(ctx, prepared_scene, transit_result):
 
     Kept as a named commit domain instead of an inline import so the generated
     code map, failure warning, and pipeline trace all expose this persistence
-    boundary. The implementation is pure/deterministic plus world-KV writes;
-    model-priced work remains at the post-commit tail.
+    boundary. The implementation is pure/deterministic plus world-KV writes:
+    the beat identity the Charter advances on, and the epoch beside it.
+
+    The `offscreen_plans` domain that ran beside this one went on 2026-11-01
+    with the paid off-screen tiers (`world/offscreen.py`'s docstring): its
+    gate had refused every beat since 2026-09-20, and nothing wrote the
+    `offscreen_plan_ops` it read.
     """
     from world.offscreen import advance_epoch
 
     return advance_epoch(ctx, prepared_scene, transit_result)
-
-
-def commit_offscreen_plans(ctx, prepared_scene):
-    """Apply Director-adjudicated, character-grounded reactive plan ops."""
-    from world.offscreen import apply_plan_ops
-
-    clock = (prepared_scene.get("clock")
-             or wget(ctx.chat.id, "simulation_clock", {}) or {})
-    return apply_plan_ops(ctx, prepared_scene.get("scene") or {}, clock)
 
 
 def commit_crowds(ctx, prepared_scene):
@@ -610,10 +604,6 @@ def _commit_all_locked(ctx, nonce):
                 ctx, results, "mapping",
                 lambda: commit_mapping(ctx, nonce, prepared=prepared["mapping"]),
             )
-            _commit_domain(
-                ctx, results, "offscreen_plans",
-                lambda: commit_offscreen_plans(ctx, prepared["scene"]),
-            )
             # After the scene domain, because a crowd op naming a room the
             # same beat created must find that room in the projected world
             # rather than the one the turn started in.
@@ -621,11 +611,11 @@ def _commit_all_locked(ctx, nonce):
                 ctx, results, "crowds",
                 lambda: commit_crowds(ctx, prepared["scene"]),
             )
-            # A first-class frame-scoped epoch, after mapping so a freshly
-            # validated standing intention can participate, but independent of
-            # mapping's skip path. `director_establish` is an opening-stage
-            # result, not a scene-boundary event; leaving ticks in
-            # commit_mapping made the documented mechanism fire once per chat.
+            # A first-class frame-scoped epoch and beat stamp, after the scene
+            # and transit domains whose clock and location it reads, and
+            # independent of mapping's skip path. `director_establish` is an
+            # opening-stage result, not a scene-boundary event; leaving the
+            # epoch in commit_mapping made it fire once per chat.
             _commit_domain(
                 ctx, results, "offscreen_epoch",
                 lambda: commit_offscreen_epoch(
@@ -659,11 +649,6 @@ def _commit_all_locked(ctx, nonce):
             _commit_domain(
                 ctx, results, "narration_person",
                 lambda: commit_narration_person(ctx, nonce),
-            )
-            _commit_domain(
-                ctx, results, "obligations",
-                lambda: commit_obligations(ctx, nonce, causal_program=(
-                    prepared["scene"].get("diff") or {}).get("causal_steps")),
             )
             _commit_domain(
                 ctx, results, "world_pressure",
@@ -703,8 +688,8 @@ def _commit_all_locked(ctx, nonce):
         ) from exc
 
     # Autobiographical summaries are derived, reconstructible caches and may
-    # invoke an LLM. They therefore run OUT OF BAND, beside the offscreen
-    # ticks below: measured live (chat 71 turn 10), the first consolidation
+    # invoke an LLM. They therefore run OUT OF BAND, beside the other jobs
+    # below: measured live (chat 71 turn 10), the first consolidation
     # was 29.5s of a 45.8s commit stage -- a background summarisation job on
     # the `utility` role, inside the player's wait. A failure is a warning,
     # never a rollback, and never silence.
@@ -846,10 +831,11 @@ def _commit_all_locked(ctx, nonce):
         ctx.add_warning(f"auto-promotion failed: {exc}")
         results["promotions"] = {"promoted": [], "error": str(exc)}
 
-    # Deterministic institution/upkeep catch-up rides the same committed
-    # epoch as the character ticks. It is explicit-opt-in (a stored Charter
-    # definition), model-free, frame-scoped, and lands incidents onto the
-    # existing scheduled-event rail rather than inventing a delivery path.
+    # Deterministic institution/upkeep catch-up rides the beat stamp the
+    # `offscreen_epoch` domain committed above, every beat. It runs for any
+    # story with a stored Charter definition, model-free, frame-scoped, and
+    # lands incidents onto the existing scheduled-event rail rather than
+    # inventing a delivery path.
     try:
         from world import charter_runtime as _charter_runtime
 
@@ -860,41 +846,11 @@ def _commit_all_locked(ctx, nonce):
         ctx.add_warning(f"charter scheduling failed: {exc}")
         results["charters"] = {"error": str(exc)}
 
-    # Out-of-band offscreen ticks start HERE, after the turn's facts are
-    # durable, and run in parallel with whatever the player does next. A
-    # turn starting never cancels one: cancelling on turn-start would make
-    # the world's progress depend on player idleness, which inverts the
-    # feature (amendments section 4). Arrival is safe because every tick
-    # write is provisional (section 5). Failure is a warning, never a
-    # rollback -- and never silence.
-    try:
-        from world import offscreen as _offscreen
-
-        job = _offscreen.schedule_profile_ticks(
-            ctx, results.get("offscreen_epoch") or {})
-        results["offscreen_ticks"] = job.as_dict() if job else None
-    except Exception as exc:
-        ctx.add_warning(f"offscreen tick scheduling failed: {exc}")
-        results["offscreen_ticks"] = {"error": str(exc)}
-
-    # The paid `character_agent` rung rides the same epoch, on the same
-    # terms: out of band, epoch/base-turn-guarded at landing, never
-    # cancelled by a turn starting, and a failure is a warning.
-    try:
-        from world import offscreen as _offscreen
-
-        job = _offscreen.schedule_agent_ticks(
-            ctx, results.get("offscreen_epoch") or {})
-        results["offscreen_agent"] = job.as_dict() if job else None
-    except Exception as exc:
-        ctx.add_warning(f"offscreen agent scheduling failed: {exc}")
-        results["offscreen_agent"] = {"error": str(exc)}
-
     # The rumor ledger's ceiling: authored wording for freshly posted
     # notices, on the same terms as every other out-of-band spend -- after
-    # the turn's facts are durable, gated on the ceiling setting, and landed
-    # only if the bill still stands when the job returns. The floor never
-    # waits on this and never needs it.
+    # the turn's facts are durable, bounded by its own attempt cap, and
+    # landed only if the bill still stands when the job returns. The floor
+    # never waits on this and never needs it.
     try:
         from story import artifacts as _artifacts
 

@@ -314,6 +314,8 @@ consumed as raw dicts. The twenty: `ambience_prompt`, `artifact_wording`,
 `import_persona_reinterpret`, `lore_reinterpret`, `memory_consolidate`,
 `offscreen_agent_adjudicate`, `offscreen_agent_attempt`, `offscreen_profile`,
 `patch_json_field`, `position_resolver`, `promote_character`, `repair_json`.
+(The three `offscreen_*` ids were deleted on 2026-11-01 with the paid
+off-screen tiers that fetched them, so seventeen of these remain.)
 
 The generator group is the sharp one: `book_ops`, `link_ops` and `entry_ops`
 are asked for by name in those prompts and opened as raw dicts on the other
@@ -765,10 +767,12 @@ name in a comment; review lane L14 rewrote it to read reachability off code,
 which found seven classes beyond the audit's three that only text reached.
 Review lane L13 deleted the two nothing read (`Engagement`, `BookOp`). The
 rest are kept by name, each with the test that needs it
-(`tests/test_schemas.py`'s `kept`): `PlayerAuthorityMode` and
-`BehaviorController`, second spellings of vocabularies `story.scene` holds
-(`PLAYER_AUTHORITY_MODES`, `OFFSCREEN_LIFE_LADDER`) that only a test holds
-equal; and `ActionElement` (with its field types `ActionCommitment` and
+(`tests/test_schemas.py`'s `kept`): `PlayerAuthorityMode`, a second
+spelling of `story.scene.PLAYER_AUTHORITY_MODES` that only a test holds
+equal; `BehaviorController`, whose first spelling (`OFFSCREEN_LIFE_LADDER`)
+and the test that held the two equal were deleted with the off-screen ladder
+on 2026-11-01, so it is held by nothing and goes with the next edit to
+`llm/schemas.py`; and `ActionElement` (with its field types `ActionCommitment` and
 `IntendedEffect`), `LoreOp`, `DestructionEffect` and `Observation` -- shapes
 the engine never validates, since every `sequence` is `list[dict]`.
 **The owner's question:** one spelling per vocabulary (delete the enums and
@@ -790,26 +794,6 @@ stage's notes of which extension rewrote what a mind or the narrator was
 handed. **The owner's call:** rehydrate it from the persisted character
 variants on resume, or accept that a rerun from the narrator or the commit
 loses the attribution.
-
-<a id="unbuilt-1-276"></a>
-
-### 1.276 The extension contract `provision_story(living_world=...)` refuses its own guide's example (2026-11-01 review)
-
-`web_routes_extensions` F13, confirmed by snippet. Since
-`LIVING_WORLD_APPROACHES = ()` (2026-09-20) `extension_runtime/api.py`
-refuses every non-empty `living_world` -- the guide's own call raises
-"unknown living_world approach 'routine_residue'; the approaches are " (an
-empty list); `provision_story(offscreen_life=...)` stores a value
-`scene.dialogue_config` overwrites; `web/story_view.py` reports constants
-(`offscreen_life` always `"stochastic"`, `max_offscreen_actors` always 0
-where the live dial is `max_bubbles`, `approaches` always `[]`); and the API
-still advertises `living_world_provisioning`, a capability name its own rule
-says is never removed or repurposed while `ext_api` stays 1. Skipped by
-review lane L2: **the owner's contract decision** -- accept the retired
-approach names as documented no-ops, keep `offscreen_life` validated but
-documented inert and report `max_bubbles`; or bump `ext_api` and retire the
-capability name. (The engine side of the same retirement is
-UNBUILT_LIVING_WORLD §1.256.)
 
 <a id="unbuilt-1-277"></a>
 
@@ -1099,8 +1083,9 @@ was translated in front of them; another's relief flipped to fear across adjacen
 turns.
 
 **Fix.** A world-KV `established_facts` ledger. Emit from `director_resolve` as a
-new optional list op, like `obligations`; persist in `persist/commit.py` with dedup and a
-cap, mirroring `commit_obligations`; inject the recent N into every co-present
+new optional list op, like `world_pressure`; persist in `persist/commit.py` with dedup and a
+cap, mirroring `commit_world_pressure` (this named the obligations ledger until that
+was deleted, 2026-11-01); inject the recent N into every co-present
 character payload alongside `world_knowledge`, with a prompt rule: *settled
 on-page facts may be disputed, never forgotten or contradicted.*
 

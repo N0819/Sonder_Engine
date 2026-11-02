@@ -462,10 +462,11 @@ Three faults, and only the first is the one usually noticed.
   comments, spelling and formatting.
 
 **Converted so far**: `test_style_guide.py` (three assertions, driven through
-the payload), `test_offscreen_resolution.py`'s
-seeded draw (both sealed and driven), `test_perception_has_no_model.py`,
-`test_story_view.py`'s layering rule and
-`test_offscreen_agent_context.py`'s fail-closed allowlist (all four to AST).
+the payload), `test_perception_has_no_model.py` and `test_story_view.py`'s
+layering rule (both to AST). Two more conversions went on 2026-11-01 with the
+code they read — the seeded tick draw's and the paid off-screen tick's
+fail-closed allowlist, deleted with the paid off-screen tiers (their files,
+`test_offscreen_resolution.py` and `test_offscreen_agent_context.py`, are gone).
 
 Institutions/upkeep has a separate narrow seam in
 `tests/test_charter_runtime.py`: run it with the nearest pure Charter tests
@@ -572,9 +573,9 @@ kinds remain:
   or a shell installer, so reading it IS the test; there is also no imported
   module for the read to disagree with, so fault 3 does not apply to them at
   all. These should be left alone.
-- **Merely easier**, and still open: the 34 Python ones, chiefly
-  `test_crowds.py` (5), `test_offscreen_resolution.py` (6),
-  `test_launcher_python_range.py` (3),
+- **Merely easier**, and still open: the 34 Python ones counted then — 28
+  since 2026-11-01, when `test_offscreen_resolution.py`'s six went with the
+  file — chiefly `test_crowds.py` (5), `test_launcher_python_range.py` (3),
   `test_body_position.py` (2), `test_pipeline_audit_leak_gaps.py` (2),
   `test_living_world.py` (2). Each needs its own judgement about what the
   property IS, which is why this is a row rather than a sweep — and a sweep is

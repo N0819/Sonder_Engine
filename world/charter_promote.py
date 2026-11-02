@@ -337,8 +337,8 @@ def remembered(charter, body_key, events=(), cap=REMEMBERED_CAP, *,
         })
 
     # Specific undertakings this person made, received, or learned about.
-    # Unlike the foreground pending-obligation ledger these can remain open
-    # for years; their lifecycle and provenance are the memory.
+    # Unlike a beat-level debt these can remain open for years; their
+    # lifecycle and provenance are the memory.
     for commitment in commitment_view(
             charter.get("commitments"), key, cap=16):
         def party(value):

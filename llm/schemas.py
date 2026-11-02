@@ -422,27 +422,20 @@ def normalize_action_stage(value: Any) -> Any:
     token = _ACTION_STAGE_ALIASES.get(token, token)
     return token if token in {m.value for m in ActionStage} else value
 
-# TWO SPELLINGS OF VOCABULARIES THE ENGINE READS ELSEWHERE. No engine code
-# validates against these enums: the live spellings are
+# A SECOND SPELLING OF A VOCABULARY THE ENGINE READS ELSEWHERE. No engine code
+# validates against this enum: the live spelling is
 # `story.scene.PLAYER_AUTHORITY_MODES` (enforced by
-# `agents/common_authority.apply_player_authority`) and
-# `story.scene.OFFSCREEN_LIFE_LADDER`. They are kept because tests hold the two
-# spellings to each other -- `tests/test_player_authority_mode.py`
-# (`test_the_enum_and_the_config_name_the_same_rungs`) and
-# `tests/test_offscreen_resolution.py` (the importance field is not this
-# ladder) -- found when deleting them as unreferenced (tooling_gate F5, review
-# 2026-11-01). Whether to keep two spellings at all is the owner's call.
+# `agents/common_authority.apply_player_authority`). It is kept because a test
+# holds the two spellings to each other -- `tests/test_player_authority_mode.py`
+# (`test_the_enum_and_the_config_name_the_same_rungs`) -- found when deleting
+# it as unreferenced (tooling_gate F5, review 2026-11-01). Whether to keep two
+# spellings at all is the owner's call. `BehaviorController`, the other second
+# spelling here, went on 2026-11-01 with the off-screen ladder it spelled
+# (`story.scene.OFFSCREEN_LIFE_LADDER`, deleted with the paid off-screen tiers).
 class PlayerAuthorityMode(str, Enum):
     actor_only = "actor_only"
     explicit_outcomes = "explicit_outcomes"
     world_author = "world_author"
-
-class BehaviorController(str, Enum):
-    inert = "inert"
-    deterministic = "deterministic"
-    reactive = "reactive"
-    stochastic = "stochastic"
-    character_agent = "character_agent"
 
 _VOLUME_ALIASES = {
     "": "normal",
@@ -1632,9 +1625,6 @@ class DirectorInterpret(LenientModel):
     # fields are compatibility projections populated by deterministic code.
     ledgers: list[CausalLedgerEntry] = Field(default_factory=list)
     causal_ledger: list[CausalLedgerEntry] = Field(default_factory=list)
-    # Social effects of asserted input, committed once with later resolve
-    # effects. Metadata, never scene state or a license to settle an attempt.
-    obligations: list[dict] = Field(default_factory=list)
     # RETIRED WITH THE CAUSAL DIRECTOR (2026-09-27). The ruling channel, built
     # for the five specialist hands `director_interpret` used to fan out to.
     # Under the prose contract there are no hands to rule for: the Director
@@ -2945,14 +2935,16 @@ class StateDiff(LenientModel):
     # witnessed?, originator?}. NOT this beat's own outcome -- that belongs
     # in the fields above. Commit validates deterministically
     # (living_world.mint_consequences): `where` must resolve to a known
-    # room or lore place, dues are clamped to honest bounds, at most 2 land
-    # per turn, and the whole lane is inert unless the chat's living-world
-    # setting turned it on.
+    # room or lore place, dues are clamped to honest bounds, and at most 2
+    # land per turn. No setting gates the lane: every declared fuse is minted
+    # and fires on its clock (A82, 2026-09-07; the living-world ladder that
+    # once switched it was deleted 2026-11-01).
     consequences: list[dict] = Field(default_factory=list)
     # `offscreen_plan_ops` lived here until 2026-09-04. A reactive plan is a
-    # CHARACTER's own declaration, and the Director does not own psychology:
-    # `world/offscreen.apply_plan_ops` now reads plan ops from the character
-    # results alone, which is what `offscreen_life=reactive` always said.
+    # CHARACTER's own declaration, and the Director does not own psychology,
+    # so the channel moved to the character's result -- and the reactive-plan
+    # rung that read it was retired with the paid off-screen tiers on
+    # 2026-11-01 (an absent character now lives a causality bubble).
     # Crowd blobs: one object with many people in it. A populous place cannot
     # be represented by managed presences -- `max_managed` is hard-capped at 8
     # and chat 57 spent three of six slots on ONE Dalek -- so a crowd is a
@@ -3095,10 +3087,6 @@ class DirectorResolve(LenientModel):
     dice: list[dict] = Field(default_factory=list)
     claim_dispositions: list[dict] = Field(default_factory=list)
     fiction_frame: dict[str, Any] = Field(default_factory=dict)
-    # Obligation-ledger ops: {op:'open'|'discharge'|'refuse', id, who, what,
-    # kind}. Applied deterministically to the world-KV pending_obligations
-    # ledger by commit.py's commit_obligations (mirrors standing_intentions).
-    obligations: list[dict] = Field(default_factory=list)
     # World-pressure ops (F5 -- THE WORLD ACTS): {op:'open'|'tick'|'hold'|
     # 'resolve', id, subject, note}. Every open pressure on the world-KV
     # world_pressures ledger must be ticked or explicitly held each resolve;
@@ -3454,7 +3442,6 @@ class DirectorSocialSpecialist(LenientModel):
     StateDiff's own shapes (same contract as DirectorBodySpecialist)."""
     cast_changes: list[dict] = Field(default_factory=list)
     introductions: list[dict] = Field(default_factory=list)
-    obligations: list[dict] = Field(default_factory=list)
     public_evidence: list[CharterPublicEvidence] = Field(default_factory=list)
     # The world's traffic, carried by this hand since the offscreen hand's
     # retirement (2026-09-04): StateDiff's own shapes, same contract.
@@ -5097,7 +5084,7 @@ SPECIALIST_CHANNELS = {
     "director_social": ("cast_changes", "introductions",
                         "public_evidence", "crowd_ops", "courier_ops",
                         "telling_ops", "ratified_claims", "contradicted_claims",
-                        "charter_ops", "claim_dispositions", "consequences", "obligations"),
+                        "charter_ops", "claim_dispositions", "consequences"),
     "director_contact": ("contact_ops", "contact_action_ops",
                          "substance_ops", "containment", "scales"),
     "director_objects": ("entities", "remove_entities", "inventory_ops",

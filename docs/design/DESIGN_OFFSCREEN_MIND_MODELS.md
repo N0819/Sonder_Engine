@@ -1,12 +1,17 @@
 # DESIGN_OFFSCREEN_MIND_MODELS — does a mind's theory of other minds travel off screen?
 
-Status: **Built.** `agent_context` carries `mind_models` as the derived view
-(decay-applied, claim + current confidence, frame-masked); the raw ledger
-never travels. Pinned by `tests/test_offscreen_agent_context.py`
-(`TestItsOwnTheoryOfOtherMindsTravels`).
+Status: **Retired with its subject, 2026-11-01.** Built as described:
+`agent_context` carried `mind_models` as the derived view (decay-applied,
+claim + current confidence, frame-masked) and the raw ledger never travelled,
+pinned by a test class (`TestItsOwnTheoryOfOtherMindsTravels`) whose file was
+deleted with it. Both went with the paid off-screen tiers of `world/offscreen.py`, superseded by
+the Charter and the Writers' Room; an absent character now lives a causality
+bubble of its own (`agents/offscreen_beat.py`) and reads its own state there
+through the ordinary character payload. The RULE below outlives the code and
+applies to any allowlisted context built for a mind.
 
-Audience: whoever next wants to add a key to `AGENT_CONTEXT_KEYS`
-(`world/offscreen.py`), and whoever is tempted to re-raise this question.
+Audience: whoever next builds an allowlisted context for a mind (as the
+retired `AGENT_CONTEXT_KEYS` was), and whoever is tempted to re-raise this question.
 The answer matters less than the rule this note extracts, which is stated
 first so it cannot be buried:
 

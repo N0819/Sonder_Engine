@@ -1,10 +1,13 @@
 """The commit tail must actually SCHEDULE its out-of-band work.
 
-Three producers ride the tail of `_commit_all_locked`, after the turn's facts
-are durable: autobiographical memory consolidation, offscreen profile ticks,
-and the paid `character_agent` rung. Each is expensive, each is deliberately
-off the player's wall clock, and each is invisible when it stops running --
-the turn still commits, the story still reads, and nothing warns.
+Producers ride the tail of `_commit_all_locked`, after the turn's facts are
+durable: autobiographical memory consolidation, every live bubble's own
+off-screen beat, and the Charter's catch-up. Each is off the player's wall
+clock, and each is invisible when it stops running -- the turn still commits,
+the story still reads, and nothing warns. (The offscreen profile ticks and
+the paid `character_agent` rung were two more until 2026-11-01, when those
+tiers were retired; the bubble beat and the Charter are what superseded them,
+so they take their places here.)
 
 They were pinned by asserting a substring of `inspect.getsource`, on the
 stated grounds that driving the whole of `_commit_all_locked` "would test
@@ -13,18 +16,18 @@ everything except the one line that regressed". An audit disproved that: with
     job = None if True else schedule_memory_consolidation(ctx)
 
 the source text is unchanged, the call never executes, and the entire suite
-stays green. All three could be switched off silently. That is the exact shape
+stays green. Every one could be switched off silently. That is the exact shape
 of the failure recorded in AGENTS.md as five mechanisms "built, documented,
 tested and never ran once".
 
 These drive a real commit and assert on the RESULT the tail returns, which is
 what a caller and the pipeline drawer actually see.
 
-This file is where the offscreen profile-tick producer is covered too:
-`test_offscreen_resolution.py` kept a placeholder method pointing here whose
-whole body was `import tests.test_commit_tail_producers`, which asserted
-nothing, collected as a passing test, and imported a test module under a second
-name.
+This file was where the offscreen profile-tick producer was covered too,
+until that tier was retired: `test_offscreen_resolution.py` kept a placeholder
+method pointing here whose whole body was `import
+tests.test_commit_tail_producers`, which asserted nothing, collected as a
+passing test, and imported a test module under a second name.
 """
 
 from __future__ import annotations
@@ -75,8 +78,9 @@ def commit_tail(temp_db, monkeypatch):
     Everything before the tail is stubbed -- the tail is what is under test,
     and preparing a full scene would test the preparation instead.
     """
+    from agents import offscreen_beat as offscreen_beat_module
     from persist import commit as commit_module
-    from world import offscreen as offscreen_module
+    from world import charter_runtime as charter_module
 
     monkeypatch.setattr(commit_module, "_prepare_turn_commit", lambda ctx: {
             "scene": {"scene": {}, "clock": None}, "mapping": {},
@@ -92,10 +96,11 @@ def commit_tail(temp_db, monkeypatch):
 
     monkeypatch.setattr(commit_module, "schedule_memory_consolidation",
                         record("memory_consolidation"))
-    monkeypatch.setattr(offscreen_module, "schedule_profile_ticks",
-                        record("profile_ticks"))
-    monkeypatch.setattr(offscreen_module, "schedule_agent_ticks",
-                        record("agent_ticks"))
+    # Both are imported by the tail at call time, from these modules.
+    monkeypatch.setattr(offscreen_beat_module, "schedule_offscreen_beats",
+                        record("offscreen_beats"))
+    monkeypatch.setattr(charter_module, "schedule_charter_ticks",
+                        record("charter_ticks"))
 
     ctx = _context(temp_db)
     commit_module.commit_all(ctx, nonce=0)
@@ -104,8 +109,8 @@ def commit_tail(temp_db, monkeypatch):
 
 @pytest.mark.parametrize("producer", [
     "memory_consolidation",   # autobiographical summaries
-    "profile_ticks",          # offscreen dormant-character ticks
-    "agent_ticks",            # the paid character_agent rung
+    "offscreen_beats",        # every live bubble's own beat
+    "charter_ticks",          # the Charter's every-beat catch-up
 ])
 def test_the_commit_tail_reaches_every_out_of_band_producer(commit_tail, producer):
     assert commit_tail.get(producer), (
@@ -186,8 +191,8 @@ def test_the_blocking_twin_fires_when_a_direct_caller_asks_for_it(
 
 def test_a_failing_producer_warns_and_does_not_roll_the_turn_back(
         temp_db, monkeypatch):
-    """Every one of the three is wrapped: a failure is a warning, never a
-    rollback, and never silence."""
+    """Every one is wrapped: a failure is a warning, never a rollback, and
+    never silence."""
     from persist import commit as commit_module
 
     monkeypatch.setattr(commit_module, "_prepare_turn_commit", lambda ctx: {

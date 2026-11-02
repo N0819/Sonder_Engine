@@ -295,7 +295,7 @@ class Author:
             out["resolved_event"] = "Nothing in particular happens."
             out["dialogue_log"] = []
             out["dialogue_order"] = []
-            for key in ("changes_asserted", "dice", "obligations",
+            for key in ("changes_asserted", "dice",
                         "fact_adjudications"):
                 out[key] = []
             return out

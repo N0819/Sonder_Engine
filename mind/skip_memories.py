@@ -147,8 +147,9 @@ SKIP_ORIGIN_PREFIX = "skip:"
 #: EVERYTHING THE WRITER IS HANDED, AND NOTHING ELSE: the mind's card, its
 #: memory from before the stretch, its own record of the stretch, and the
 #: stretch itself. Built as a structure rather than filtered from a bigger one
-#: -- the shape `world/offscreen.agent_context` set -- so a key nobody named
-#: cannot ride in.
+#: -- the shape the retired paid off-screen tick's private context set
+#: (`world/offscreen.py`, deleted 2026-11-01) -- so a key nobody named cannot
+#: ride in.
 WRITER_PAYLOAD_KEYS = ("who", "memory", "record", "span")
 
 #: The LOG row fields the record is built from (the build spec's LOG shape).

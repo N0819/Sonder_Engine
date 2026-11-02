@@ -6,8 +6,9 @@ log into the mind's memories, a two-part check holds them to it, and the rows
 land on the mind's own ledger. Design: `docs/design/DESIGN_THE_CAST_ACROSS_A_SKIP.md`
 §§ 2.2 and 4.6, and the four rules of `DESIGN_OFFSCREEN_SUPERSEDED.md` § 3c.
 
-The firewall here is a STRUCTURE, as `world/offscreen.agent_context` builds
-its own: the writer is handed one mind's card, its memory from before the
+The firewall here is a STRUCTURE, as the retired paid off-screen tick's
+private context was (`world/offscreen.py`, deleted 2026-11-01): the writer is
+handed one mind's card, its memory from before the
 stretch and its own record, and the tests below are mostly about what never
 reaches it.
 """
@@ -358,8 +359,9 @@ class TestOneCallPerMindItsOwnLogOnly:
         assert set(sm.SEEN_FIELDS) == {"who", "doing"}
 
     def test_the_mind_pass_never_reaches_for_a_plan_or_the_account(self):
-        """Asked of the parsed functions, as `test_offscreen_agent_context`
-        asks it: the names, attributes and string keys the bodies can reach."""
+        """Asked of the parsed functions, as the retired
+        `test_offscreen_agent_context` asked it of the paid tick's context
+        builder: the names, attributes and string keys the bodies can reach."""
         tree = ast.parse(inspect.getsource(sm))
         for fname in ("remember_one", "writer_payload", "record_rows", "memory_packet",
                       "card_of", "_jev_state", "past_state", "how_it_went"):

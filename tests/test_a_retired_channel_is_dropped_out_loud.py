@@ -4,9 +4,14 @@
 mind's own to keep and strike in its notebook, never a Director ledger. It
 was retired only by not being ASKED -- `candidate_channels` skips it, so its
 chunk never ships -- while an encoder that wrote it anyway was dispatched to
-its owner (`social` still holds the channel) and committed, without a word
-(audit of 2026-11-01, `agents_director_prose_movement_rooms` F16). The stage
-says what it drops, as it does for a channel no owner holds.
+its owner (`social` then still held the channel) and committed, without a
+word (audit of 2026-11-01, `agents_director_prose_movement_rooms` F16). The
+stage says what it drops, as it does for a channel no owner holds.
+
+The ledger itself went later the same day (the owner: "obligations caused
+hyperfixation"): no owner, chunk, schema field or commit domain holds the
+channel now, and the name stays in `RETIRED_CHANNELS` so this still holds
+(`tests/test_the_obligations_ledger_is_gone.py`).
 """
 
 from __future__ import annotations

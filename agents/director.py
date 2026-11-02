@@ -4113,7 +4113,7 @@ def _run_specialists(ctx, out, sc, dispatch, view, extras, stage, *,
         # envelope, never replay it as a scene-state channel.
         state_history = [dict(entry, patch={
             channel: value for channel, value in entry["patch"].items()
-            if channel not in {"public_evidence", "obligations"}}) for entry in history]
+            if channel != "public_evidence"}) for entry in history]
         _stage_state(out, stage)["causal_steps"] = program_from_history(
             state_history, out.get("sequence") or [], stage,
             requirements=_causal_completion_requirements(dispatch, history, scene=sc))
@@ -5711,11 +5711,9 @@ def director_resolve(ctx, nonce, _corrections=None):
         here = room_of(sc, declaration["name"])
         if here:
             declaration["sprint_reach"] = sprint_reach(sc, here)
-    # Lazy import: commit.py owns the ledger's deterministic semantics
-    # (OBLIGATION_OVERDUE_AGE, the commit-side re-deferral reminder); the
-    # payload view is built there so the flag the prompt's hard rule keys
-    # on and the flag commit warns on can never disagree. world_pressure_view
-    # rides the same convention (F5).
+    # Lazy import: commit.py owns the world-pressure ledger's deterministic
+    # semantics, and the payload view is built there so the flag the payload
+    # carries and the flag commit warns on can never disagree (F5).
     from persist.commit import world_pressure_view
 
     # Living world, approach A: when this beat moves the party into a room

@@ -265,11 +265,11 @@ class TestTheDeterministicSkeleton:
 class TestTheGapGeneratorIsDeterministic:
     def test_no_subject_at_any_tier_buys_a_model_call(self, temp_db):
         """`gap_for` answers from state the engine already has, for every
-        subject. The model-priced rung is
-        `offscreen.profile_summary_record`, which runs OUT OF BAND and whose
-        model half is state fields rather than a sentence -- this module's
-        own first paragraph rules out the prose shape, and section 1.0.2
-        rules out paying for a model on the turn path.
+        subject. The model-priced rung over it was the off-screen profile
+        tick, which ran OUT OF BAND and whose model half was state fields
+        rather than a sentence (retired with the paid tiers, 2026-11-01) --
+        this module's own first paragraph rules out the prose shape, and
+        section 1.0.2 rules out paying for a model on the turn path.
 
         This module previously carried a second, prose-shaped rung
         (`_medium_overlay`, `gap_medium`) that both production callers asked

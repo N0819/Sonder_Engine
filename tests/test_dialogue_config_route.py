@@ -38,8 +38,7 @@ def _panel_save(**overrides):
         "stop_on_player_address": True, "stop_on_question_to_player": True,
         "silence_ends_exchange": True,
         "promote_after_addressed": 0,
-        "offscreen_life": "reactive",
-        "max_offscreen_actors": 3,
+        "max_bubbles": 3, "bubble_radius": 3,
     }
     body.update(overrides)
     return body
@@ -110,3 +109,30 @@ def test_the_autonomy_ladder_still_re_derives_on_every_save(temp_db):
 
     low = app.dlg_put(cid, _panel_save(autonomy=0))
     assert low["max_character_calls"] == 1
+
+
+def test_a_save_drops_the_retired_ladder_keys_and_keeps_their_answer(temp_db):
+    """The off-screen ladder's keys were deleted with the paid tiers on
+    2026-11-01. A blob that still carries them -- an old story, an archive, a
+    client that still sends them -- loses them on the next save rather than
+    riding them forward forever, and the one that meant something has already
+    been read into `max_bubbles` by then."""
+    from web import app
+
+    cid = _chat(temp_db)
+    temp_db.wset(cid, "dialogue_config", {
+        "autonomy": 50, "offscreen_life": "character_agent",
+        "offscreen_cognition": True, "max_offscreen_actors": 1,
+        "initial_parallel_reactors": 2})
+    body = _panel_save(offscreen_life="stochastic")
+    del body["max_bubbles"]
+
+    saved = app.dlg_put(cid, body)
+
+    stored = temp_db.wget(cid, "dialogue_config", {})
+    for retired in ("offscreen_life", "offscreen_cognition",
+                    "max_offscreen_actors"):
+        assert retired not in saved, retired
+        assert retired not in stored, retired
+    assert stored["max_bubbles"] == 1
+    assert stored["initial_parallel_reactors"] == 2

@@ -53,27 +53,25 @@ class TestTheDial:
                      {"max_offscreen_actors": 1, "max_bubbles": 5})
         assert dialogue_config(cid)["max_bubbles"] == 5
 
-    def test_a_stored_ladder_value_no_longer_decides_anything(self, cid,
-                                                              temp_db):
+    def test_a_stored_ladder_value_is_not_part_of_the_config(self, cid,
+                                                             temp_db):
         """A stored `offscreen_life` is a holdover, not a setting: it rationed a
-        tier Charter and the Writers' Room superseded. It is forced back to its
-        default so nothing can act on what a story configured years ago.
-
-        THE KEYS ARE STILL PRESENT, and that is measured rather than chosen:
-        deleting them outright broke 120 direct readers, several inside the
-        commit path, and turns rolled back with
-        `offscreen_plans: 'offscreen_life'`. `DESIGN_OFFSCREEN_SUPERSEDED.md`
-        §4 says the readers come out first and the keys after.
+        tier Charter and the Writers' Room superseded. Until 2026-11-01 the
+        three retired keys were FORCED to their defaults rather than dropped,
+        because deleting them on 2026-09-20 broke 120 direct readers, several
+        inside the commit path, and turns rolled back with
+        `offscreen_plans: 'offscreen_life'` -- `DESIGN_OFFSCREEN_SUPERSEDED.md`
+        §4: readers first, keys after. The readers went with the paid tiers on
+        2026-11-01, so now the keys go too: `dialogue_config` reports none of
+        them, and the one that meant something is carried into `max_bubbles`.
         """
-        from story.scene import (OFFSCREEN_COGNITION_DEFAULT,
-                                 OFFSCREEN_LIFE_DEFAULT)
         temp_db.wset(cid, "dialogue_config",
                      {"offscreen_life": "stochastic",
                       "offscreen_cognition": "on", "max_offscreen_actors": 2})
         config = dialogue_config(cid)
-        assert config["offscreen_life"] == OFFSCREEN_LIFE_DEFAULT
-        assert config["offscreen_cognition"] == OFFSCREEN_COGNITION_DEFAULT
-        assert config["max_offscreen_actors"] == 0
+        for retired in ("offscreen_life", "offscreen_cognition",
+                        "max_offscreen_actors"):
+            assert retired not in config, retired
         # ...and the cost dial carries the old one's answer over.
         assert config["max_bubbles"] == 2
 

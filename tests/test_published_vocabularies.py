@@ -467,7 +467,7 @@ def delegated_channels() -> list[str]:
 
 
 class TestEveryDelegatedChannelIsNamedAsDelegated:
-    def test_the_engine_owns_thirty_eight(self):
+    def test_the_engine_owns_thirty_seven(self):
         """A channel owner that gains a channel moves this count, and the
         encoder's card and the decision model's questions have to move in the
         same commit (the causal Director's sheets had to until 2026-09-27,
@@ -501,8 +501,13 @@ class TestEveryDelegatedChannelIsNamedAsDelegated:
         PASSES OVER ("that evening", "hours later"). The steps stay engine
         arithmetic; the encoder sees the beat whole, so the slice objection
         that sent the channel away no longer holds (`encoder.time`,
-        `jev_questions.time`, `world.mechanics.beat_time_block`)."""
-        assert len(delegated_channels()) == 38
+        `jev_questions.time`, `world.mechanics.beat_time_block`).
+        37 on 2026-11-01: `obligations` left the social owner with the
+        ledger it wrote (the owner: "obligations caused hyperfixation"). It
+        had been no candidate since 2026-10-02, and once the encoder's stray
+        writes were stripped nothing opened a debt; the name stays in
+        `director_prose.RETIRED_CHANNELS` so a stray write is still said."""
+        assert len(delegated_channels()) == 37
 
 # ---------------------------------------------------------------------------
 # (h) entities[].ubiquitous -- the flag that says a thing has no place at all

@@ -19,8 +19,11 @@ independent zeroes stack up, and none of them is a defect:
 So the mechanisms have never been observed either working or failing. This
 builds the conditions they need and reports which of them actually fire.
 
-WHAT THIS CAN AND CANNOT PROVE. It exercises machinery: epoch -> dormant tick
--> plan acceptance -> reactive stage -> effect. It CANNOT validate the Director
+WHAT THIS CAN AND CANNOT PROVE. It exercises machinery: the epoch, a fired
+consequence's public surface, and the carriers that pass it on. (It also drove
+the dormant tick, plan acceptance and the reactive stage until 2026-11-01, when
+those paid off-screen tiers were retired with the ladder over them -- the
+Charter and the Writers' Room superseded them.) It CANNOT validate the Director
 prompt that decides duration, because the harness supplies the state a model
 would have produced. Asking it whether `time_skip` now fires would be asking
 whether the author of the harness typed `time_skip`. That number only moves in
@@ -84,10 +87,9 @@ def scene_at(location, room, who):
 def build_story(db):
     """A story shaped exactly like the conditions the floors need.
 
-    Every setting here is switched ON deliberately. The live corpus has them
-    off or absent, which is one of the four reasons nothing has ever fired, and
-    a harness that inherited the defaults would faithfully reproduce the
-    silence it exists to break.
+    The settings this used to switch ON (the off-screen rung and the
+    living-world ladder) were retired on 2026-11-01; what is left is the cast,
+    the last-seen ledger and the standing intention the carriers read.
     """
     cid = db.qi("INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
                 ("Off-screen drive", "", time.time()))
@@ -132,20 +134,9 @@ def build_story(db):
             [{"who": "Kestrel", "what": "watch the western gate",
               "where": "hall"}])
 
-    # `stochastic`, not `reactive`. The ladder is cumulative and stochastic
-    # sits ABOVE reactive, so setting `reactive` permits the deterministic and
-    # reactive rungs and silently forbids the seeded tick draw. `stochastic` is
-    # also the shipped default, so this matches an ordinary story.
-    db.wset(cid, "dialogue_config",
-            {"offscreen_life": "stochastic", "max_offscreen_actors": 3})
-    db.wset(cid, "living_world", {
-        "routine_residue": "floor", "scheduled_consequence": "floor",
-        "place_obligations": "floor", "antagonist_ladder": "floor",
-        # Carriers are gated on this, and BOTH live configured stories have it
-        # off -- which is why `character acquired carried report` reads
-        # `no chances` independently of everything else.
-        "rumor_ledger": "floor",
-    })
+    # No `dialogue_config` rung and no `living_world` ladder: both were
+    # retired on 2026-11-01 (the carriers had been core physics, ungated,
+    # since before then), so an ordinary story is the right harness.
     return cid, [{"id": here_id, "sheet": here_sheet},
                  {"id": away_id, "sheet": away_sheet},
                  {"id": heard_id, "sheet": heard_sheet},
@@ -168,60 +159,6 @@ def make_ctx(cid, cast, turn_idx, db, *, resolve=None):
         director_establish={}, extra_players=[],
         warnings=[],
     )
-
-
-def accept_plan(db, cid, cast, report):
-    """Open an authored plan through the REAL acceptance path.
-
-    Writing a plan straight into the world key skips `apply_plan_ops`, and
-    that is the function which converts a stage's relative `after_seconds` into
-    the absolute `due_at` that `_reactive_triggered` actually reads. A
-    hand-written plan is therefore considered on every epoch and can never
-    fire -- which is exactly what the first version of this harness showed, and
-    it was the harness that was wrong, not the engine.
-    """
-    from world.offscreen import apply_plan_ops
-
-    # THE PLAN MUST BE GROUNDED IN THE ACTOR'S OWN DECLARATION. `apply_plan_ops`
-    # refuses an op whose actor said nothing this beat -- "made no plan
-    # declaration this beat" -- which is the epistemic guard the roadmap names:
-    # the Director ENCODES a plan the character stated, it does not author one
-    # on their behalf. So Kestrel has to say it out loud before leaving.
-    declaration = "I'll shut the west gate before dusk"
-    ctx = make_ctx(cid, cast, 0, db, resolve={"state_diff": {
-        "offscreen_plan_ops": [{
-            "op": "open", "plan_id": "shut-the-west-gate", "actor": "Kestrel",
-            "objective": "Shut the western gate before dusk",
-            "basis": declaration,
-            "stages": [{
-                "stage_id": "shut-it",
-                # Above PLAN_TRIGGER_MIN_SECONDS (60s) and inside the hour the
-                # story is about to cross.
-                "trigger": {"after_seconds": 600},
-                "effect": {
-                    "what": "the western gate stands shut and barred",
-                    "where": "hall", "due_seconds": 0,
-                    # Carries a COUNT, a PLACE and a NAME on purpose: those are the
-            # three things degradation subtracts, in that order, and a surface
-            # without them would fade invisibly and prove nothing.
-            "witnessed": "Kestrel barred the gate against forty riders "
-                         "in the Hall",
-                    "originator": "Kestrel",
-                },
-            }],
-        }],
-    }})
-    ctx.character_results = {cast[1]["id"]: {
-        "sequence": [{"type": "speech", "text": declaration}],
-        "intent_ops": [], "project_ops": [],
-    }}
-    db.wset(cid, "simulation_clock", {"elapsed_seconds": 0.0})
-    result = apply_plan_ops(
-        ctx, scene_at("Lugunica", "hall", "Mora"), {"elapsed_seconds": 0.0}) or {}
-    report["plan_acceptance"] = {
-        "offered": result.get("offered"), "applied": result.get("applied"),
-        "warnings": list(ctx.warnings),
-    }
 
 
 def carrier_scene():
@@ -516,7 +453,6 @@ def drive(db):
 
     cid, cast = build_story(db)
     report = {"chat_id": cid, "beats": []}
-    accept_plan(db, cid, cast, report)
 
     def beat(label, *, turn_idx, prev_location, location, prev_seconds,
              seconds, transit=None):
@@ -524,10 +460,9 @@ def drive(db):
                 {"elapsed_seconds": float(seconds), "display": "",
                  "time_scale": "scene"})
         ctx = make_ctx(cid, cast, turn_idx, db)
-        # `advance_epoch` is a COMMIT DOMAIN -- its docstring says it "runs
-        # under `commit_all`'s outer transaction", and `advance_reactive_plans`
-        # inserts a scheduled event with `qtx`, which raises outside one. So the
-        # beat is wrapped exactly as commit wraps it.
+        # `advance_epoch` is a COMMIT DOMAIN -- its docstring says it runs
+        # under `commit_all`'s outer transaction -- so the beat is wrapped
+        # exactly as commit wraps it.
         with db.transaction():
             result = advance_epoch(ctx, {
                 "scene": scene_at(location, "hall", "Mora"),
@@ -539,11 +474,7 @@ def drive(db):
             "beat": label, "turn": turn_idx,
             "opportunity": bool(result.get("opportunity")),
             "reasons": result.get("reasons") or [],
-            "actors_considered": result.get("actors_considered"),
-            "stochastic_fired": result.get("stochastic_fired"),
-            "reactive_considered": result.get("reactive_considered"),
-            "reactive_fired": result.get("reactive_fired"),
-            "reactive_effects_minted": result.get("reactive_effects_minted"),
+            "beat_id": result.get("beat_id"),
             "warnings": list(ctx.warnings),
         })
 
@@ -583,13 +514,14 @@ MILESTONE = (
     ("a place changes across an absence without a model call",
      "routine residue ceiling"),
     ("a scheduled or reactive consequence genuinely fires",
-     "reactive_fired"),
+     "tests/test_living_world.py (the reactive rung was retired 2026-11-01)"),
     ("one witness learns while another unreached mind stays ignorant",
      "witness_vs_unreached"),
     ("information follows a route and arrives late, degraded, or not at all",
      "degraded_chain"),
     ("an opted-in character adapts only after evidence reaches them",
-     "character_agent rung"),
+     "a played story (the character_agent rung was retired 2026-11-01; "
+     "an absent character now lives a bubble of their own)"),
     ("the player meets consistent aftermath before an explanation",
      "needs a played story"),
     ("the returning character remembers its own off-screen experience",
@@ -611,7 +543,6 @@ def milestone(report):
     chain = tell.get("chain") or []
     crowd = report.get("crowd_carrier") or {}
 
-    fired = any(int(b.get("reactive_fired") or 0) > 0 for b in beats)
     ignorant = (bool(chain) and not tell.get("unreached_holds"))
     faded = len({c["heard"] for c in chain}) > 1
     stopped = any("stops here" in w for a in tell.get("attempts") or []
@@ -619,7 +550,6 @@ def milestone(report):
     rode = bool((crowd.get("beako_holds") or []))
 
     shown = {
-        "a scheduled or reactive consequence genuinely fires": fired,
         "one witness learns while another unreached mind stays ignorant":
             ignorant,
         "information follows a route and arrives late, degraded, or not at all":
@@ -658,21 +588,11 @@ def main():
             print("        not answerable here — %s" % item["by"])
     print()
 
-    acc = report.get("plan_acceptance") or {}
     print("off-screen drive — did the floors get a chance, and take it?\n")
-    print(f"  plan ops accepted: {acc.get('applied')} of {acc.get('offered')}")
-    for w in acc.get("warnings") or []:
-        print(f"    ! {w}")
-    print()
-    print(f"  {'beat':<24}{'epoch':>6}{'reasons':>12}{'ticks':>7}"
-          f"{'rx seen':>9}{'rx fired':>10}{'minted':>8}")
+    print(f"  {'beat':<24}{'epoch':>6}{'reasons':>12}  beat id")
     for b in report["beats"]:
         print(f"  {b['beat']:<24}{('YES' if b['opportunity'] else '-'):>6}"
-              f"{(','.join(b['reasons']) or '-'):>12}"
-              f"{str(b['stochastic_fired']):>7}"
-              f"{str(b['reactive_considered']):>9}"
-              f"{str(b['reactive_fired']):>10}"
-              f"{str(b['reactive_effects_minted']):>8}")
+              f"{(','.join(b['reasons']) or '-'):>12}  {b['beat_id']}")
     we, ca = report.get("world_events") or {}, report.get("carriers") or {}
     print(f"\n  world events written: {we.get('written')} of {we.get('offered')} fired")
     print(f"  public surfaces     : {ca.get('public_surfaces')}")

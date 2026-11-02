@@ -1,5 +1,10 @@
-"""The living world's settings surface and the deterministic floors of
-approaches B (scheduled consequence) and D (places that owe a history).
+"""The deterministic floors of the living world's approaches B (scheduled
+consequence) and D (places that owe a history).
+
+Its settings surface -- the four-approach ladder, its route and the
+off-screen ceiling over it -- was pinned here too until 2026-11-01, when it
+was retired with the paid off-screen tiers it rationed
+(`tests/test_the_living_world_tiers_are_gone.py` pins that it stays gone).
 
 What is being prevented, per class, is named on the class — but the whole
 file exists because of one measured family of failures: mechanisms assumed
@@ -19,10 +24,7 @@ import pytest
 
 from world import living_world
 from world.living_world import (
-    LIVING_WORLD_APPROACHES, LIVING_WORLD_BUILT, LIVING_WORLD_DEPTHS,
-    LIVING_WORLD_DESCRIPTIONS, effective_depth, living_world_allows,
-    living_world_levels, mint_consequences, normalize_living_world,
-    owed_history, record_obligations,
+    mint_consequences, owed_history, record_obligations,
 )
 
 
@@ -346,18 +348,21 @@ class TestArrivalIsTheEarningEvent:
         place you have never been owes what happened there whether or not a menu
         says so, and the switch only ever decided whether anybody was told --
         the same shape of thing the `scheduled_consequence` surface gate was.
-        So the debt is annotated whatever the config says, including none."""
+        Since 2026-11-01 there is not even a parameter to hand it a config: the
+        debt is annotated, and the signature says nothing can stop it."""
+        import inspect
+
         from world.living_world import attach_owed_history
 
+        assert list(inspect.signature(attach_owed_history).parameters) == [
+            "cid", "lore_hits"]
         cid = _make_chat(temp_db)
         record_obligations(cid, [_fuse_row(where="entry_cd34",
                                            where_kind="place")])
         hits = [{"entry_uid": "entry_cd34", "category": "location",
                  "content": "x"}]
-        for config in ({}, None, {"place_obligations": "off"}):
-            out = attach_owed_history(cid, hits, config=config)
-            assert out[0]["owed_history"][0]["what"] == "the patrol is doubled", \
-                config
+        out = attach_owed_history(cid, hits)
+        assert out[0]["owed_history"][0]["what"] == "the patrol is doubled"
 
     def test_a_place_without_debt_is_not_annotated(self, temp_db):
         from world.living_world import attach_owed_history
@@ -365,59 +370,16 @@ class TestArrivalIsTheEarningEvent:
         cid = _make_chat(temp_db)
         hits = [{"entry_uid": "entry_zz99", "category": "location"},
                 {"entry_uid": "entry_ff11", "category": "faction"}]
-        out = attach_owed_history(
-            cid, hits, config={"place_obligations": "floor"})
+        out = attach_owed_history(cid, hits)
         assert all("owed_history" not in h for h in out)
 
 
-class TestTheRoute:
-    """The settings must be reachable: background_config shipped with no
-    route once, and scene_life was only settable by hand-editing world KV
-    in both live demo runs."""
-
-    @pytest.fixture
-    def client(self, temp_db):
-        from web import guest_access as guest
-        from fastapi.testclient import TestClient
-
-        from web import app as app_module
-
-        guest.reset_host_account()
-        with TestClient(app_module.app) as c:
-            r = c.post("/api/auth/setup",
-                       json={"username": "host", "password": "pw12345"})
-            assert r.status_code == 200, r.text
-            yield c
-        guest.reset_host_account()
-
-    @pytest.fixture
-    def chat_id(self, temp_db):
-        return _make_chat(temp_db)
-
-    def test_the_route_survives_an_empty_ladder(self, client, chat_id):
-        """The ladder has no approaches left (2026-09-20): Charter, the Writers'
-        Room and causality bubbles superseded the whole of it. The ROUTE stays,
-        because an extension may still call it and must get a shape rather than
-        a 500 -- it now serves nothing to set."""
-        out = client.get(f"/api/chats/{chat_id}/living_world").json()
-        assert out["living_world"] == {}
-        assert out["approaches"] == []
-
-    def test_a_put_of_a_retired_approach_sticks_to_nothing(self, client,
-                                                          chat_id):
-        """A story configured before the retirement, or an extension still
-        publishing against the old contract, is answered rather than obeyed:
-        the name is dropped and nothing is stored under it, so no retired rung
-        can come back and gate a mechanism that is now unconditional."""
-        out = client.put(
-            f"/api/chats/{chat_id}/living_world",
-            json={"living_world": {"routine_residue": "floor",
-                                   "antagonist_ladder": "ceiling",
-                                   "rumor_ledger": "warp speed"}}).json()
-        assert out["living_world"] == {}
-        again = client.get(f"/api/chats/{chat_id}/living_world").json()
-        assert again["living_world"] == {}
-
+# TestTheRoute went on 2026-11-01 with `GET`/`PUT /api/chats/{cid}/living_world`
+# itself. It pinned that the route survived an emptied ladder, so an old caller
+# got a shape rather than a 500; the ladder, the route and the panel that once
+# called it are all deleted now, and an old caller gets a 404
+# (`tests/test_the_living_world_tiers_are_gone.py`).
+#
 # TestTheLadder and TestOneAuthorityCeiling were removed on 2026-09-20 with the
 # thing they pinned. The four-approach ladder and the off-screen cognition
 # CEILING over it are retired: `routine_residue` and `scheduled_consequence`
@@ -427,9 +389,6 @@ class TestTheRoute:
 # cognition ladder is superseded by Charter and the Writers' Room
 # (`docs/design/DESIGN_OFFSCREEN_SUPERSEDED.md`). What a story now says about
 # how much runs beside it is `max_bubbles`
-# (`tests/test_a_story_says_how_many_threads_it_carries.py`).
-#
-# `antagonist_ladder` KEPT its rung and its coverage below: retiring it was
-# tried the same day and measured -- reactive plans fire off plans it authors,
-# so cutting it silently ended the race-you-can-lose mechanism, which is what
-# §4.3 of that doc warned about.
+# (`tests/test_a_story_says_how_many_threads_it_carries.py`). The antagonist
+# ladder's reactive plans, kept a while longer as a placeholder, went with the
+# paid off-screen tiers on 2026-11-01.

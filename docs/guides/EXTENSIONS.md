@@ -1046,8 +1046,18 @@ does when two extensions want the same thing, and what order it runs you in.
 
 ### A world that runs while nobody is looking
 
-Two optional arguments to the same call set how much of the world keeps working
-between beats:
+It runs without being switched on. The Charter moves every institution's
+people every beat, consequences fire on the story clock, unvisited places
+accrue the history they owe, and a character who walks out of reach lives a
+thread of their own — none of it is a setting a campaign has to provision
+([`LIVING_WORLD.md`](LIVING_WORLD.md)).
+
+**`offscreen_life=` and `living_world=` are retired, and still accepted.** Two
+arguments to `provision_story` used to set the off-screen ladder and its four
+living-world approaches inside the provisioning transaction. The ladder, the
+approaches and the paid off-screen tiers they rationed were deleted on
+2026-11-01, superseded by the Charter and the Writers' Room. Because `ext_api`
+stays 1, a call written against the old guide still succeeds:
 
 ```python
 result = api.provision_story(
@@ -1056,31 +1066,25 @@ result = api.provision_story(
     offscreen_life="deterministic",
     living_world={"routine_residue": "floor", "place_obligations": "floor"},
 )
-result["living_world"]["approaches"]   # what will ACTUALLY run
+result["deprecations"]   # one sentence per retired argument it ignored
 ```
 
-They land inside the same transaction as everything else, which is the point:
-a campaign whose premise is that the town keeps working without you is not a
-campaign until that is switched on, and a second write afterwards can fail.
-Both are optional and `None` leaves whatever the package or the host chose.
+Every rung (`inert`, `deterministic`, `reactive`, `stochastic`,
+`character_agent`), approach (`routine_residue`, `scheduled_consequence`,
+`place_obligations`, `antagonist_ladder`) and depth (`off`, `floor`,
+`ceiling`) either argument ever accepted is accepted, provisions NOTHING, and
+is reported three ways: a `DeprecationWarning`, a warning on your extension's
+log, and a sentence in `result["deprecations"]` (an empty list when you named
+neither). A value the ladder never had is still refused with `ExtensionError`
+before the archive is touched, as it always was. What a story now says about
+how much runs beside the player's thread is its `max_bubbles`, read back in the
+slice below. The capability name `living_world_provisioning` left
+`api.capabilities` with the behaviour it promised (the names table below).
 
-**Read `effective`, never `value`.** `approaches` is the engine's own ladder:
-`value` is what you asked for and `effective` is what the gates will run.
-They differ more often than you would expect — three of the four approaches
-have no built ceiling, and the `offscreen_life` rung caps all four — and the
-lowering is silent by design. A caller that reads back only its own request
-learns nothing.
-
-**These two are refused, not normalized**, unlike every host route. A host
-typing into a panel sees the normalized answer come straight back and can
-correct it; you see nothing, and an unreadable rung falls to the *default*
-rather than to the floor, so a typo would quietly buy more off-screen life
-than you asked for. A bad value raises `ExtensionError` naming the valid set,
-before the archive is touched.
-
-`api.story_view(chat_id)["living_world"]` carries the same slice for a story
-you did not provision, plus the institutions in it and the engine's warnings
-about them. Pass `charters="full"` for the complete registry — the same bytes
+`api.story_view(chat_id)["living_world"]` carries what runs beside the
+player's thread for any story -- its `max_bubbles`, its background config, the
+institutions in it and the engine's warnings about them (`story_view` schema
+5; schema 4 carried the retired ladder here instead). Pass `charters="full"` for the complete registry — the same bytes
 `GET /api/chats/{id}/charters` serves; the default is a summary because a
 populated town is large and this is a per-render read.
 
@@ -1094,10 +1098,9 @@ same request replays it for free; a run interrupted *after* it began planting
 rooms is refused rather than repeated, and `api.living_world_job(chat_id)`
 reports it.
 
-The subsystem itself — the four approaches, the five off-screen rungs, and the
-six gates that must agree before anything happens — is
-[`LIVING_WORLD.md`](LIVING_WORLD.md). Read it before choosing values; the
-defaults do less than they look like they do.
+The subsystem itself — what runs without a setting, the few dials that remain,
+and what the retired ladder used to gate — is
+[`LIVING_WORLD.md`](LIVING_WORLD.md).
 
 ### Asking the host what it can do
 
@@ -1137,21 +1140,26 @@ The names today:
 | `routes` | `api.add_route` |
 | `install_limits` | the installer audits one manifest against bounded counts and bytes, and reports what it measured |
 | `frame_coherent_reads` | `api.at_frame` — several reads resolving against one chosen era |
-| `living_world_provisioning` | `api.provision_story(..., offscreen_life=, living_world=)`, and the effective ladder read back (§7.6) |
 | `living_world_generation` | `api.generate_lived_location` / `api.living_world_job` (§7.6) |
 
-One name has left this table while `ext_api` stayed 1: `list_channels`
-(`api.add_director_specialist(list_channels=…)`), withdrawn on 2026-09-27
-with the Director specialists it described. The call it promised now
-raises, and a name still promising it would be the lie this table exists
-to prevent; an extension that branched on it finds it absent, which is the
-true answer.
+Two names have left this table while `ext_api` stayed 1, each with the
+behaviour it promised, because a name still promising it would be the lie this
+table exists to prevent; an extension that branched on one finds it absent,
+which is the true answer. `list_channels`
+(`api.add_director_specialist(list_channels=…)`) was withdrawn on 2026-09-27
+with the Director specialists it described, and the call it promised now
+raises. `living_world_provisioning` (`api.provision_story(...,
+offscreen_life=, living_world=)` and the effective ladder read back) was
+withdrawn on 2026-11-01 with the off-screen ladder; that call does NOT raise —
+both arguments are still accepted, as warning no-ops (*A world that runs while
+nobody is looking*, above).
 
 **Two names for one subject, on purpose** — `frame_state` is a claim about
-*scope* and `frame_coherent_reads` about *coherence*, and the same split is why
-`living_world_provisioning` and `living_world_generation` are separate: an
-extension can want to configure a world without ever generating one, and a name
-covering both would be a promise it could not check. The reasoning, which was
+*scope* and `frame_coherent_reads` about *coherence*, and the same split was why
+`living_world_provisioning` and `living_world_generation` were separate: an
+extension could want to configure a world without ever generating one, and a
+name covering both would have been a promise it could not check. (The first of
+that pair has since left, 2026-11-01; the second stands.) The reasoning, which was
 written when only the first of each pair existed:
 
 `frame_state` says state can belong to one era, not that several reads made

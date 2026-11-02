@@ -40,7 +40,6 @@ import secrets
 from core.db import q, wget, wset
 from persist.steps import active_content
 from world.charter_runtime import REGISTRY_VERSION
-from world.living_world import OFFSCREEN_CEILING_KEY
 
 #: Bump when a consumer could break. Callers are outside this repository and
 #: cannot be migrated in the same commit, which is the whole reason a read this
@@ -79,7 +78,16 @@ from world.living_world import OFFSCREEN_CEILING_KEY
 #: one case a rename is safer than reuse: a consumer that kept reading `time`
 #: would silently keep getting the corrupt field's semantics, and absence of
 #: the old key is the signal that its meaning is gone.
-STORY_VIEW_SCHEMA = 4
+#:
+#: 5: the `living_world` slice loses `living_world`, `offscreen_life`,
+#: `max_offscreen_actors` and `approaches` and gains `max_bubbles`. The four
+#: described the paid off-screen tiers and their ladder, deleted 2026-11-01;
+#: every one had read a constant since 2026-09-20 (`{}`, `stochastic`, `0`,
+#: `[]`), so a consumer computing from them was already computing from
+#: nothing -- but one INDEXING them breaks, which is this constant's rule.
+#: `max_bubbles` is the dial that replaced `max_offscreen_actors`: how many
+#: absent characters may be living a thread of their own at once.
+STORY_VIEW_SCHEMA = 5
 
 #: How many committed world events a view carries by default. Bounded because
 #: this is a per-render read from a UI, and an unbounded history turns a panel
@@ -344,13 +352,12 @@ def _living_world(chat_id, frame_id, scene, detail):
     registry, belief and all, to any host session, so a Python caller getting
     less than the browser would be a weaker path rather than a safer one.
 
-    THE ENGINE'S OWN COMPOSED ANSWER, not a second one. `living_world_levels`
-    computes `effective` through `effective_depth` with the off-screen ceiling
-    folded in, so `value` (what was asked for) and `effective` (what will
-    actually run) cannot drift from what the gates do. Reporting `value`
-    alone would be the trap the ladder is full of: two of the four approaches
-    have no built ceiling, and `effective_depth` lowers a request silently and
-    never says why. The ceiling rides along because it is half the answer.
+    WHAT RUNS, NOT A LADDER. The slice used to carry the four-approach
+    living-world ladder and the off-screen ceiling over it; both were retired
+    with the paid off-screen tiers on 2026-11-01 (schema 5), after six weeks
+    of reading constants. What a story now says about how much lives beside
+    the player's thread is `max_bubbles`, read through `dialogue_config`, the
+    reader that clamps it.
 
     `detail` bounds SIZE, never disclosure. The default carries a row per
     institution and the counts a panel renders from; `"full"` carries
@@ -358,24 +365,16 @@ def _living_world(chat_id, frame_id, scene, detail):
     A registry is a per-render read and a populated town is large, which is
     the only reason there is a choice here at all.
     """
-    from world.living_world import (living_world_config, living_world_levels,
-                                    normalize_living_world)
-    from story.scene import background_config
+    from story.scene import background_config, dialogue_config
 
-    config = living_world_config(chat_id)
     out = {
-        # The four author-selectable approaches, as stored.
-        "living_world": normalize_living_world(config),
-        # The authority ceiling over all four, and the actor cap. Not
-        # decoration: `effective` below is computed against them.
-        "offscreen_life": config.get(OFFSCREEN_CEILING_KEY),
-        "max_offscreen_actors": _dialogue_actor_cap(chat_id),
-        # Requested vs effective per approach, with `built` and `permitted`
-        # per depth -- the engine's ladder, not a copy of it.
-        "approaches": living_world_levels(config),
-        # The sixth gate, and the one that governs bodies IN the room rather
-        # than absent ones. Included because an integrator configuring a world
-        # should not need a second call to see a setting this one composes with.
+        # How many absent characters may be living a thread of their own at
+        # once (`agents/offscreen_beat.py`): the cost dial for what runs
+        # beside the player's story.
+        "max_bubbles": dialogue_config(chat_id)["max_bubbles"],
+        # The setting that governs bodies IN the room rather than absent
+        # ones. Included because an integrator configuring a world should not
+        # need a second call to see it.
         "background": background_config(chat_id),
         "charters": [],
         "registry_warnings": [],
@@ -448,13 +447,6 @@ def _structure_names(chat_id):
         return {}
     return {str(key): str((value or {}).get("name") or "")
             for key, value in items.items() if isinstance(value, dict)}
-
-
-def _dialogue_actor_cap(chat_id):
-    """`max_offscreen_actors`, through the reader that clamps it."""
-    from story.scene import dialogue_config
-
-    return dialogue_config(chat_id).get("max_offscreen_actors")
 
 
 def _story_view_in_frame(chat_id, chat, turn, events, frame_id,
