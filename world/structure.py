@@ -153,6 +153,19 @@ PLAN_SEEDED_FIELDS = ("far_look",)
 #: changes in one frame never reaches another frame's stub.
 LAID_LOOKS_KEY = "far_looks_laid"
 
+#: The scene's record of the measurements each prose-free planned stub last
+#: took from its plan: ``{room uid: {field: fingerprint}}``
+#: (`_lay_planned_geometry`). Read and written by `materialize_planned_fringe`
+#: alone, and absent from a scene whose stubs took nothing. Frame-scoped
+#: because the scene is. Room-keyed, like `LAID_LOOKS_KEY`.
+PLAN_GEOMETRY_LAID_KEY = "planned_geometry_laid"
+
+#: The measurements a solve owns on a stub (`apply_planned_layout`: laid
+#: from a solved plan, taken back by `_take_the_solve_off` through the
+#: stub's own `LAID_OUT_KEY` record) -- never taken back by the fringe's
+#: record, which would leave that record nothing to read.
+_SOLVE_OWNED_FIELDS = ("site", "parts", "windows")
+
 
 def planned_anchors(planned):
     """``{"anchors": {id: {...}}}`` for a planned room that names its
@@ -355,7 +368,17 @@ def _lay_stub_on_its_plan(room, spec):
         # the wall's now, never also a thing in the room
         held.pop(aid, None)
     split = _split_records(spec)
-    for aid, anchor in (planned_anchors(spec).get("anchors") or {}).items():
+    # THE PLAN'S ANCHORS READ IN PLACE, COPIED ONLY WHERE THE STUB DIFFERS:
+    # every `get_scene` lays every sited stub again (`apply_solved_plans`),
+    # and deep-copying each anchor three times over was 70% of it -- 22 ms a
+    # call on 150 stubs already laid (audit 2026-11-01,
+    # world_layout_bridge_structure E1). The stub ends holding equal values
+    # either way; `planned_anchors`' key rule is kept.
+    raw = spec.get("anchors") if isinstance(spec.get("anchors"), dict) else {}
+    for raw_id, anchor in raw.items():
+        aid = str(raw_id or "").strip()
+        if not aid or not isinstance(anchor, dict):
+            continue
         live = held.get(aid)
         if not isinstance(live, dict):
             held[aid] = copy.deepcopy(anchor)
@@ -364,7 +387,7 @@ def _lay_stub_on_its_plan(room, spec):
             live.pop("cell", None)
             live.pop("extent", None)
         for key in LAYOUT_ANCHOR_FIELDS:
-            if key in anchor:
+            if key in anchor and (key not in live or live[key] != anchor[key]):
                 live[key] = copy.deepcopy(anchor[key])
         if "mount" not in anchor:
             # a stub's anchors are the plan's: a mount an earlier solve laid
@@ -550,7 +573,7 @@ def solved_plan_row(planned, solved):
     solve's own ways; and the record under `layout`. ONE RULE, TWO READERS:
     `write_planned_layout` writes exactly this, and the grounds floor reads
     exactly this before anything is written (`solved_scene`,
-    `layout_bridge.ground_refusals`), so the floor never judges a building
+    `layout_bridge.ground_breaches`), so the floor never judges a building
     other than the one the plan will hold."""
     planned = copy.deepcopy(planned)
     for key, value in (solved.get("geometry") or {}).items():
@@ -1628,6 +1651,9 @@ def materialize_planned_fringe(cid, scene):
     # (`settle_developed_stubs` takes the seed off) and nothing here touches
     # it -- which is the same line the claim draws when it refuses to rename.
     stubs = []
+    geometry_was = scene.get(PLAN_GEOMETRY_LAID_KEY)
+    geometry_was = dict(geometry_was) if isinstance(geometry_was, dict) else {}
+    geometry_laid = {}
     for uid, (name, spec) in planned.items():
         room = rooms.get(uid)
         if not isinstance(room, dict) or not room.get("planned"):
@@ -1641,7 +1667,7 @@ def materialize_planned_fringe(cid, scene):
         _mark_held_open(room, spec)
         if str(spec.get("purpose") or ""):
             room["purpose"] = str(spec["purpose"])
-        room.update(planned_geometry(spec))
+        geometry_laid[uid] = _lay_planned_geometry(room, spec, geometry_was.get(uid))
         # A ROOM'S ANCHORS ARE ADDED TO, NOT REPLACED (`spatial_merge.
         # _merge_anchor_fields`, one layer out). A stub the plan furnished
         # may already have had a fixture written onto it by a beat, and
@@ -1649,6 +1675,11 @@ def materialize_planned_fringe(cid, scene):
         # and every station hanging off it.
         for _aid, _anchor in planned_anchors(spec).get("anchors", {}).items():
             room.setdefault("anchors", {}).setdefault(_aid, _anchor)
+    kept = {uid: laid for uid, laid in geometry_laid.items() if laid}
+    if kept:
+        scene[PLAN_GEOMETRY_LAID_KEY] = kept
+    else:
+        scene.pop(PLAN_GEOMETRY_LAID_KEY, None)
     # ITS FAR LOOK IS THE PLAN'S ONLY WHEN THE PLAN SPEAKS: a beat that
     # burned the place, or a host who edited it, has the last word until the
     # plan says something new (`PLAN_SEEDED_FIELDS`).
@@ -1708,6 +1739,55 @@ def materialize_planned_fringe(cid, scene):
     from world.site_plan import derive_site_plans
     derive_site_plans(scene)
     return scene, added
+
+
+def _geometry_print(value) -> str:
+    """One measurement as a short comparable fingerprint (`_lay_planned_geometry`)."""
+    text = json.dumps(value, sort_keys=True, default=str, ensure_ascii=False)
+    return hashlib.sha1(text.encode("utf-8")).hexdigest()[:12]
+
+
+def _lay_planned_geometry(room, spec, laid_before=None) -> dict:
+    """Lay the plan's measurements on its prose-free stub `room`, in place,
+    and return what was laid (`{field: fingerprint}`, the scene's
+    `PLAN_GEOMETRY_LAID_KEY` entry for the stub).
+
+    A RE-PLAN THAT DROPS A MEASUREMENT TAKES IT OFF ITS STUB: the plan owns
+    a stub's measurements, so one it laid and no longer states goes -- only
+    while the stub still holds exactly what the plan laid (a value a beat or
+    a host wrote since is theirs), and never a solve's own (`site`, `parts`,
+    `windows`, or anything on a stub a solve laid, which `apply_planned_layout`
+    takes back by its own record). It only ever ADDED, so a lot's entry stub
+    kept the lot's footprint -- the whole building's -- after its expansion
+    said the entry has no size, and a beat describing the shop floor as 4 by
+    5 was refused, because a planned stub carrying an extent holds it as the
+    plan's measurement (audit 2026-11-01, B F3: 10 by 14 kept, 4 by 5
+    refused). A stub laid before this record existed reads the lot's own
+    record of the footprint it dropped (`lots.normalize_lot`'s `footprint`),
+    compared by its two sides alone."""
+    from world.lots import LOT_KEY, normalize_lot
+    geometry = planned_geometry(spec)
+    before = dict(laid_before) if isinstance(laid_before, dict) else {}
+    if LAID_OUT_KEY not in room:
+        if before:
+            for key, was in before.items():
+                if (key in geometry or key in _SOLVE_OWNED_FIELDS
+                        or key not in GEOMETRY_FIELDS or key not in room):
+                    continue
+                if _geometry_print(room[key]) == was:
+                    room.pop(key, None)
+        else:
+            lot = normalize_lot((spec or {}).get(LOT_KEY)) or {}
+            footprint = lot.get("footprint")
+            extent = room.get("extent")
+            if ("expanded" in lot and footprint and "extent" not in geometry
+                    and isinstance(extent, dict)
+                    and extent.get("w") == footprint["w"]
+                    and extent.get("d") == footprint["d"]):
+                room.pop("extent", None)
+    room.update(geometry)
+    return {key: _geometry_print(value) for key, value in geometry.items()
+            if key not in _SOLVE_OWNED_FIELDS}
 
 
 def held_open_marks(spec) -> dict:
@@ -1819,7 +1899,7 @@ def solved_scene(rows):
     into it (`_edges_declared_to`), every solved plan laid on its stub
     (`apply_planned_layout`) and its stub barriers settled. Pure: nothing
     read, nothing written. The grounds floor's preview of a solve
-    (`layout_bridge.ground_refusals`) -- over the rows `solved_plan_row` and
+    (`layout_bridge.ground_breaches`) -- over the rows `solved_plan_row` and
     `made_plan_row` make, which `write_planned_layout` writes."""
     rooms = {uid: _planned_stub(name, spec) for uid, (name, spec) in rows.items()}
     for uid, (_name, spec) in rows.items():
@@ -2059,16 +2139,25 @@ def planned_room_brief(cid, scene, room_ids, *, fixtures=False):
         room = rooms.get(rid) or {}
         name, spec = specs.get(rid, (names.get(rid, rid), {}))
         exits = {}
-        for edge in list(spec.get("adjacent") or ()) + list(
-                room.get("adjacent") or ()):
+        # THE STUB'S OWN DOORWAY FIRST, the plan's only where the stub says
+        # nothing: the stub's barrier is the one the story settled
+        # (`_settle_stub_barriers`, "the plan yields and the story stands"),
+        # and the plan's first, it briefed the designer and the beat's
+        # Director `open_door` for a doorway the spine records shut -- a
+        # design that echoed the exit wrote it back, and the doorway
+        # disagreed with itself again: chat 117's measured class (audit
+        # 2026-11-01, B F9). First writer wins for every field, the way's
+        # name included -- the stub's, as it was.
+        for edge in list(room.get("adjacent") or ()) + list(
+                spec.get("adjacent") or ()):
             if not isinstance(edge, dict) or not edge.get("to"):
                 continue
             to = str(edge["to"])
             entry = exits.setdefault(to, {"to": to, "name": names.get(to, to)})
             for key in ("barrier", "dir", "name"):
-                if edge.get(key) and key not in entry or key == "name" \
-                        and edge.get(key):
-                    entry[key if key != "name" else "way"] = edge[key]
+                field = key if key != "name" else "way"
+                if edge.get(key) and field not in entry:
+                    entry[field] = edge[key]
         brief = {
             "name": name,
             "purpose": str(spec.get("purpose") or room.get("purpose") or ""),
@@ -2470,18 +2559,67 @@ def planned_topology(cid, *, routes_only=False):
     return out
 
 
+def rooms_named_whole(text, spellings_by_room):
+    """`{room id}` whose spelling stands in ``text`` as a WHOLE name.
+
+    THE ONE MATCHER for "which rooms does this description name". A spelling
+    sits inside a description only as a whole name, never as the letters
+    inside another word, and where one spelling sits inside another the
+    LONGEST is the one named (`language_runtime.find_names`: each end of each
+    spelling bounded by its own script, `name_boundary_pattern`). Both sides
+    are folded by `fold_key(..., " ")`, so `great_hall`, "Great Hall" and
+    "the GREAT hall" are one phrase, and a name written in a script
+    `normalize_room_id` empties keeps its letters.
+
+    ``spellings_by_room`` is `{room id: [spelling, ...]}`, in any fold --
+    an id, a slug, a display name, an alias.
+
+    Measured (audits of 2026-11-01, agents_runtime_loops_mapping F5 and
+    world_layout_bridge_structure F8): the readers tested `key in folded`
+    on slugs, so a planned `inn` answered "the spinning mill", "Finnegan's
+    forge" and "the inner keep", a planned `hall` answered "a shallow ford",
+    and a declared walk to the spinning mill was made canonical as the inn.
+    """
+    from language_runtime import find_names, fold_key
+
+    body = fold_key(text, " ")
+    if not body:
+        return set()
+    owners = {}
+    for rid, spellings in (spellings_by_room or {}).items():
+        for spelling in spellings or ():
+            form = fold_key(spelling, " ")
+            if form:
+                owners.setdefault(form, set()).add(str(rid))
+    if not owners:
+        return set()
+    return {rid for _start, _end, form in find_names(body, owners, flags=0)
+            for rid in owners[form]}
+
+
+def _planned_forms(cid):
+    """``{room_uid: every spelling}`` a live planned room answers to: the
+    folded keys `_planned_spellings` holds, and its uid, name and aliases as
+    written -- so a name in a script `normalize_room_id` folds to nothing
+    (宿屋, ホール) is still a spelling of its room."""
+    spellings = _planned_spellings(cid)
+    out = {}
+    for uid, entry in registry_rows(cid).items():
+        if entry["planned"] is None:
+            continue
+        forms = set(spellings.get(uid) or ())
+        forms.update(str(form) for form in (uid, entry["name"],
+                                            *(entry["aliases"] or ()))
+                     if str(form or "").strip())
+        out[uid] = forms
+    return out
+
+
 def planned_rooms_named_in(cid, text):
-    """The planned rooms whose uid or name spelling sits inside ``text``,
-    folded the way `planned_context` folds a query -- the rooms a scenario
-    names without ids. Sorted, for a stable payload."""
-    folded = normalize_room_id(str(text or ""))
-    if not folded:
-        return []
-    out = []
-    for rid, keys in _planned_spellings(cid).items():
-        if any(k == folded or k in folded for k in keys):
-            out.append(str(rid))
-    return sorted(out)
+    """The planned rooms whose uid, name or alias stands in ``text`` as a
+    whole name (`rooms_named_whole`) -- the rooms a scenario names without
+    ids. Sorted, for a stable payload."""
+    return sorted(rooms_named_whole(text, _planned_forms(cid)))
 
 
 def protect_planned_edges(cid, scene):
@@ -2561,8 +2699,13 @@ def settle_developed_stubs(scene):
 
 def planned_context(cid, query):
     """Short structural context for mapping a specifically requested room."""
+    from language_runtime import fold_key
+
     folded = normalize_room_id(str(query or ""))
-    if not folded:
+    # The same fold in every script: `normalize_room_id` keeps ASCII alone,
+    # so a Japanese query folded to "" and no plan room could answer it.
+    script_folded = fold_key(query, "_")
+    if not folded and not script_folded:
         return None
     rows = []
     all_rows = registry_rows(cid)
@@ -2572,6 +2715,12 @@ def planned_context(cid, query):
     # included (`_planned_spellings`): a brief asked for under the name the
     # story has been using is the same room, not an unplanned destination.
     spellings = _planned_spellings(cid)
+    # The loose tier reads the query ONCE over every planned room
+    # (`rooms_named_whole`): a spelling stands in it as a whole name, never
+    # as letters inside a word ("the spinning mill" is no `inn`), and where
+    # one room's spelling sits inside another's the longer is the one named.
+    forms = _planned_forms(cid)
+    named = rooms_named_whole(query, forms)
     for uid, entry in all_rows.items():
         spec = entry["planned"]
         if spec is None:
@@ -2580,8 +2729,11 @@ def planned_context(cid, query):
         keys = set(spellings.get(uid) or ())
         keys.update({normalize_room_id(uid), normalize_room_id(name)})
         keys.discard("")
-        exact = folded in keys
-        if not exact and not any(key in folded for key in keys):
+        script_keys = {fold_key(form, "_") for form in forms.get(uid) or ()}
+        script_keys.discard("")
+        exact = (bool(folded) and folded in keys) or (
+            bool(script_folded) and script_folded in script_keys)
+        if not exact and uid not in named:
             # THE THIRD TIER IS THE NAME'S WORDS (`spatial.room_name_words`,
             # the same fold `scene_room_id` makes for a live room): a
             # destination written the way a person says it -- "Cope's
@@ -2612,8 +2764,10 @@ def planned_context(cid, query):
     # AN EXACT MATCH IS NOT AMBIGUOUS, and the substring tier is what made it
     # look like one. The match above is deliberately loose -- the Director
     # writes a destination as a description ("Reeve's Hall interior and
-    # occupants"), so a room answers when its spelling SITS INSIDE the query
-    # -- but a room id also sits inside another room id. Measured on the live
+    # occupants"), so a room answers when its spelling stands in the query as
+    # a whole name (it was a bare substring until 2026-11-01, which let `inn`
+    # answer "the spinning mill") -- but a room id also sits inside another
+    # room id. Measured on the live
     # chat 114 register: a room called `parking` is a substring of
     # `guest_parking_lot`, so both matched, `len(rows) != 1`, and the query
     # resolved to None; 30-odd rooms of that story's district answered nothing
@@ -2715,6 +2869,17 @@ def prepare_frontier_expansion(cid, scene):
         if isinstance(spec, dict):
             specs[uid] = (payload, dict(spec))
             skey = str(spec.get("structure") or "")
+            # A LOT'S ROOMS ARE INSIDE IT, never places on the map's edge:
+            # the frontier's quota is read on the structure's total here and
+            # on one call's rooms in `plant_structure`, and `expand_lot`
+            # plants up to 14 a lot, so a village whose lots were expanded
+            # past `max_planned` retained every axis with no word, and a walk
+            # to its edge minted nothing (audit 2026-11-01, B F12). The lot
+            # itself counts once, as it did unexpanded; the number is the
+            # owner's and unchanged.
+            of = str(spec.get("lot_of") or "")
+            if of and of != str(uid):
+                continue
             counts[skey] = counts.get(skey, 0) + 1
     structures = normalize_structures(
         wget_for_frame(cid, STRUCTURES_KEY, None, {}) or {})["items"]

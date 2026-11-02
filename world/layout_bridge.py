@@ -22,8 +22,10 @@ one structure joined by stairs between rooms that may be storeys, grown along
 level joins into rooms the plan or the scene states are `enclosed` -- the
 engine's own word for a room with walls round it; a room of unstated
 exposure is not guessed into a building along a level join. What the
-building's rooms join outside it is the ground it opens onto. Nothing here
-reads a name or a purpose for meaning.
+building's rooms join outside it is the ground it opens onto. One thing
+here reads a name or a purpose: which room is the house's own door, and
+only after what the plan itself says (`_entry_rank`: a lot's entry, a
+closed purpose), as whole words of the solver's closed set and the pack's.
 
 WHAT THE PLAN FIXES, CODE KEEPS. The rooms, their ids, names and storeys;
 which rooms join which (a join the model writes that the plan lacks is
@@ -123,22 +125,38 @@ never refused.
 """
 from __future__ import annotations
 
+import contextvars
 import copy
 import hashlib
 import json
+import logging
 import math
 import re
 
-from world.layout_arrange import ArrangeBudget, solve_arranged
+from world.layout_arrange import ArrangeBudget, ArrangeCancelled, solve_arranged
 from world.layout_solver import (FIXTURE_SIZES, PURPOSE_AREA, SIZE_WORD_FOOTPRINT,  # noqa: F401
                                  STAIR_FALLBACK, STAIRS, ZONE_SIZES, check, fixture_footprint,
                                  purpose_key, solve)
 from world.lots import LOT_KEY, LOT_OF_KEY
 from world.structure import LAYOUT_MADE_KEY, LAYOUT_PLAN_PREFIX
 
-#: The purposes (`layout_solver.purpose_key`) of a room that is the house's
-#: own door where several rooms open onto the ground its entrance does
-#: (`_building`): an entry, a hall.
+#: The engine's logger, by name: this module stays importable with no
+#: database configured (`core.logging_utils` reads a setting at import).
+_log = logging.getLogger("fiction_engine")
+
+#: WHETHER THE JOB LAYING A BUILDING WAS STOPPED: a predicate the job sets
+#: around its solves (`agents.director_layout.lay_out_buildings`), asked by
+#: the core as it counts its work and by the lab's search between seeds
+#: (`solve_for`, `lab_solve_for`); either raises `ArrangeCancelled`, and
+#: nothing falls back. None -- a test, a tool, the opening's own solve --
+#: asks nothing. A cancelled job used to keep solving to the core's budget
+#: and four lab seeds of pure-Python CPU, competing for the GIL with the beat
+#: that replaced it (audit 2026-11-01, world_layout_core E3).
+CANCELLED = contextvars.ContextVar("layout_cancelled", default=None)
+
+#: The purposes (`layout_solver.PURPOSE_AREA`'s closed words) of a room that
+#: is the house's own door where several rooms open onto the ground its
+#: entrance does (`_building`, `_entry_rank`): an entry, a hall.
 ENTRY_PURPOSES = ("entryway", "hall")
 
 #: Rooms one building may hold for the tier to lay it out. The solver
@@ -402,7 +420,10 @@ def _joined_apart(building, room, pid):
                 continue
             if {uid, str(edge.get("to") or "")} == {room, pid}:
                 said.append(edge.get("distance"))
-    if _apart_habit(building.get("specs") or {}, str(building.get("structure") or "")):
+    habit = building.get("apart_habit")
+    if habit is None:
+        habit = _apart_habit(building.get("specs") or {}, str(building.get("structure") or ""))
+    if habit:
         return False        # the plan writes the word on most of its joins
     return any(_authored_apart(distance) for distance in said)
 
@@ -432,7 +453,7 @@ def _exposure(uid, specs, rooms):
 
 
 def plan_buildings(specs, scene, *, held_open=(), max_rooms=LAYOUT_TIER_MAX_ROOMS,
-                   grounds=False):
+                   grounds=False, only=None):
     """Every planned building of two storeys or more, each with `refusal`
     None when the tier may lay it out and the reason in words when not.
 
@@ -447,7 +468,14 @@ def plan_buildings(specs, scene, *, held_open=(), max_rooms=LAYOUT_TIER_MAX_ROOM
     room stated `open` or `sheltered` is never a storey
     (`STOREY_EXPOSURES`). A stair into another part of the map joins the
     rooms it reaches when they are a storey of this building and of no
-    other (`_a_storey_of`)."""
+    other (`_a_storey_of`).
+
+    `only`, a set of room ids: build only the buildings that hold one of them
+    (the grouping still reads the whole plan, so a building is the same one
+    whichever rooms are asked about). Built whole every run and then
+    filtered, a street of expanded lots cost 112 ms at 25 lots and 1,485 ms
+    at 100, per rooms-in-view run (audit 2026-11-01,
+    world_layout_bridge_structure E2)."""
     from world.site_plan import normalize_site
     from world.spatial import normalize_level
     rooms = ((scene or {}).get("rooms") or {})
@@ -465,8 +493,11 @@ def plan_buildings(specs, scene, *, held_open=(), max_rooms=LAYOUT_TIER_MAX_ROOM
     # card then defined the word by how much weather reaches a place -- with
     # the house's front door between it and the lantern path, and the genkan
     # was laid as a block of the garden jutting from the hall, the kitchen's
-    # back door taken for the front door.
-    walled |= _walled_by_a_door(specs, rooms, edges, walled, structure_of)
+    # back door taken for the front door. `by_door` is each such place and
+    # the walled rooms it is the doorway of, which it joins whatever part of
+    # the map either is filed in.
+    by_door = _walled_by_a_door(specs, rooms, edges, walled, structure_of)
+    walled |= set(by_door)
 
     def may_be_storey(uid):
         return uid in walled or _exposure(uid, specs, rooms) in STOREY_EXPOSURES
@@ -488,7 +519,8 @@ def plan_buildings(specs, scene, *, held_open=(), max_rooms=LAYOUT_TIER_MAX_ROOM
     # latrine the plan put across the ground behind the house was laid as a
     # room inside it in every shrine the engine laid (2026-10-15).
     planned = {uid: spec for uid, (_name, spec) in specs.items()}
-    apart = {uid: others for uid, others in _stated_apart(edges, structure_of, planned).items()
+    stated_apart = _stated_apart(edges, structure_of, planned)
+    apart = {uid: others for uid, others in stated_apart.items()
              if uid in walled and uid not in stair_rooms}
     parent = {}
 
@@ -501,10 +533,18 @@ def plan_buildings(specs, scene, *, held_open=(), max_rooms=LAYOUT_TIER_MAX_ROOM
 
     # A LOT'S ROOMS ARE ITS BUILDING (`world/lots.py`): the rooms one lot was
     # expanded into are one building and no other's, whatever storeys it has
-    # -- a house that shares a wall with the next is still two
-    lot_of = {uid: str(((spec or {}).get(LOT_OF_KEY) or "")) for uid, (_n, spec) in specs.items()}
+    # -- a house that shares a wall with the next is still two. A lot not yet
+    # expanded is a building of its own too: it carries `lot` and no
+    # `lot_of`, and read by `lot_of` alone it was "" like every ordinary
+    # room's, so an inn's taproom with a door into the stable lot next to it
+    # laid the stable as a room of the inn, and the stable's own expansion
+    # later stripped the inn's solve (audit 2026-11-01, B F4)
+    lot_of = {uid: _lot_key(uid, spec) for uid, (_n, spec) in specs.items()}
     for (a, b), rec in edges.items():
-        if a not in candidates or b not in candidates or structure_of[a] != structure_of[b]:
+        if a not in candidates or b not in candidates:
+            continue
+        if structure_of[a] != structure_of[b] and not (
+                b in by_door.get(a, ()) or a in by_door.get(b, ())):
             continue
         if lot_of.get(a) != lot_of.get(b):
             continue
@@ -529,7 +569,7 @@ def plan_buildings(specs, scene, *, held_open=(), max_rooms=LAYOUT_TIER_MAX_ROOM
     # where the two still fit one solve (`max_rooms`); else the stair stays
     # the way out it was.
     for a, b in crossings:
-        if find(a) == find(b):
+        if find(a) == find(b) or lot_of.get(a) != lot_of.get(b):
             continue
         ga = {u for u in parent if find(u) == find(a)} or {a}
         gb = {u for u in parent if find(u) == find(b)} or {b}
@@ -542,15 +582,20 @@ def plan_buildings(specs, scene, *, held_open=(), max_rooms=LAYOUT_TIER_MAX_ROOM
     groups = {}
     for uid in list(parent):
         groups.setdefault(find(uid), set()).add(uid)
+    wanted = None if only is None else {str(r) for r in only}
+    shared = {"structure_of": structure_of, "stated_apart": stated_apart,
+              "habit": {}}
     out = []
     for members in groups.values():
         if not members & stair_rooms and not any(lot_of.get(u) for u in members):
+            continue
+        if wanted is not None and not members & wanted:
             continue
         structure = _home_structure(members, specs, structure_of, normalize_level)
         out.append(_building(sorted(members), specs, rooms, edges, structure,
                              held_open=set(held_open or ()), max_rooms=max_rooms,
                              normalize_site=normalize_site, normalize_level=normalize_level,
-                             grounds=grounds))
+                             grounds=grounds, shared=shared))
     return sorted(out, key=lambda b: b["key"])
 
 
@@ -559,42 +604,206 @@ def plan_buildings(specs, scene, *, held_open=(), max_rooms=LAYOUT_TIER_MAX_ROOM
 DOOR_BARRIERS = ("open_door", "closed_door")
 
 
-def _walled_by_a_door(specs, rooms, edges, walled, structure_of) -> set:
-    """The places the plan states `sheltered` that stand between a walled
-    room of their own part of the map and open ground, with a door the
-    engine reads as one on the way onto the open ground, declared on either
-    side (`plan_buildings`). A porch, a veranda or an archway opens onto the
-    ground with no door, and stays ground the building opens onto."""
+def _lot_key(uid, spec) -> str:
+    """The lot a planned room is a room of (`world/lots.py`): the lot it was
+    expanded from, else itself when it is a lot not yet expanded -- one room
+    standing for a building of its own -- else "" (no lot)."""
+    spec = spec if isinstance(spec, dict) else {}
+    of = str(spec.get(LOT_OF_KEY) or "")
+    if of:
+        return of
+    return str(uid) if spec.get(LOT_KEY) is not None else ""
+
+
+def _walled_by_a_door(specs, rooms, edges, walled, structure_of) -> dict:
+    """`{place: {the walled rooms it opens into}}` for each place the plan
+    states `sheltered` that stands between a walled room and the ground
+    outside the building, with a door the engine reads as one on the way
+    out, declared on either side (`plan_buildings`). A porch, a veranda or
+    an archway opens onto the ground with no door, and stays ground the
+    building opens onto.
+
+    THE WAY OUT IS ONTO ANYTHING THAT IS NO ROOM OF THE BUILDING: neither
+    walled nor touched by a stair, which is the grouping's own reading of
+    what a building holds -- not only a place that says `open` in so many
+    words. 338 of the 586 planned rooms in the owner's registry state no
+    exposure at all (audit 2026-11-01, B F5), so a genkan whose door gave
+    onto a path of unstated exposure stayed ground and the hall's door onto
+    it became the front door: chat 179's shape, back by another road. And
+    THE WALLED ROOM MAY BE FILED IN ANY PART OF THE MAP, as a stair's storey
+    may (`_a_storey_of`): the Room files a house and its grounds apart
+    (chat 179's own latrine is `shrine_grounds` beside a `shrine_house`
+    washroom), and a genkan filed with the grounds was never walled."""
     from world.spatial import normalize_barrier
-    out = set()
+
+    def doors(rec, back):
+        said = {normalize_barrier(r.get("barrier")) for r in (rec, back or {})
+                if r.get("barrier")}
+        return said & set(DOOR_BARRIERS)
+
+    stair_touched = {a for (a, b), rec in edges.items() if rec["vertical"] and b in specs}
+    out = {}
     for uid in specs:
         if _exposure(uid, specs, rooms) != "sheltered":
             continue
         joins = [(b, rec) for (a, b), rec in edges.items() if a == uid and not rec["vertical"]]
-        if not any(b in walled and structure_of.get(b) == structure_of.get(uid) for b, _rec in joins):
+        inside = {b for b, _rec in joins if b in walled}
+        if not inside:
             continue
-        if any(_exposure(b, specs, rooms) == "open"
-               and {normalize_barrier(rec.get("barrier")) if rec.get("barrier") else "",
-                    normalize_barrier((edges.get((b, uid)) or {}).get("barrier"))
-                    if (edges.get((b, uid)) or {}).get("barrier") else ""} & set(DOOR_BARRIERS)
+        if any(b not in walled and b not in stair_touched
+               and _exposure(b, specs, rooms) != "sheltered"
+               and doors(rec, edges.get((b, uid)))
                for b, rec in joins):
-            out.add(uid)
+            out[uid] = inside
     return out
 
 
 def _a_storey_of(annex, host, edges, specs, walled, normalize_level):
     """Whether the rooms `annex`, which a stair from the rooms `host` reaches
     in another part of the map, are storeys of the building `host` stands
-    in: every one of them stated off the ground storey -- a part of the map
-    with a room on the ground is a building of its own, met by a stair --
-    and none joined to a walled room outside the two, whose building the
-    stair might as well be said to serve (`plan_buildings`)."""
+    in: every one of them off the ground storey -- a part of the map with a
+    room on the ground is a building of its own, met by a stair -- and none
+    joined to a walled room outside the two, whose building the stair might
+    as well be said to serve (`plan_buildings`).
+
+    A STOREY THE PLAN LEAVES TO ITS STAIR IS THE STAIR'S: the plan
+    specification says of `level` "a stair changes it, a door does not", so
+    a cellar reached by a stair down with no level of its own is a storey
+    below the room the stair leaves, as `_building` itself reads it. Read by
+    a stated level alone, such a cellar stayed outside and its stair was laid
+    as a door in the hall's outside wall (audit 2026-11-01, B F6). A room no
+    stair or join of the two reaches from a stated storey says nothing, and
+    the stair stays the way out it was."""
+    def stated(uid):
+        return normalize_level(((specs.get(uid) or (None, {}))[1] or {}).get("level"))
+
+    both = set(annex) | set(host)
+    levels = {u: stated(u) for u in both if stated(u) is not None}
+
+    def spread():
+        queue = sorted(levels)
+        while queue:
+            cur = queue.pop(0)
+            for (a, b), rec in edges.items():
+                if a != cur or b not in both or b in levels:
+                    continue
+                levels[b] = levels[cur] + {"up": 1, "down": -1}.get(rec["vertical"], 0)
+                queue.append(b)
+    spread()
+    if host and not any(uid in levels for uid in host):
+        # nothing of either states a storey: the host is read from its own
+        # first room on the ground, as `_building` seeds a building none of
+        # whose storeys is stated
+        levels[min(host)] = 0
+        spread()
     for uid in annex:
-        level = normalize_level(((specs.get(uid) or (None, {}))[1] or {}).get("level"))
+        level = levels.get(uid)
         if level is None or level == 0:
             return False
-    both = set(annex) | set(host)
     return not any(a in annex and b not in both and b in walled for (a, b) in edges)
+
+
+def _entry_words() -> dict:
+    """`{purpose: (word, ...)}` -- the active story pack's words that name a
+    room of each of `ENTRY_PURPOSES` (`world.layout_bridge._ENTRY_WORDS` in
+    the pack's linguistics), read whole (`_entry_rank`). Empty where the pack
+    holds no table: the solver's own closed words are then all that is read."""
+    try:
+        from language_runtime import linguistic
+        table = linguistic("world.layout_bridge", "_ENTRY_WORDS")
+    except Exception:
+        return {}
+    if not isinstance(table, dict):
+        return {}
+    return {str(k): tuple(str(w) for w in (v or ()) if str(w or "").strip())
+            for k, v in table.items() if str(k) in ENTRY_PURPOSES}
+
+
+def _entry_rank(uid, name, spec, words=None) -> int:
+    """How surely the plan makes room `uid` the house's own door: the index
+    of its purpose in `ENTRY_PURPOSES` (an entry, then a hall), else
+    `len(ENTRY_PURPOSES)` (`_building`'s entrance, first by this).
+
+    THE PLAN'S OWN DATA FIRST, ITS WORDS LAST, every word read WHOLE. It was
+    read off English SUBSTRINGS of the name (`layout_solver.purpose_key`):
+    "Marshall's Study" and "Whitehall Office" ranked as halls, while
+    "Entrance", "Foyer" and every Japanese name ranked as nothing, so a
+    Japanese house fell to the first room by id (audit 2026-11-01, B F2). In
+    order: a lot's own entry (`world/lots.py` -- the room its outside door
+    opens into keeps the lot's record); the plan's purpose where it IS one of
+    the solver's closed words (`PURPOSE_AREA`), or the purpose a solve
+    settled on the row (`layout.purpose`); the pack's own words for an entry
+    or a hall (`_entry_words`) in the room's name; the solver's closed words
+    in its name and id -- one that names any other purpose says the room is
+    that and no entry -- and only then in its purpose sentence, the first in
+    the solver's own order, as before. Every word is read whole in whatever
+    script it is written (`language_runtime.find_names`). The name before
+    the purpose, because a purpose is a sentence, and the kitchen's "service
+    room east of the hall" read as a hall; the pack's words in the name
+    alone for the same reason."""
+    rest = len(ENTRY_PURPOSES)
+    spec = spec if isinstance(spec, dict) else {}
+    if spec.get(LOT_KEY) is not None and _lot_key(uid, spec) == str(uid):
+        return 0
+    record = spec.get("layout") if isinstance(spec.get("layout"), dict) else {}
+    for said in (str(spec.get("purpose") or "").strip().casefold().replace(" ", "_"),
+                 str(record.get("purpose") or "").strip().casefold()):
+        if said in ENTRY_PURPOSES:
+            return ENTRY_PURPOSES.index(said)
+        if said in PURPOSE_AREA:
+            return rest
+    named = f"{name or ''} {str(uid).replace('_', ' ')}"
+    words = _entry_words() if words is None else words
+    hits = [ENTRY_PURPOSES.index(p) for p in ENTRY_PURPOSES
+            if _says_whole(named, words.get(p) or ())]
+    if hits:
+        return min(hits)
+    for text in (named, str(spec.get("purpose") or "")):
+        said = next((key for key in PURPOSE_AREA if key != "other"
+                     and _says_whole(text, (key.replace("_", " "),))), None)
+        if said is not None:
+            return ENTRY_PURPOSES.index(said) if said in ENTRY_PURPOSES else rest
+    return rest
+
+
+def _says_whole(text, forms) -> bool:
+    """Whether `text` says any of `forms` as a whole word, in whatever script
+    each is written (`language_runtime.find_names`; casefolded)."""
+    from language_runtime import find_names
+    forms = [str(f) for f in forms if str(f or "").strip()]
+    return bool(forms) and bool(find_names(str(text or ""), forms))
+
+
+def _ground_seed(outside, members, specs, rooms, normalize_level) -> dict:
+    """`{room: storey}`, one room, for a building no room of which states a
+    storey: the storeys are then read along its stairs from this one
+    (`_building`).
+
+    THE GROUND IS WHERE A DOOR OPENS ONTO THE GROUND, never where a ladder
+    does. Seeded from the first outside way by id, a loft whose outside
+    ladder sorted first was made the ground storey, the hall and kitchen
+    under it storey -1, and the solve wrote `level: -1` and `elev_m: -3.0`
+    onto both plan rows -- a front door opening onto a yard three metres
+    above the hall (audit 2026-11-01, B F11). So: the room of a level way
+    out, on the storey the place beyond it states (the ground where it
+    states none); failing any, the room an outside stair leaves, a storey
+    off the place it reaches; failing that, the first room on the ground."""
+    def beyond(o):
+        to = o["to"]
+        level = normalize_level(((specs.get(to) or (None, {}))[1] or {}).get("level"))
+        if level is None:
+            level = normalize_level((rooms.get(to) or {}).get("level"))
+        return level
+
+    level_ways = sorted((o for o in outside if not o.get("vertical")),
+                        key=lambda o: (beyond(o) is None, o["room"], o["to"]))
+    if level_ways:
+        o = level_ways[0]
+        return {o["room"]: beyond(o) or 0}
+    for o in sorted(outside, key=lambda o: (o["room"], o["to"])):
+        step = {"up": 1, "down": -1}.get(o.get("vertical"), 0)
+        return {o["room"]: (beyond(o) or 0) - step}
+    return {members[0]: 0}
 
 
 def _home_structure(members, specs, structure_of, normalize_level):
@@ -814,13 +1023,17 @@ def _solved_plans(rooms, normalize_site) -> set:
 
 
 def _building(members, specs, rooms, edges, structure, *, held_open, max_rooms,
-              normalize_site, normalize_level, grounds=False):
+              normalize_site, normalize_level, grounds=False, shared=None):
     from world.spatial import opposite_bearing
     from world.spatial import WAYS
     names = {uid: str(specs[uid][0] or uid) for uid in members}
     plan = {uid: copy.deepcopy(specs[uid][1] or {}) for uid in members}
     building = {"key": "+".join(members), "rooms": members, "names": names,
-                "specs": plan, "structure": structure, "refusal": None}
+                "specs": plan, "structure": structure, "refusal": None,
+                # read by `_joined_apart` once a place pair, for every pair of
+                # the grounds floor and every seed: worked out once here
+                # (audit 2026-11-01, world_layout_bridge_structure E3)
+                "apart_habit": _apart_habit(plan, structure)}
     # the storeys: stated where the plan or the scene states them, the rest
     # along the stairs from those
     levels = {}
@@ -852,8 +1065,7 @@ def _building(members, specs, rooms, edges, structure, *, held_open, max_rooms,
                 entry["vertical"] = rec["vertical"]
             outside.append(entry)
     if not levels:
-        start = outside[0]["room"] if outside else members[0]
-        levels[start] = 0
+        levels.update(_ground_seed(outside, members, specs, rooms, normalize_level))
     queue = list(levels)
     while queue:
         cur = queue.pop(0)
@@ -895,23 +1107,23 @@ def _building(members, specs, rooms, edges, structure, *, held_open, max_rooms,
     # through one wall and lies past it, under no roof of the building: a
     # block of its own beside the room it opens from, as a room of another
     # shape is (below) and as the layout lab's liked shrine has its cavern
-    structure_of = {uid: str((spec or {}).get("structure") or "") for uid, (_n, spec) in specs.items()}
-    planned = {uid: spec for uid, (_name, spec) in specs.items()}
-    for uid in sorted(set(_stated_apart(edges, structure_of, planned)) & set(members)):
+    # read once a `plan_buildings` call (`shared`), never once a building
+    shared = shared if isinstance(shared, dict) else {}
+    structure_of = shared.get("structure_of") or {
+        uid: str((spec or {}).get("structure") or "") for uid, (_n, spec) in specs.items()}
+    stated_apart = shared.get("stated_apart")
+    if stated_apart is None:
+        stated_apart = _stated_apart(edges, structure_of,
+                                     {uid: spec for uid, (_name, spec) in specs.items()})
+    for uid in sorted(set(stated_apart) & set(members)):
         if levels.get(uid, 0) < 0 and uid not in (building.get("own_blocks") or {}):
             block = _own_block(uid, joins, stairs, levels)
             if block is not None:
                 building.setdefault("own_blocks", {})[uid] = block
-    def purpose_of(uid):
-        # its name and id first: a purpose is a sentence, and the kitchen's
-        # "service room east of the hall" read as a hall
-        said = purpose_key({"id": uid, "name": names.get(uid)})
-        return said if said != "other" else \
-            purpose_key(dict(plan.get(uid) or {}, id=uid, name=names.get(uid)))
+    words = _entry_words()
 
     def entry(o):
-        purpose = purpose_of(o["room"])
-        return ENTRY_PURPOSES.index(purpose) if purpose in ENTRY_PURPOSES else len(ENTRY_PURPOSES)
+        return _entry_rank(o["room"], names.get(o["room"]), plan.get(o["room"]) or {}, words)
 
     # THE HOUSE'S OWN DOOR BEFORE ANY OTHER WAY OUT ON ITS STOREY, whatever it
     # opens onto: an entry's door, then a hall's, then the first by id. Chat
@@ -927,7 +1139,7 @@ def _building(members, specs, rooms, edges, structure, *, held_open, max_rooms,
         # unseen farmhouse's byre and cross passage both open south onto the
         # farmyard, and 'lg_byre' sorting first made the byre's cart door the
         # front door): a room the engine reads as an entry, then a hall
-        # (`purpose_key`, `entry`), then the one joined to the most other
+        # (`_entry_rank`, `entry`), then the one joined to the most other
         # rooms of the building, then the id. Only the tie is read again -- the ground the
         # entrance opens onto, its storey and its kind stay the first's
         head = entrance[0]
@@ -2095,13 +2307,30 @@ def _arranged(spec, face=True):
     """The core's layout of `spec` (`layout_arrange.solve_arranged`, on a
     copy, so a fallback reads the spec as written), and why it does not
     stand where it does not: `(layout or None, words or None)`. `face`:
-    `layout_solver._finish`'s."""
+    `layout_solver._finish`'s.
+
+    ANY FAILURE OF THE CORE STILL FALLS BACK -- the owner's "never worse than
+    the lab" (2026-10-19), MemoryError too -- BUT A FAULT IS NOT A REFUSAL.
+    The core gives up in two ways of its own: its budget (`ArrangeBudget`)
+    and a storey it cannot lay (`ValueError`). Anything else is a fault in
+    the code, and it read exactly like those, in a sentence on a `Layout`
+    nothing filed (audit 2026-11-01, world_layout_core F1). It is logged with
+    its traceback now, and the sentence says it was a fault. A stopped job
+    (`ArrangeCancelled`) is no failure at all and is raised on."""
     try:
-        return solve_arranged(copy.deepcopy(spec), face=face), None
+        return solve_arranged(copy.deepcopy(spec), face=face, cancelled=CANCELLED.get()), None
+    except ArrangeCancelled:
+        raise
     except ArrangeBudget as exc:
         return None, f"it passed its work budget ({exc})"
+    except ValueError as exc:
+        return None, f"it could not lay the building ({' '.join(str(exc).split())[:160]})"
     except Exception as exc:  # noqa: BLE001 -- any failure of the core falls back, MemoryError too
-        return None, f"it could not lay the building ({type(exc).__name__}: {' '.join(str(exc).split())[:160]})"
+        _log.error("layout tier: a fault in the arrangement core (%s: %s); the lab's search "
+                   "lays the building instead", type(exc).__name__,
+                   " ".join(str(exc).split())[:300], exc_info=True)
+        return None, (f"a fault in the core, logged ({type(exc).__name__}: "
+                      f"{' '.join(str(exc).split())[:160]})")
 
 
 def _unturned(building, spec, layout, refused, found):
@@ -2137,7 +2366,11 @@ def _fell_back(layout, why, seed=None):
     """The warning a layout laid by the lab's search carries, naming why the
     core's did not stand."""
     by = f"the lab's search (seed {seed})" if seed is not None else "the lab's search"
-    layout.warnings.append(f"the arrangement core's layout did not stand -- {why}; laid by {by}")
+    said = f"the arrangement core's layout did not stand -- {why}; laid by {by}"
+    layout.warnings.append(said)
+    # ...and the log, which outlives the layout: the sentence above reaches
+    # a run record only where the job files the solve's warnings
+    _log.warning("layout tier: %s", said)
     return layout
 
 
@@ -2210,6 +2443,12 @@ def solve_for(building, spec, attempts=None):
         return layout, refused
     if attempts is not None:
         attempts.extend(lab_attempts)
+    # BOTH REFUSED, AND THE CORE LAID NOTHING: the refusals are the lab's,
+    # and its layout says why the core is not the one refused
+    said = f"the arrangement core gave up first -- {why}"
+    if said not in lab.warnings:
+        lab.warnings.append(said)
+    _log.info("layout tier: %s; the lab's search was refused too", said)
     return lab, lab_refused
 
 
@@ -2224,7 +2463,10 @@ def lab_solve_for(building, spec, attempts=None):
     tie; failing that, the first the bridge does not refuse; failing every
     seed, the first seed's solve and its refusals, the building failing open
     as before. Each seed is deterministic, so a building solves the same way
-    every time.
+    every time -- in every process too, since the search breaks its ties by
+    place and wall and never by a set's order (`layout_solver._side_order`,
+    `_shaft_spots`; audit 2026-11-01, world_layout_core F4). A job stopped
+    between seeds solves no further one (`CANCELLED`).
 
     The owner's shrine (chat 164, 2026-10-10), replicated: of twenty seeds,
     one answer set laid out with no refusal on fifteen, another on thirteen
@@ -2245,7 +2487,10 @@ def lab_solve_for(building, spec, attempts=None):
     58 asked sides turned to 19, for 60 solves where 44 were."""
     from world.layout_solver import SEED
     first = standing = best = None
+    cancelled = CANCELLED.get()
     for k in range(LAYOUT_SOLVE_SEEDS):
+        if cancelled is not None and cancelled():
+            raise ArrangeCancelled(f"the job was stopped before the lab's seed {SEED + k}")
         layout = solve(spec, seed=SEED + k)
         found = []
         refused = refusals(building, spec, layout, breaches=found)
@@ -3896,7 +4141,7 @@ def _ground_doorways(building, spec, layout, laid, out):
     A door of the house, or of an outbuilding onto the ground it stands on:
     on whatever place it opens onto, the cell across its threshold, on the
     wall facing it -- a place whose cells do not hold the threshold gets no
-    pin, and the grounds floor refuses the pair (`ground_refusals`): a pin
+    pin, and the grounds floor refuses the pair (`ground_breaches`): a pin
     "on its nearest cell, facing it" put a doorway a pace off its other side
     (the farm's well) or across a gap (Home 9's, e against e). Two places of
     the ground the plan joins: where they touch, on the side the plan

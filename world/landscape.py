@@ -755,7 +755,7 @@ def _eye_on_plan(scene, observer, here, toward):
 # ---------------------------------------------------------------------------
 
 def far_places(scene, observer, *, known=None, senses=None, via_names=None,
-               gate=None, hidden=None, regions=None):
+               gate=None, hidden=None, regions=None, aimed=(), stopped=None):
     """The far places one body sees now, nearest first, each a record the
     composer words (`composer.landscape_percepts`). [] when none qualifies,
     which is every body in a closed room and almost every body in the
@@ -781,6 +781,18 @@ def far_places(scene, observer, *, known=None, senses=None, via_names=None,
     sight did not deliver, each with what hid it (`hidden_by`): the window's
     cone, the weather, the dark, or the roofs or the ground standing between
     -- what a LOOK at that place finds instead (`looked_far`).
+
+    `aimed`, the rooms a look this beat aims at, are graded past
+    `PLACES_GRADED_MAX`: the cap bounds a standing view, and a place cut by
+    it -- alphabetically, within a hop count -- was answered with an
+    occluder that was not there (audit 2026-11-01, world_misc_causal F6:
+    the 39th of 40 meadows round one green, "the buildings around you").
+    `stopped`, when a dict, collects where and why the walk ended short of a
+    place, `{room: {"kind": "building" | "wall" | "locale" | "reach",
+    "name"}}`: a mass that ends the line, a wall or shut gate between open
+    grounds (its edge's own name, where it has one), another locale, past
+    `REACH_HOPS` -- so a look at a place the walk never reached is told the
+    real reason or nothing (`looked_far`), never one made up.
     """
     from world.day_cycle import SUN_LIGHT
     from world.site_plan import (EYE_M, PACE_M, STOREY_M, body_altitude_m,
@@ -891,10 +903,17 @@ def far_places(scene, observer, *, known=None, senses=None, via_names=None,
     for seed in seeds:
         heapq.heappush(queue, (seed["hops"], order, seed))
         order += 1
+    def stop(rid, kind, name=""):
+        if isinstance(stopped, dict) and rid not in best:
+            stopped.setdefault(rid, {"kind": kind, "name": str(name or "")})
+
     while queue:
         hops, _n, rec = heapq.heappop(queue)
         rid = rec["room"]
-        if hops > REACH_HOPS or rid in best:
+        if rid in best:
+            continue
+        if hops > REACH_HOPS:
+            stop(rid, "reach")
             continue
         best[rid] = rec
         ground = declared_ground(scene, rid)
@@ -902,6 +921,9 @@ def far_places(scene, observer, *, known=None, senses=None, via_names=None,
             members, rise = building_of(scene, rid, graph)
             top = room_elevation_m(scene, rid) + max(rise.values() or [0.0]) + STOREY_M
             if eye < top + ROOF_CLEAR_M:
+                if isinstance(stopped, dict):
+                    for m in sorted(set(members) | {str(e.get("to")) for e in graph.get(rid) or ()}):
+                        stop(m, "building")
                 continue                     # the mass ends the line
             sources = sorted(members)
         elif ground in OPEN_GROUND:
@@ -914,12 +936,14 @@ def far_places(scene, observer, *, known=None, senses=None, via_names=None,
                 if other in near or other in own or other in best or other == rid:
                     continue
                 if room_locale(rooms.get(other)) != locale:
+                    stop(other, "locale")
                     continue
                 other_ground = declared_ground(scene, other)
                 if other_ground is None:
                     continue
                 if (ground in OPEN_GROUND and other_ground in OPEN_GROUND
                         and not sees_across(rooms, src, other, edge.get("barrier"))):
+                    stop(other, "wall", edge.get("name"))
                     continue                 # open ground behind a wall or a shut gate
                 if ground == "building" and other_ground == "building":
                     continue
@@ -959,17 +983,20 @@ def far_places(scene, observer, *, known=None, senses=None, via_names=None,
         if place_forms is None:
             place_forms = _place_forms(scene, known, regions=regions) or False
         return _admit_look(look, place_forms or None, gate, own=own_rooms, scene=scene)
+    aimed = {str(a) for a in (aimed or ()) if str(a or "")}
     for rid, rec in sorted(best.items(), key=lambda kv: (kv[1]["hops"], kv[0])):
         if rid in near or rid in own:
             continue
         graded += 1
-        if graded > PLACES_GRADED_MAX:
+        if graded > PLACES_GRADED_MAX and not aimed:
             break
         ground = declared_ground(scene, rid)
         if ground == "building":
             members, rise = building_of(scene, rid, graph)
         else:
             members, rise = {rid}, {rid: 0.0}
+        if graded > PLACES_GRADED_MAX and not (set(members) & aimed):
+            continue                         # past the cap: graded only where a look aims
         if members & claimed:
             continue                         # one mass, seen once, from its nearest front
         base = min(room_elevation_m(scene, m) for m in members)
@@ -1152,41 +1179,85 @@ def looked_far(scene, observer, looks, *, known=None, senses=None, via_names=Non
     UNBUILT_WORLD 2.40: "one matcher would serve both"): a look names a place
     by the id of ANY room of its mass -- a look at a bell loft is a look at
     the building it tops -- or by the name this mind knows it by, or by its
-    own name, which the actor used and so may hear back; a compass word
-    finds only what is in view that way. A place named that the walk never
-    reached stands behind what surrounds the looker: the walls of a closed
-    room, the buildings round open ground. What a look finds is ALWAYS
-    something -- the place, its top over what is nearer, or what stands in
-    the way (owner, 2026-10-07: "nothing can be made out and similar place
-    holders are quite frustrating")."""
-    from world.spatial import room_of
+    own name; a compass word finds only what is in view that way. A place
+    named that the walk never reached stands behind what surrounds the
+    looker: the walls of a closed room, the buildings round open ground. What
+    a look finds is ALWAYS something real -- the place, its top over what is
+    nearer, or what stands in the way (owner, 2026-10-07: "nothing can be
+    made out and similar place holders are quite frustrating").
+
+    NAMED ONLY AS THIS MIND KNOWS IT. A place is labelled by the name the
+    mind learned (`known`), else by the LOOK'S OWN WORD -- what the act
+    carried, said back to the actor who used it -- and never by the room's
+    own name: that fallback told a stranger's look "To the east, you can see
+    Gale Green" and "Toward Widow Marsh's Orchard, ..." -- a place's name and
+    a person's in it (audit 2026-11-01, world_misc_causal F1, the LEAK). A
+    look word that is a room's id is the encoder's pointer, not the actor's
+    word (its card: "its id where world_index gives one"): a place SEEN by
+    one is described as the standing view describes an unknown place, by its
+    ground, height and look, no label; a place HIDDEN is "toward" the word as
+    the act wrote it, its underscores spaces -- the hidden lines need one --
+    and every look word said back goes through the observer's people gate.
+
+    THE CAUSE IS A REAL ONE OR NONE IS SAID (owner, 2026-10-07: name the
+    occluder or the fog's reach, never a placeholder). An eye that sees
+    nothing looks at nothing far off; a place past the standing view's
+    grading cap is graded for the look aimed at it (`far_places`' `aimed`);
+    and the walls or buildings round the looker are said only where they are
+    what stands between -- the looker's own walls, or a mass that ended the
+    walk -- with a wall or shut gate between open grounds said by its own
+    name where it has one. A place past the walk's reach or in another locale
+    has no occluder to name, and is not answered (audit 2026-11-01,
+    world_misc_causal F6: "the buildings around you" on all-open ground, past
+    the cap, and to a blind body)."""
+    from world.spatial import room_of, sense_adjusted
     from world.vistas import normalize_bearing8
     rooms = _rooms(scene)
     words = [str(v or "").strip() for v in looks or () if str(v or "").strip()]
-    if not words:
+    if not words or sense_adjusted("full", "sight", senses) == "none":
         return []
 
     def fold(value):
         return " ".join(str(value or "").replace("_", " ").casefold().split())
 
+    known = dict(known or {})
+
+    def known_name(rid):
+        if rid not in known:
+            return ""
+        return str(known.get(rid) or (rooms.get(rid) or {}).get("name") or "").strip()
+
+    def said_back(word, pointer):
+        """The look's own word heard back, through the observer's gate --
+        "" for a pointer where `pointer` says a pointer says nothing."""
+        if word in rooms:
+            if pointer:
+                return ""
+            word = word.replace("_", " ")
+        return str(_through_gate(scene, gate, word) or "").strip()
+
     wanted = {fold(w) for w in words}
     bearings = {b for b in (normalize_bearing8(w) for w in words) if b}
-    hidden = []
+    targets = {rid for rid, room in rooms.items()
+               if fold(rid) in wanted or fold((room or {}).get("name")) in wanted}
+    hidden, stopped = [], {}
     places = far_places(scene, observer, known=known, senses=senses,
                         via_names=via_names, gate=gate, hidden=hidden,
-                        regions=regions)
+                        regions=regions, aimed=targets, stopped=stopped)
 
     def named_in(members):
-        """The member a look named, by id or by its own name, or None."""
+        """(the member a look named, the word it was named by), by id or by
+        its own name, or (None, "")."""
         for m in members:
-            if fold(m) in wanted or fold((rooms.get(m) or {}).get("name")) in wanted:
-                return m
-        return None
+            for w in words:
+                if fold(m) == fold(w) or fold((rooms.get(m) or {}).get("name")) == fold(w):
+                    return m, w
+        return None, ""
 
     out, answered = [], set()
     for place in places:
         members = place.get("members") or [place["room"]]
-        hit = named_in(members)
+        hit, word = named_in(members)
         by_name = bool(place.get("name")) and fold(place["name"]) in wanted
         by_compass = place.get("bearing") in bearings
         if hit is None and not by_name and not by_compass:
@@ -1195,20 +1266,21 @@ def looked_far(scene, observer, looks, *, known=None, senses=None, via_names=Non
         if key in answered:
             continue
         answered.add(key)
-        label = place.get("name") or (
-            str((rooms.get(hit) or {}).get("name") or "") if hit else "")
+        label = place.get("name") or (said_back(word, pointer=True) if hit else "")
         out.append({"room": key, "label": str(label or ""), "place": place, "hidden_by": None})
     for rec in hidden:
         members = rec.get("members") or [rec["room"]]
-        hit = named_in(members)
+        hit, word = named_in(members)
         if hit is None and not (rec.get("name") and fold(rec["name"]) in wanted):
             continue
         key = min(members)
         if key in answered:
             continue
         answered.add(key)
-        label = rec.get("name") or str((rooms.get(hit) or {}).get("name") or "")
-        out.append({"room": key, "label": str(label or ""), "place": None,
+        label = rec.get("name") or (said_back(word, pointer=False) if hit else "")
+        if not label:
+            continue
+        out.append({"room": key, "label": str(label), "place": None,
                     "hidden_by": rec.get("hidden_by") or {}})
     # NAMED, AND NEVER REACHED. A room that declares no ground is part of
     # what it opens onto: a loft up a ladder from a chapel is seen where the
@@ -1216,7 +1288,7 @@ def looked_far(scene, observer, looks, *, known=None, senses=None, via_names=Non
     # exposure, sat off every walk) -- so a look at it is answered by the
     # far place a neighbour of it belongs to. Only past that is what
     # surrounds the looker what stands in the way: a room's own walls, or
-    # the buildings round open ground.
+    # the buildings round open ground that ended the walk.
     here = room_of(scene, observer)
     near = near_field(scene, here) if here else set()
     graph = _graph(scene)
@@ -1230,7 +1302,6 @@ def looked_far(scene, observer, looks, *, known=None, senses=None, via_names=Non
             continue
         if any(target in (r.get("members") or ()) for r in hidden):
             continue
-        label = str((rooms.get(target) or {}).get("name") or target)
         neighbours = {str(e.get("to")) for e in graph.get(target) or ()}
         place = next((p for p in places
                       if neighbours & set(p.get("members") or [p["room"]])), None)
@@ -1238,8 +1309,13 @@ def looked_far(scene, observer, looks, *, known=None, senses=None, via_names=Non
             key = place.get("key_room") or place["room"]
             if key not in answered:
                 answered.add(key)
-                out.append({"room": key, "label": place.get("name") or label,
+                out.append({"room": key,
+                            "label": place.get("name") or known_name(target)
+                            or said_back(word, pointer=True),
                             "place": place, "hidden_by": None})
+            continue
+        label = known_name(target) or said_back(word, pointer=False)
+        if not label:
             continue
         cover = next((r for r in hidden
                       if neighbours & set(r.get("members") or [r["room"]])), None)
@@ -1248,11 +1324,35 @@ def looked_far(scene, observer, looks, *, known=None, senses=None, via_names=Non
                         "label": cover.get("name") or label, "place": None,
                         "hidden_by": cover.get("hidden_by") or {}})
             continue
-        out.append({"room": target, "label": label, "place": None,
-                    "hidden_by": {"kind": ("around" if declared_ground(scene, here)
-                                           in OPEN_GROUND else "walls"),
-                                  "room": "", "name": ""}})
+        found = _what_stopped_the_walk(scene, here, target, neighbours, stopped, gate)
+        if found is None:
+            continue                         # no real occluder to name: not answered
+        out.append({"room": target, "label": label, "place": None, "hidden_by": found})
     return out
+
+
+def _what_stopped_the_walk(scene, here, target, neighbours, stopped, gate):
+    """What stands between `here` and a `target` the far walk never reached,
+    or None where nothing true can be said (`looked_far`): the looker's own
+    walls in a room that has them; a wall or shut gate between open grounds
+    by its own name where it has one (`far_places`' `stopped`); the buildings
+    round open ground where a mass ended the walk; and nothing for a place
+    past the walk's reach, in another locale, behind an unnamed wall, or that
+    no way joins at all."""
+    if declared_ground(scene, here) not in OPEN_GROUND:
+        return {"kind": "walls", "room": "", "name": ""}
+    why = stopped.get(target) or next(
+        (stopped[n] for n in sorted(neighbours) if n in stopped), None)
+    if why is None and any(v.get("kind") == "building" for v in stopped.values()):
+        why = {"kind": "building"}           # deeper past the masses that ended the walk
+    if why is None:
+        return None
+    if why["kind"] == "wall":
+        name = str(_through_gate(scene, gate, why.get("name") or "") or "").strip()
+        return {"kind": "building", "room": "", "name": name} if name else None
+    if why["kind"] == "building":
+        return {"kind": "around", "room": "", "name": ""}
+    return None
 
 
 class _Floor:

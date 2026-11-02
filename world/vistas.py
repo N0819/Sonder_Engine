@@ -265,23 +265,34 @@ def obstructed(scene, name, vista, eye_z) -> bool:
     # in front of the ridge behind it (2026-10-05: it was skipped with the
     # field's whole footprint, and hid nothing).
     from world.landscape import OPEN_GROUND, declared_ground
-    own = (frozenset() if declared_ground(scene, rid) in OPEN_GROUND
-           else site_cells(scene, rid))
-    slabs: dict = {}
-    for levels in site_plans(scene).get(site["plan"], {}).values():
-        for other in levels:
-            if other == rid:
-                continue
-            floor = room_elevation_m(scene, other)
-            span = (float("-inf"), floor) if _open_air(scene, other) else (floor, floor + STOREY_M)
-            for cell in site_cells(scene, other):
-                if cell not in own:
-                    slabs.setdefault(cell, []).append(span)
+    from world.scene_memo import scene_memo
+
+    def build():
+        own = (frozenset() if declared_ground(scene, rid) in OPEN_GROUND
+               else site_cells(scene, rid))
+        slabs: dict = {}
+        for levels in site_plans(scene).get(site["plan"], {}).values():
+            for other in levels:
+                if other == rid:
+                    continue
+                floor = room_elevation_m(scene, other)
+                span = (float("-inf"), floor) if _open_air(scene, other) else (floor, floor + STOREY_M)
+                for cell in site_cells(scene, other):
+                    if cell not in own:
+                        slabs.setdefault(cell, []).append(span)
+        reach = max((math.hypot(c[0] + 0.5 - point[0], c[1] + 0.5 - point[1]) for c in slabs),
+                    default=0.0) + 2
+        return slabs, reach
+
+    # THE PLAN'S MASSES ONCE A READ PASS PER (PLAN, ROOM, EYE), not once a
+    # vista per observer: 120 rooms on a plan by 6 vistas cost 117 ms a
+    # `visible_vistas` and 711 ms for a look at each (audit 2026-11-01,
+    # world_misc_causal efficiency 2). Outside a pass it is built as before.
+    slabs, reach = scene_memo(scene, ("vista-slabs", site["plan"], str(rid), tuple(point)), build)
     if not slabs:
         return False
     rise = math.tan(elevation_angle(vista, eye_z))
     ux, uy = _UNIT8[vista["bearing"]]
-    reach = max(math.hypot(c[0] + 0.5 - point[0], c[1] + 0.5 - point[1]) for c in slabs) + 2
     for i in range(1, int(reach * 2) + 1):
         t = i / 2.0
         cell = (math.floor(point[0] + ux * t), math.floor(point[1] + uy * t))
@@ -292,6 +303,20 @@ def obstructed(scene, name, vista, eye_z) -> bool:
 
 
 def visible_vistas(scene, name, senses=None) -> list:
+    """`_visible_vistas`, once a read pass per body and card (`scene_memo`):
+    a look at each vista asks it again (`what_a_look_finds`), and the view
+    asked it first. A fresh list each time."""
+    import json
+    from world.scene_memo import scene_memo
+    try:
+        card = json.dumps(senses, sort_keys=True, default=str)
+    except (TypeError, ValueError):
+        return _visible_vistas(scene, name, senses)
+    return list(scene_memo(scene, ("vistas-visible", str(name), card),
+                           lambda: _visible_vistas(scene, name, senses)))
+
+
+def _visible_vistas(scene, name, senses=None) -> list:
     """`[(vista, "clear" | "lights" | "silhouette")]` a body sees now: its
     room looks that way, the weather reaches that far, the dark leaves it --
     a lit one as its LIGHTS (its daytime `desc` is roofs and a spire no eye

@@ -215,20 +215,37 @@ def _looked(sc, who, looks, known=None):
 
 def test_a_look_at_a_storey_is_a_look_at_its_building_and_is_answered():
     """Live, scratch story 166 turn 4589: a look up at the bell loft over the
-    chapel, two rooms off, reached no view at all."""
+    chapel, two rooms off, reached no view at all.
+
+    CHANGED 2026-11-01 (audit world_misc_causal F1, the LEAK): this used to
+    expect "where the bell loft is" with `known=None` -- the room's own name
+    told to a mind that never learned it, because the look carried the
+    room's id (the encoder's pointer, "its id where world_index gives one").
+    A stranger is now told the building as the standing view tells an
+    unknown place; the name is said once the mind knows it."""
     sc = _corner(house_dir=None, target_storeys=2)
     sc["rooms"]["chapel_up1"]["name"] = "the bell loft"
     found, lines = _looked(sc, "Ada", ["chapel_up1"])
     assert [f["room"] for f in found] == ["chapel"] and found[0]["place"]
-    assert lines == [lines[0]] and "where the bell loft is" in lines[0], lines
-    assert "two-storey building" in lines[0]
+    assert lines == [lines[0]] and "two-storey building" in lines[0], lines
+    assert "bell loft" not in lines[0] and "chapel" not in lines[0].casefold()
+    _found, lines = _looked(sc, "Ada", ["chapel_up1"], known={"chapel_up1": "the bell loft"})
+    assert "where the bell loft is" in lines[0] and "two-storey building" in lines[0]
 
 
 def test_a_look_at_a_hidden_place_names_what_stands_between():
+    """CHANGED 2026-11-01 (audit world_misc_causal F1): a look by the room's
+    id (`chapel`) at a place the mind never learned was told the room's own
+    name ("The Chapel"); it is told the look's own word now, and the name
+    only once the mind knows it. A look by a NAME the actor used is heard
+    back as it was said, as before."""
     found, lines = _looked(_corner(), "Ada", ["The Chapel"])
     assert found[0]["hidden_by"]["kind"] == "building"
     assert lines == ["Toward The Chapel, the roofs nearer in stand between you and it."]
     _found, lines = _looked(_corner(), "Ada", ["chapel"], known={"house": "the cooper's house"})
+    assert lines == ["Toward chapel, the cooper's house stands between you and it."]
+    _found, lines = _looked(_corner(), "Ada", ["chapel"],
+                            known={"house": "the cooper's house", "chapel": "The Chapel"})
     assert lines == ["Toward The Chapel, the cooper's house stands between you and it."]
 
 
@@ -237,7 +254,11 @@ def test_a_look_from_a_closed_room_meets_its_walls():
     sc["rooms"]["cellar"] = _room("The Cellar", "enclosed",
                                   [{"to": "yard", "barrier": "closed_door", "dir": "s"}])
     sc["positions"]["Ada"] = "cellar"
+    # CHANGED 2026-11-01 (audit world_misc_causal F1): a stranger's look by
+    # the id is told the look's own word, never the room's own name
     _found, lines = _looked(sc, "Ada", ["chapel"])
+    assert lines == ["Toward chapel, the walls around you stand between you and it."]
+    _found, lines = _looked(sc, "Ada", ["chapel"], known={"chapel": "The Chapel"})
     assert lines == ["Toward The Chapel, the walls around you stand between you and it."]
 
 
@@ -288,4 +309,8 @@ def test_a_room_that_declares_no_ground_is_seen_where_its_building_is():
     sc["rooms"]["chapel"]["adjacent"].append({"to": "loft", "vertical": "up"})
     found, lines = _looked(sc, "Ada", ["loft"])
     assert [f["room"] for f in found] == ["chapel"] and found[0]["place"]
+    # CHANGED 2026-11-01 (audit world_misc_causal F1): the loft's own name
+    # reached a mind that never learned it; it is said once the mind knows it
+    assert "bell loft" not in lines[0]
+    _found, lines = _looked(sc, "Ada", ["loft"], known={"loft": "the bell loft"})
     assert "where the bell loft is" in lines[0]

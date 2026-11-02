@@ -680,19 +680,51 @@ RELAX_COST = {"way": 30.0, "end": 80.0, "stair_pinned": 20.0, "stair": 20.0, "or
 class ArrangeBudget(RuntimeError):
     """The core passed ARRANGE_WORK_BUDGET laying one building: it stops,
     and the bridge lays the building with the lab's search, as it was laid
-    before the core (`layout_bridge.solve_for`)."""
+    before the core (`layout_bridge.solve_for`) -- unless a layout is already
+    in hand and the budget ran out on a pass that only looked for a better
+    one (`BUDGET_CUT_NOTE`)."""
+
+
+class ArrangeCancelled(RuntimeError):
+    """The job laying the building was stopped (`_Meter.cancelled`): the
+    core stops where it is, and nothing falls back -- a stopped job writes
+    nothing (`structure.write_planned_layout`), so a fallback would only burn
+    the CPU the beat that replaced it needs (audit 2026-11-01,
+    world_layout_core E3)."""
+
+
+#: What a layout says when the work budget ran out on a pass that only looks
+#: for a BETTER layout -- the stair turned so it can be climbed (`_climb`),
+#: the ground grown for a crushed or severed storey (`_lay_kinds`), the
+#: ground notched (`_carry`) -- with a layout already found: that layout
+#: stands. It used to be thrown away whole and the lab's search laid the
+#: house (audit 2026-11-01, world_layout_core F2: on the test plan `STACKED`,
+#: a budget of the first pass's work plus 1,000 entries raised from inside
+#: `_climb`'s re-lay).
+BUDGET_CUT_NOTE = ("the core's work budget ran out while it looked for a better layout; "
+                   "the layout it had found stands")
+
+#: How many table entries are built between two asks of whether the job was
+#: stopped (`_Storey._tick`): the ask is cheap, but `_tick` runs for every
+#: table built. About a tenth of a second of the core at its measured rates
+#: (29 to 83 us an entry). An engine number, named.
+CANCEL_CHECK_ENTRIES = 2048
 
 
 class _Meter:
     """The work one building's solve has done: table entries built, over the
     building (`ARRANGE_WORK_BUDGET`) and over each storey of each block
-    (`NARROW_WORK`), counted where they are built (`_Storey._tick`)."""
-    __slots__ = ("total", "by_storey", "budget")
+    (`NARROW_WORK`), counted where they are built (`_Storey._tick`); and
+    `cancelled`, a predicate asked every `CANCEL_CHECK_ENTRIES` entries
+    (`ArrangeCancelled`), None for a solve no job runs."""
+    __slots__ = ("total", "by_storey", "budget", "cancelled", "next_check")
 
-    def __init__(self):
+    def __init__(self, cancelled=None):
         self.total = 0
         self.by_storey = {}
         self.budget = ARRANGE_WORK_BUDGET
+        self.cancelled = cancelled
+        self.next_check = CANCEL_CHECK_ENTRIES
 
 
 # ---------------------------------------------------------------- leaves
@@ -977,13 +1009,12 @@ class _Table:
     coupled cut must check (`_Storey.etable`); () for a plain table. Its
     entries grouped by the side two parts share serve the convolutions
     (`grouped`)."""
-    __slots__ = ("cost", "back", "best", "_grouped", "_at")
+    __slots__ = ("cost", "back", "best", "_grouped")
 
     def __init__(self):
         self.cost = {}
         self.back = {}
         self._grouped = {}
-        self._at = None
         self.best = INF
 
     def put(self, key, c, how):
@@ -993,15 +1024,6 @@ class _Table:
 
     def get(self, w, h):
         return self.cost.get((w, h, ()), INF)
-
-    def at(self, w, h):
-        """[(key, cost)] of every entry of shape w x h."""
-        if self._at is None:
-            d = {}
-            for (ww, hh, k), c in self.cost.items():
-                d.setdefault((ww, hh), []).append((k, c))
-            self._at = d
-        return self._at.get((w, h), ())
 
     def seal(self):
         if self.cost:
@@ -1127,7 +1149,6 @@ class _Storey:
         # (the manor's ground floor: no layout at all until every join gave
         # way); the exact reading over-constrains nothing
         self.couple_all = large
-        self.work = 0                   # table entries built (`_Building.work`)
         self.leaf_margin = LEAF_MARGIN_LARGE if large else LEAF_MARGIN
         self.key_cap = KEY_CAP_LARGE if large else KEY_CAP
         self._tables = {}
@@ -1146,8 +1167,9 @@ class _Storey:
     def _tick(self, n):
         """Count `n` table entries built (`_Meter`): past ARRANGE_WORK_BUDGET
         over the building the solve stops (`ArrangeBudget`); past NARROW_WORK
-        over this storey it lays on narrowly, from here (`_narrow`)."""
-        self.work += n
+        over this storey it lays on narrowly, from here (`_narrow`); and every
+        CANCEL_CHECK_ENTRIES it asks whether its job was stopped
+        (`ArrangeCancelled`)."""
         m = self.meter
         if m is None:
             return
@@ -1155,6 +1177,10 @@ class _Storey:
         k = m.by_storey[self.level_key] = m.by_storey.get(self.level_key, 0) + n
         if m.total > m.budget:
             raise ArrangeBudget(f"{m.total} table entries built, past the core's budget of {m.budget}")
+        if m.cancelled is not None and m.total >= m.next_check:
+            m.next_check = m.total + CANCEL_CHECK_ENTRIES
+            if m.cancelled():
+                raise ArrangeCancelled(f"the job was stopped after {m.total} table entries")
         if k > self.narrow_at and not self.narrowed:
             self._narrow()
 
@@ -2006,7 +2032,6 @@ class _Storey:
                     row[h] = v
                     if v < INF:
                         core.put((w, h, ()), v + pad * w * h, None)
-            core._at = None
             core._grouped = {}
         elif self.pad is not None and core.cost:
             M, pad = self.M, self.pad
@@ -2016,7 +2041,6 @@ class _Storey:
                         core.put((w + p, h, k), c + pad * p * h, None)
                     if h + p <= M:
                         core.put((w, h + p, k), c + pad * p * w, None)
-            core._at = None
             core._grouped = {}
         self._tables[key] = core
         return core
@@ -2966,7 +2990,7 @@ class _Edge:
 class _Building:
     """The whole building: its blocks, their storeys, laid stepwise."""
 
-    def __init__(self, p):
+    def __init__(self, p, cancelled=None):
         self.p = p
         self.rooms = p.rooms
         self.every = p.every
@@ -2991,20 +3015,15 @@ class _Building:
         self.large = False              # the block being laid is large (`lay_block`)
         # the work done, counted (`_Meter`): a storey problem laid is let go
         # -- its pinned DP's tables with it -- and only its count kept (every
-        # one kept for the count held the unseen inn's 0.87 GB)
-        self.meter = _Meter()
+        # one kept for the count held the unseen inn's 0.87 GB) -- read as
+        # `self.meter.total`; and whether its job was stopped (`cancelled`)
+        self.meter = _Meter(cancelled)
         self._families = {}             # storeys alike but for their pins share tables (`make`)
         self._narrow_try = False        # a try searched as a large storey is (`_relaxed`'s climb floor)
         self._strict = False            # storeys laid on a notched ground give nothing way (`_carry`)
         ent = (p.entrance or {}).get("room")
         self.home = self.rooms[ent]["block"] if ent in self.rooms else \
             max(sorted(self.levels), key=lambda b: sum(1 for r in self.rooms.values() if r["block"] == b))
-
-    @property
-    def work(self):
-        """Table entries built so far, over every storey problem: the
-        building's deterministic measure of the time it has taken."""
-        return self.meter.total
 
     # -- what a storey holds ---------------------------------------------------
 
@@ -4159,8 +4178,14 @@ class _Building:
             # again on more grounds: the owner's rule yields because the
             # alternative is unreachable or crushed rooms or a refusal
             grow = LOOKAHEAD_GROW if best is None or self._severe(best, first) else LOOKAHEAD_GROW_CRUSHED
-            again, _c, _t = self._carry(b, first, ups, downs, kinds, tower, combos, lookahead * grow,
-                                        LOOKAHEAD_MARGIN_GROW, tried, self._floor_needed(b, ups + downs, kinds))
+            try:
+                again, _c, _t = self._carry(b, first, ups, downs, kinds, tower, combos, lookahead * grow,
+                                            LOOKAHEAD_MARGIN_GROW, tried, self._floor_needed(b, ups + downs, kinds))
+            except ArrangeBudget:
+                if best is None:
+                    raise               # nothing found yet: the core gives up
+                again = None            # a crushed or severed chain in hand stands
+                notes.append(BUDGET_CUT_NOTE)
             if again is not None and (best is None or not self._severe(again, first) and (
                     self._severe(best, first) or len(self._missed(again)) < len(self._missed(best)))):
                 best = again
@@ -4308,10 +4333,10 @@ class _Building:
         turn that lays a storey without a shared wall it needs, or does not
         lay, is not taken: the straight flight stays, and the layout says it
         cannot be climbed. Returns (chain, kinds, sentences)."""
-        stuck, turned = [], []
+        stuck, turned, spent = [], [], False
         for _round in range(len(kinds)):
             bad = [sid for sid in self._unclimbed(b, best, kinds) if sid not in stuck]
-            if not bad:
+            if not bad or spent:
                 break
             sid = bad[0]
             for kind in self._turns(kinds[sid]):
@@ -4321,6 +4346,13 @@ class _Building:
                     again, n2 = self._lay_kinds(b, first, ups, downs, k2, tower)
                 except ValueError:
                     continue
+                except ArrangeBudget:
+                    # the chain in hand stands (`BUDGET_CUT_NOTE`); every
+                    # flight still unclimbed is said to be so below
+                    spent = True
+                    stuck.extend(s for s in bad if s not in stuck)
+                    notes = notes + [BUDGET_CUT_NOTE]
+                    break
                 if again is None or (self._severe(again, first) and not self._severe(best, first)):
                     continue
                 best, kinds, notes = again, k2, n2
@@ -4450,13 +4482,18 @@ class _Building:
                     each = max(2, lookahead // len(combos))
                 # ...asking of it every ask the plain grounds were asked: a
                 # notch never buys an ask given way (`_relaxed`, strict)
-                self._strict = True
                 try:
-                    _least, notched = self._grounds(b, first, kinds, combos, each, margin, min_area, wanted, sizes,
-                                                    limit, carried)
-                finally:
-                    self._strict = False
-                best = self._chains(b, first, ups, downs, kinds, tower, notched, narrow, best)
+                    self._strict = True
+                    try:
+                        _least, notched = self._grounds(b, first, kinds, combos, each, margin, min_area, wanted,
+                                                        sizes, limit, carried)
+                    finally:
+                        self._strict = False
+                    best = self._chains(b, first, ups, downs, kinds, tower, notched, narrow, best)
+                except ArrangeBudget:
+                    if best is None:
+                        raise           # nothing found yet: the core gives up
+                    self.warnings.append(BUDGET_CUT_NOTE)   # the plain ground's chain stands
         return best, cheapest, carried
 
     def _grounds(self, b, first, kinds, combos, each, margin, min_area, notch, sizes, limit, carried):
@@ -4670,9 +4707,13 @@ class _Building:
             if sh.block != b or lv not in sh.levels or sh.id in fixed:
                 continue
             up = [v for v in sh.levels if v > lv] if lv >= 0 else [v for v in sh.levels if v < lv]
-            if not up or (lv >= 0 and up[0] <= 0):
+            if not up:
                 continue
-            nxt = up[0]
+            # THE STOREY NEXT TO THIS ONE, the one laid after it: `levels` is
+            # ascending, so below the ground the first was the DEEPEST -- a
+            # shaft -1 -> -2 -> -3 priced storey -1 by the -3 room's wall
+            # (audit 2026-11-01, world_layout_core F6)
+            nxt = min(up) if lv >= 0 else max(up)
             hall = laid.rects.get(f"{sh.id}@{lv}")
             if hall is None:
                 continue
@@ -5131,11 +5172,12 @@ class _Building:
         return Division(chosen=chosen, hall_at=hall_at, outlines=outlines, warnings=warnings)
 
 
-def arrange(p) -> Division:
+def arrange(p, cancelled=None) -> Division:
     """The tier's core: the building `p` (`layout_solver._prepare(...,
     own_outlines=True)`) arranged from its relations and sized, one
-    deterministic solve."""
-    return _Building(p).division()
+    deterministic solve. `cancelled`: asked as the work is counted, and
+    `ArrangeCancelled` raised once it says the job was stopped."""
+    return _Building(p, cancelled).division()
 
 
 #: THE LAST DIVISION LAID, kept to finish the same spec once more with its
@@ -5146,11 +5188,12 @@ def arrange(p) -> Division:
 _LAST_DIVISION = [None]
 
 
-def solve_arranged(spec, seed=SEED, face=True):
+def solve_arranged(spec, seed=SEED, face=True, cancelled=None):
     """`layout_solver.solve` with this core in place of the lab's search: one
     solve, the same for every seed (the seed is read by nothing here).
     `face`: `layout_solver._finish`'s; off, a spec just arranged is finished
-    again from its division (`_LAST_DIVISION`), not arranged again."""
+    again from its division (`_LAST_DIVISION`), not arranged again.
+    `cancelled`: the job's own "was I stopped?" (`ArrangeCancelled`)."""
     try:
         key = json.dumps(spec, sort_keys=True, default=str)
     except (TypeError, ValueError):
@@ -5163,7 +5206,7 @@ def solve_arranged(spec, seed=SEED, face=True):
             return kept
     else:
         def core(p):
-            div = arrange(p)
+            div = arrange(p, cancelled)
             _LAST_DIVISION[0] = (key, copy.deepcopy(div)) if key is not None else None
             return div
     return solve_with(spec, core, seed, own_outlines=True, face=face)

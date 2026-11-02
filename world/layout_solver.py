@@ -75,6 +75,7 @@ Units are paces (0.75 m), the engine's own.
 
 from __future__ import annotations
 
+import functools
 import math
 import random
 from dataclasses import dataclass, field
@@ -221,14 +222,6 @@ class Rect:
                 and other.x + other.w <= self.x + self.w
                 and other.y + other.d <= self.y + self.d)
 
-    def flush(self, other, side):
-        """Is `other` (inside self) against self's `side` wall?"""
-        return {"n": other.y == self.y, "s": other.y + other.d == self.y + self.d,
-                "w": other.x == self.x, "e": other.x + other.w == self.x + self.w}[side]
-
-    def inset(self, k):
-        return Rect(self.x + k, self.y + k, self.w - 2 * k, self.d - 2 * k)
-
     def as_dict(self):
         return {"x": self.x, "y": self.y, "w": self.w, "d": self.d}
 
@@ -341,14 +334,15 @@ def _shared_wall(a: Rect, b: Rect):
     return None, []
 
 
-def _door_cells(a: Rect, b: Rect, avoid=frozenset()):
+def _door_cells(a: Rect, b: Rect):
     """(side of a, cells of a a doorway into b may open from): the shared
-    wall less any cell with a stairwell on either side of it."""
+    wall. Stairs are rooms of their own, so no cell of it is a stairwell's
+    (the `_solid` cells it once left out were none since; deleted 2026-11-01,
+    world_layout_core F7)."""
     side, cells = _shared_wall(a, b)
     if side is None:
         return None, []
-    dx, dy = _STEP[side]
-    return side, [c for c in cells if c not in avoid and (c[0] + dx, c[1] + dy) not in avoid]
+    return side, list(cells)
 
 
 # ------------------------------------------------------------ sizing
@@ -359,8 +353,19 @@ SIZE_SCALE = {"tiny": 0.6, "small": 0.8, "medium": 1.0, "large": 1.5, "huge": 2.
 
 
 def fixture_footprint(fx):
-    kind = str(fx.get("kind") or "").strip().casefold().replace(" ", "_")
-    word = str(fx.get("size") or "").casefold()
+    """(w, d, height) of a fixture: its kind's (`FIXTURE_SIZES`) scaled by its
+    size word, else the size word's own (`SIZE_WORD_FOOTPRINT`)."""
+    return _footprint(str(fx.get("kind") or ""), str(fx.get("size") or ""))
+
+
+# A PURE FUNCTION OF TWO WORDS, called ~400k times a lab seed (`_score`'s
+# longest fixture), so it is worked out once a word pair: together with
+# `purpose_key` and `_joins`, 47% of a profiled seed (audit 2026-11-01,
+# world_layout_core E2). The tables it reads are the engine's constants.
+@functools.lru_cache(maxsize=4096)
+def _footprint(kind, size):
+    kind = kind.strip().casefold().replace(" ", "_")
+    word = size.casefold()
     if kind in FIXTURE_SIZES:
         w, d, h = FIXTURE_SIZES[kind]
         k = SIZE_SCALE.get(word, 1.0)
@@ -434,10 +439,22 @@ def _sort_fixtures(r):
 
 
 def purpose_key(room):
-    text = str(room.get("purpose") or "").casefold().replace(" ", "_")
+    """The solver's word (`PURPOSE_AREA`) for what a room is for: its
+    `purpose` where that IS one, else the first the purpose, name and id
+    contain. Read for sizing (`room_target`) and ordering; the entrance is
+    ranked by whole words instead (`layout_bridge._entry_rank`)."""
+    return _purpose_key(str(room.get("purpose") or ""), str(room.get("name") or ""),
+                        str(room.get("id") or ""))
+
+
+# Pure in its three strings and ~1M calls a lab seed (audit 2026-11-01,
+# world_layout_core E2): worked out once a room.
+@functools.lru_cache(maxsize=4096)
+def _purpose_key(purpose, name, rid):
+    text = purpose.casefold().replace(" ", "_")
     if text in PURPOSE_AREA:
         return text
-    text = " ".join(str(room.get(k) or "") for k in ("purpose", "name", "id")).casefold()
+    text = " ".join((purpose, name, rid)).casefold()
     for key in PURPOSE_AREA:
         if key.replace("_", " ") in text or key in text:
             return key
@@ -811,7 +828,13 @@ def _place_blocks(spec, rooms, shafts, front, layout):
                           if rooms[rid]["level"] == (lv - 1 if lv > 0 else lv + 1)
                           and lv in (rooms[st.low]["level"], rooms[st.high]["level"]) and st.at.get(rid)]
                 if toward:
-                    side_to = max(set(toward), key=toward.count)
+                    # a tie between two asked walls goes to the first in
+                    # `_SIDES` order: broken by a set's iteration order it
+                    # followed `PYTHONHASHSEED`, and the same plan's upper
+                    # storey stood against the other wall in another process
+                    # (audit 2026-11-01, world_layout_core F4: hash seeds 3
+                    # and 5 against 1, 2, 4 and 6)
+                    side_to = max(sorted(set(toward), key=_side_order), key=toward.count)
                     if side_to == "n":
                         o = Rect(o.x, base.y, o.w, o.d)
                     elif side_to == "s":
@@ -1256,7 +1279,17 @@ def _shaft_spots(shaft, outlines, rng):
             tried += 1
             if shaft.asked or tried >= 2:
                 break
-    return sorted(out, key=lambda t: (t[1].x, t[1].y, t[1].w))
+    # ORDERED WHOLLY by place, shape and kind: spots tying on (x, y, w) -- a
+    # spiral 2x2 and a ladder 2x1 at one corner -- kept the set's iteration
+    # order, which `PYTHONHASHSEED` decides, and the search starts from the
+    # middle of this list (audit 2026-11-01, world_layout_core F4)
+    return sorted(out, key=lambda t: (t[1].x, t[1].y, t[1].w, t[1].d, t[0]))
+
+
+def _side_order(side):
+    """A wall's place in `_SIDES`, for a tie broken the same way in every
+    process; a word that is no wall goes last."""
+    return _SIDES.index(side) if side in _SIDES else len(_SIDES)
 
 
 # ------------------------------------------------------------ scoring
@@ -1848,12 +1881,6 @@ def solve_with(spec, core, seed=SEED, own_outlines=False, face=True) -> Layout:
 
 # ------------------------------------------------------------ doors
 
-def _solid(layout, lv):
-    """Cells no doorway may open from and no fixture may take. Stairs are
-    rooms of their own now, so a room holds none."""
-    return set()
-
-
 def _room_cells(layout, rid, lv):
     cells = set()
     for r in layout.floors.get(lv, {}).get(rid, ()):
@@ -1969,18 +1996,19 @@ def _place_doors(layout, rooms, outdoor_ids, approaches=frozenset(), things=froz
     from, a stair's first (the review of 2026-10-16, visual 5: a hallway's
     corner cell held the stair's arrival door and the meditation room's door
     in 8 of 18 shrine layouts; the spread avoided only cells fixed on its
-    own wall). Off, the lab's spread is unchanged."""
+    own wall), and so does each outside door, which holds its own cell in
+    turn (audit 2026-11-01, F3: the outside doors read none of them). Off,
+    the lab's spread is unchanged."""
     per_wall = {}
     done = set()
     for lv, parts in layout.floors.items():
-        avoid = _solid(layout, lv)
         for rid in parts:
             for other, (side, order, kind) in _joins(rid, rooms).items():
                 key = tuple(sorted((rid, other)))
                 if key in done or other not in parts:
                     continue
                 done.add(key)
-                got, cells = _door_cells(parts[rid][0], parts[other][0], avoid)
+                got, cells = _door_cells(parts[rid][0], parts[other][0])
                 if not cells:
                     layout.warnings.append(f"{layout.names[rid]} and {layout.names[other]} "
                                            f"were to join but share no wall")
@@ -2081,7 +2109,6 @@ def _place_doors(layout, rooms, outdoor_ids, approaches=frozenset(), things=froz
                 dx, dy = _STEP[sd]
                 cells = [c for c in sorted(r.cells()) if (c[0] + dx, c[1] + dy) not in house
                          and (c[0] + dx, c[1] + dy) not in r.cells()]
-                cells = [c for c in cells if c not in _solid(layout, lv)]
                 if target in things:
                     # A THING AT A DOOR HAS A DOOR OF ITS OWN, clear of the
                     # room's other doors' ground: one door carrying two of the
@@ -2092,11 +2119,21 @@ def _place_doors(layout, rooms, outdoor_ids, approaches=frozenset(), things=froz
                     clear = [c for c in cells if gap(c) >= THING_DOOR_GAP]
                     if not clear:
                         continue
+                    if apart:
+                        clear = [c for c in clear if tuple(c) not in held.get((lv, rid), ())] or clear
                     mid = len(cells) // 2
                     pos = min(clear, key=lambda c: abs(cells.index(c) - mid))
                 elif sd in seen_sides or not cells:
                     continue
                 else:
+                    if apart:
+                        # NOT FROM A CELL A DOORWAY ALREADY OPENS FROM, where
+                        # the wall has another: the inner doorways' spread
+                        # held them and this loop never read them, so a
+                        # corridor's last room and the yard door opened from
+                        # one corner with the other cell of the wall free
+                        # (audit 2026-11-01, world_layout_core F3)
+                        cells = [c for c in cells if tuple(c) not in held.get((lv, rid), ())] or cells
                     pos = cells[len(cells) // 2]
                 if side and sd != side:
                     layout.warnings.append(f"{layout.names[rid]} opens to {target} on its {sd} side, "
@@ -2105,6 +2142,8 @@ def _place_doors(layout, rooms, outdoor_ids, approaches=frozenset(), things=froz
                                      "cell": list(pos), "kind": kind, "outside": True})
                 seen_sides.add(sd)
                 used.append(tuple(pos))
+                if apart:
+                    held.setdefault((lv, rid), set()).add(tuple(pos))
                 break
             else:
                 layout.warnings.append(f"{layout.names[rid]} has no outside wall to open to {target}")
@@ -2148,13 +2187,12 @@ def _sides_toward(layout, rooms, rid, r, target, lv, house):
         return min(max(e.x - c[0], 0, c[0] - (e.x + e.w - 1)) + max(e.y - c[1], 0, c[1] - (e.y + e.d - 1))
                    for e in rects)
 
-    solid = _solid(layout, lv)
     far = {}
     for sd in _SIDES:
         dx, dy = _STEP[sd]
         # the cells the caller would open a door in on this side, as it reads them
         cells = [c for c in sorted(r.cells()) if (c[0] + dx, c[1] + dy) not in house
-                 and (c[0] + dx, c[1] + dy) not in r.cells() and c not in solid]
+                 and (c[0] + dx, c[1] + dy) not in r.cells()]
         if cells:
             c = cells[len(cells) // 2]
             far[sd] = steps((c[0] + dx, c[1] + dy))
@@ -2187,13 +2225,12 @@ def _place_windows(layout, rooms):
         for rf in list(layout.roofs.get(lv, ())) + list(layout.notches.get(lv, ())):
             inside -= rf.cells()
         doors = {tuple(d["cell"]) for d in layout.doors if d["level"] == lv and rid in (d["a"], d["b"])}
-        solid = _solid(layout, lv)
 
         def outside_cells(side):
             dx, dy = _STEP[side]
             return [c for c in sorted(rect.cells())
                     if (c[0] + dx, c[1] + dy) not in inside and (c[0] + dx, c[1] + dy) not in rect.cells()
-                    and c not in doors and c not in solid]
+                    and c not in doors]
 
         for k, wdef in enumerate(r["windows"]):
             if not isinstance(wdef, dict):
@@ -2224,7 +2261,7 @@ def _place_zones(layout, rooms):
     the doorway it is `by` (an entry step at the entrance)."""
     for rid, r in rooms.items():
         lv = r["level"]
-        cells = _room_cells(layout, rid, lv) - _solid(layout, lv)
+        cells = _room_cells(layout, rid, lv)
         if not cells:
             continue
         box = _bbox(cells)
@@ -2323,8 +2360,7 @@ def _furnish(layout, rooms):
         lv = r["level"]
         if not layout.floors.get(lv, {}).get(rid):
             continue
-        solid = _solid(layout, lv)
-        cells = _room_cells(layout, rid, lv) - solid
+        cells = _room_cells(layout, rid, lv)
         # A DOORWAY'S STEP AND THE PACE INSIDE IT are the room's to walk
         # through, never a fixture's: a stove one pace in from the kitchen
         # door, cushions across the genkan's step (the owner, reading Home 9
@@ -2359,11 +2395,21 @@ def _furnish(layout, rooms):
 
 
 def _place_fixtures(room_id, room, cells, layout, *, clear=frozenset(), zones=None, landmarks=None):
-    """Fixtures by relation, backtracking. Hard: inside the room (inside its
-    zone when it names one, out of every zone when it does not), no overlap,
-    never on a doorway's step or a landing, against the wall it names, and
-    never cutting the doorways and landings off from each other. Soft: near
-    / beside / facing. A fixture no cell takes is reported."""
+    """Fixtures by relation, placed GREEDILY: each in turn, in the order
+    below, takes the best place left and is never moved for a later one.
+    Hard: inside the room (inside its zone when it names one, out of every
+    zone when it does not), no overlap, never on a doorway's step or a
+    landing, against the wall it names, and never cutting the doorways and
+    landings off from each other. Soft: near / beside / facing. A fixture no
+    cell takes is reported, and the next is placed.
+
+    NOT A BACKTRACKING SEARCH, though `go` is shaped like one and this said
+    it was: a level that finds no place records its fixture unplaced and
+    goes on, so `go` returns False only past its budget, and the first
+    candidate is always kept (audit 2026-11-01, world_layout_core F5: over
+    the shrine baseline's 17 furnished rooms, calls == fixtures + 1 in every
+    room). Making it backtrack would move the lab's baselines; the owner's
+    call, and left as it is."""
     if not cells:
         return
     zones = zones or {}

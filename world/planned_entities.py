@@ -28,8 +28,17 @@ appearance, position, what it did) and files a typed PLANNING NEED with
 that surface attached -- the one ledger in `world/planning_needs.py`, shared
 with the world-context compiler -- so the plan is authored behind what was
 seen and never contradicts it (v2 § 7.4, the causal-exposure rule). This
-ledger rides the `world` row under its own key, so archive, checkpoint,
-branch and frame split carry it without their own handling.
+ledger rides the `world` row under its own key, so archive, checkpoint and
+branch carry it without their own handling. IT IS ONE ROW FOR THE WHOLE
+CHAT: `planned_entities` is not a frame-scoped world key
+(`core.db.FRAME_SCOPED_WORLD_KEYS`), so every `frame_id` below is passed
+through and, today, ignored -- a plan rendered in one frame reads rendered
+in every frame (audit 2026-11-01, world_layout_bridge_structure F1).
+
+WRITTEN BY THE COMMIT THAT STANDS A THING UP, never by its preparation: the
+materializer DECIDES (`plans_in_sight`, which writes nothing) and the turn's
+transaction WRITES (`mark_plans_rendered`), so a commit rolled back takes
+the mark back with the scene it described.
 """
 from __future__ import annotations
 
@@ -51,6 +60,18 @@ PLAN_BRIEF_CHARS = 600
 PLAN_ALIASES_CAP = 8
 #: A plan's rendered surface, kept at the same ceiling as a need's.
 SURFACE_CHARS = 600
+
+#: The scene's record of the noise `project_planned_emissions` laid on each
+#: room, ``{room id: level}``, so a projection no plan makes any more is
+#: taken back. Absent from a scene with nothing projected. Room-keyed and
+#: frame-scoped, like `structure.LAID_LOOKS_KEY`.
+PROJECTED_SOUNDS_KEY = "planned_sounds_laid"
+
+#: The emission fields a plan declares (`story.plot_packages._plan_sources`,
+#: in the engine's closed vocabularies) and a thing the engine stands up
+#: carries as its own: the same fields a scene entity carries.
+PLAN_SOURCE_FIELDS = ("light_source", "light_shape", "light_height",
+                      "steadiness", "sound_source")
 
 
 def _text(value, limit):
@@ -255,6 +276,20 @@ def project_planned_emissions(cid, scene, frame_id=None):
     the loudest thing in it. A `sound` the ROOM itself declares is left
     alone: that one is authored about the place, it carries a detail, and a
     thing standing in it does not overrule it.
+
+    AND WHAT IT LAID IT TAKES BACK. This only ever SET a room's `sound`, so a
+    planned generator rendered and later switched off went on sounding
+    through its room -- across storeys, for the rest of the story, "a noise
+    nothing is making" -- and while it ran it was heard twice, room and
+    entity; a plan moved to another room left the old one sounding (audit
+    2026-11-01, world_layout_bridge_structure F7). The scene records what
+    was laid (`PROJECTED_SOUNDS_KEY`), and a projection no plan makes any
+    more comes off while the room still holds exactly what was laid -- never
+    a voice the room declares, nor one a beat wrote since. A thing the
+    engine stands up carries the plan's emissions itself
+    (`plans_in_sight`), so taking the room's back never silences it.
+
+    Returns ``(scene, [(room, level), ...])`` -- each projection newly laid.
     """
     from world.spatial import SOUND_LEVELS
 
@@ -272,23 +307,83 @@ def project_planned_emissions(cid, scene, frame_id=None):
             continue
         if rank[level] > rank.get(loudest.get(where, ""), -1):
             loudest[where] = level
+    was = scene.get(PROJECTED_SOUNDS_KEY)
+    was = dict(was) if isinstance(was, dict) else {}
+    laid = {}
+    for where, level in sorted(was.items()):
+        room = rooms.get(where)
+        if not isinstance(room, dict) or room.get("sound") != {"level": level}:
+            continue                    # gone, or the room says otherwise now
+        if loudest.get(where) == level:
+            laid[where] = level         # still projected, still standing
+            continue
+        room.pop("sound", None)
     projected = []
     for where, level in sorted(loudest.items()):
         room = rooms.get(where)
-        if not isinstance(room, dict):
+        if not isinstance(room, dict) or where in laid:
             continue
         standing = room.get("sound")
         if isinstance(standing, dict) and standing.get("detail"):
             continue                    # the room's own voice, authored
         if isinstance(standing, dict) and standing.get("level") == level:
-            continue
+            continue                    # the room says it already: its own
         room["sound"] = {"level": level}
+        laid[where] = level
         projected.append((where, level))
+    if laid:
+        scene[PROJECTED_SOUNDS_KEY] = laid
+    else:
+        scene.pop(PROJECTED_SOUNDS_KEY, None)
     return scene, projected
 
 
 def materialize_plans_in_sight(cid, scene, frame_id=None, *, occupied=(),
                                turn_idx=None):
+    """`plans_in_sight` and `mark_plans_rendered` in one call, for a caller
+    ALREADY INSIDE the transaction its scene is written in. Returns
+    ``(scene, minted)``.
+
+    The commit must not use this from its preparation, which runs before the
+    turn's transaction opens: the mark would be written whether or not the
+    scene that holds the thing ever is (audit 2026-11-01,
+    world_layout_bridge_structure F1, reproduced -- a rolled-back commit left
+    the plan `rendered` and the thing never existed). It prepares with
+    `plans_in_sight` and writes the marks inside its transaction."""
+    scene, minted, marks = plans_in_sight(cid, scene, frame_id, occupied=occupied,
+                                          turn_idx=turn_idx)
+    if marks:
+        mark_plans_rendered(cid, marks, frame_id)
+    return scene, minted
+
+
+def mark_plans_rendered(cid, marks, frame_id=None):
+    """Write the renders `plans_in_sight` decided onto the plan ledger --
+    inside the caller's transaction, so a rollback takes them back with the
+    scene that holds the things. ``marks`` is ``{plan uid: rendered record}``.
+
+    Read afresh and idempotent: a plan already rendered keeps the render it
+    has (first writer wins, as `settle_rendered_plans`' once-only rule), a
+    plan gone since is skipped, and nothing is written when nothing changed.
+    Returns the uids written."""
+    marks = {str(uid): dict(rec) for uid, rec in (marks or {}).items()
+             if str(uid or "") and isinstance(rec, dict)}
+    if not marks:
+        return []
+    plans = planned_entities(cid, frame_id)
+    written = []
+    for uid, record in sorted(marks.items()):
+        plan = plans.get(uid)
+        if not isinstance(plan, dict) or plan.get("rendered"):
+            continue
+        plan["rendered"] = record
+        written.append(uid)
+    if written:
+        save_planned_entities(cid, plans, frame_id)
+    return written
+
+
+def plans_in_sight(cid, scene, frame_id=None, *, occupied=(), turn_idx=None):
     """A planned THING standing where a body stands becomes a real entity.
 
     THE COMPLEMENT OF `project_planned_emissions`, and licensed by its own
@@ -316,8 +411,10 @@ def materialize_plans_in_sight(cid, scene, frame_id=None, *, occupied=(),
 
     MINTS THE BARE FACT AND NOTHING ELSE -- `mint_unreferenced_things`' rule:
     the plan's name, an inert kind, the `look` it was filed with, the room it
-    was filed for, and the `plan_ref` the settle path binds through. What the
-    thing then DOES is the Director's, and what it is for stays the plan's.
+    was filed for, what checking it would find (`brief.state`), what it emits
+    (`sources`, `PLAN_SOURCE_FIELDS`) and the `plan_ref` the settle path
+    binds through. What the thing then DOES is the Director's, and what it
+    is for stays the plan's.
 
     Every gate subtracts:
 
@@ -334,28 +431,32 @@ def materialize_plans_in_sight(cid, scene, frame_id=None, *, occupied=(),
         engine minted as `copper_coin_2` on 2026-09-20);
       * no name, no mint.
 
-    Idempotent by construction: the plan is marked rendered in the same call,
+    Idempotent by construction: the plan is marked rendered by the commit
+    that stands the thing up (`mark_plans_rendered`, inside its transaction),
     so a reroll, a rerun-from-stage or a second visit cannot double-mint, and
-    `plans_in_view` stops offering it.
+    `plans_in_view` stops offering it -- and a commit that rolls back leaves
+    the plan to stand up again. Between the two, a name the scene already
+    answers to mints nothing.
 
     It also SETTLES a thing plan the Director already rendered: a scene record
     the identity floor bound to the plan (`plan_ref`) marks it rendered with
     that record's description, wherever it stands. A person's render settles
     through the presence ledger instead (`settle_rendered_plans`).
 
-    Returns ``(scene, [{plan, entity_id, name, room}, ...])`` -- the scene
-    mutated in place, and one record per thing stood up, for the caller to
-    report.
+    WRITES NOTHING. Returns ``(scene, [{plan, entity_id, name, room}, ...],
+    {plan uid: rendered record})`` -- the scene mutated in place, one record
+    per thing stood up for the caller to report, and the renders for
+    `mark_plans_rendered` to write in the transaction the scene is written in.
     """
     rooms = (scene or {}).get("rooms") if isinstance(scene, dict) else None
     if not isinstance(rooms, dict) or not rooms:
-        return scene, []
+        return scene, [], {}
     here = {str(r) for r in (occupied or ()) if str(r or "")}
     if not here:
-        return scene, []
+        return scene, [], {}
     plans = planned_entities(cid, frame_id)
     if not plans:
-        return scene, []
+        return scene, [], {}
     entities = scene.setdefault("entities", {})
     positions = scene.setdefault("positions", {})
     # Every spelling the scene already answers to, so a plan the world holds
@@ -368,7 +469,7 @@ def materialize_plans_in_sight(cid, scene, frame_id=None, *, occupied=(),
             held.update(_fold(a) for a in record.get("aliases") or [])
     held.update(_fold(key) for key in positions)
     held.discard("")
-    minted, changed = [], False
+    minted, marks = [], {}
     # A THING THE DIRECTOR RENDERED SETTLES ITS PLAN. The identity floor binds
     # a mint to the plan it renders (`plan_ref`), and the presence ledger
     # settles a PERSON's render onto its plan (`settle_rendered_plans`); a
@@ -385,13 +486,13 @@ def materialize_plans_in_sight(cid, scene, frame_id=None, *, occupied=(),
         if (not isinstance(plan, dict) or plan.get("rendered")
                 or str(plan.get("kind") or "") != "thing"):
             continue
-        plan["rendered"] = {
+        marks.setdefault(str(ref.get("uid")), {
             "entity_id": _text(key, 120), "turn": turn_idx,
             "render": _text(record.get("description") or record.get("name")
-                            or key, SURFACE_CHARS)}
-        changed = True
+                            or key, SURFACE_CHARS)})
     for uid, plan in sorted(plans.items()):
-        if plan.get("rendered") or str(plan.get("kind") or "") != "thing":
+        if (plan.get("rendered") or uid in marks
+                or str(plan.get("kind") or "") != "thing"):
             continue
         name = str(plan.get("name") or "").strip()
         where = str((plan.get("brief") or {}).get("where") or "")
@@ -417,15 +518,21 @@ def materialize_plans_in_sight(cid, scene, frame_id=None, *, occupied=(),
         state = plan_state((plan.get("brief") or {}).get("state"))
         if state:
             record["state"] = state
+        # AND WHAT IT EMITS, in the plan's own closed words: the room stops
+        # carrying the plan's noise once the plan is rendered
+        # (`project_planned_emissions`), so the thing carries it now.
+        for field in PLAN_SOURCE_FIELDS:
+            value = str((plan.get("sources") or {}).get(field) or "")
+            if value:
+                record[field] = value
         entities[key] = record
         positions[key] = where
         _station_a_thing(scene, key, where,
                          str((plan.get("brief") or {}).get("station") or ""))
         held |= forms
         held.add(_fold(key))
-        plan["rendered"] = {"entity_id": key, "turn": None,
-                            "render": look or name, "by": "engine"}
-        changed = True
+        marks[uid] = {"entity_id": key, "turn": None,
+                      "render": look or name, "by": "engine"}
         minted.append({"plan": uid, "entity_id": key, "name": name,
                        "room": where})
     # A THING THIS PASS ALREADY STOOD UP, BEFORE IT LEARNED TO PLACE ONE.
@@ -438,7 +545,7 @@ def materialize_plans_in_sight(cid, scene, frame_id=None, *, occupied=(),
     # story repairs itself on its next beat instead of needing its scene
     # rewritten underneath it.
     for uid, plan in sorted(plans.items()):
-        rendered = plan.get("rendered")
+        rendered = plan.get("rendered") or marks.get(uid)
         if not isinstance(rendered, dict) or rendered.get("by") != "engine":
             continue
         key = str(rendered.get("entity_id") or "")
@@ -452,9 +559,7 @@ def materialize_plans_in_sight(cid, scene, frame_id=None, *, occupied=(),
             minted.append({"plan": uid, "entity_id": key,
                            "name": str(plan.get("name") or ""), "room": room,
                            "placed_late": True})
-    if changed:
-        save_planned_entities(cid, plans, frame_id)
-    return scene, minted
+    return scene, minted, marks
 
 
 def _station_a_thing(scene, key, room, declared=""):
