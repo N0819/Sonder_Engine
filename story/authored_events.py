@@ -126,6 +126,13 @@ def _changed_text(state_diff):
 
 
 
+def _assertion_key(summary):
+    """The ASSERTION an authored event carries, as one comparable string:
+    whitespace and case normalised, so a re-emission that only reflows the
+    string is still the same assertion."""
+    return " ".join(str(summary or "").casefold().split())
+
+
 def _event_id(cid, summary):
     """Identity of an authored assertion: the chat and the ASSERTION, never
     the beat that minted it.
@@ -138,10 +145,48 @@ def _event_id(cid, summary):
     Keyed on `turn_idx`, one assertion could exist as three pending rows, each
     with its own untouched re-queue budget -- measured three identical copies
     at one beat and two at another, the earliest minted nine beats before.
+
+    The id NAMES a new row; it does not decide whether one is new. A branch
+    re-keys every scheduled event to a random id and an archive import moves
+    the row to a chat this hash was not computed for, so the "already live"
+    question is asked of the assertion (`_live_event_for`), never of the id.
     """
-    key = " ".join(str(summary or "").casefold().split())
+    key = _assertion_key(summary)
     digest = hashlib.sha256(f"{cid}:{key}".encode("utf-8")).hexdigest()[:20]
     return f"authored:{digest}"
+
+
+def _payload_of(row):
+    """A scheduled event's payload as a mapping; {} for anything else."""
+    try:
+        payload = json.loads(row["payload"]) if row else {}
+    except (TypeError, ValueError):
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def _live_event_for(cid, summary):
+    """The pending authored event in this chat that carries this assertion,
+    whatever id it is stored under, or None.
+
+    THE ASSERTION, NOT THE ID (story_scene_schema audit F3). The absorption
+    looked the row up by `_event_id(cid, summary)`, and a branched chat holds
+    its copy under a random remapped id while an imported one holds it under
+    a hash of ANOTHER chat id -- so a re-emitted, still-standing assertion
+    missed its own row, minted a second with a fresh re-queue budget, and
+    both were delivered as due: the multiplication the id exists to prevent.
+    The table is keyed (chat_id, event_id), and a chat's pending authored
+    events are a handful of rows.
+    """
+    key = _assertion_key(summary)
+    if not key:
+        return None
+    for row in q("SELECT event_id, payload FROM scheduled_events "
+                 "WHERE chat_id=? AND kind='authored_event' "
+                 "AND status='pending'", (cid,)):
+        if _assertion_key(_payload_of(row).get("summary")) == key:
+            return row["event_id"]
+    return None
 
 
 def mint_authored_events(cid, turn_idx, scheduled_assertions, *,
@@ -176,9 +221,7 @@ def mint_authored_events(cid, turn_idx, scheduled_assertions, *,
         # was minted with rather than being reset by the fold-in it caused. A
         # row that has already fired or gone stale is NOT live, so scheduling
         # the same thing again later legitimately re-arms it.
-        live = q("SELECT status FROM scheduled_events WHERE chat_id=? "
-                 "AND event_id=?", (cid, eid), one=True)
-        if live and str(live["status"] or "") == "pending":
+        if _live_event_for(cid, summary) is not None:
             continue
         payload = json.dumps({
             "summary": summary, "source": str(source or "player"),
@@ -201,11 +244,7 @@ def due_authored_events(cid, turn_idx):
         "SELECT event_id, payload FROM scheduled_events WHERE chat_id=? "
         "AND kind='authored_event' AND status='pending' AND due_at<=? "
         "ORDER BY due_at", (cid, float(turn_idx))):
-        try:
-            payload = json.loads(row["payload"])
-        except (TypeError, ValueError):
-            payload = {}
-        summary = str(payload.get("summary") or "").strip()
+        summary = str(_payload_of(row).get("summary") or "").strip()
         if summary:
             out.append({"event_id": row["event_id"], "summary": summary})
     return out
@@ -213,6 +252,45 @@ def due_authored_events(cid, turn_idx):
 
 def _covers(stoks, other):
     return bool(stoks) and len(stoks & other) / len(stoks) >= _COVERAGE_RATIO
+
+
+def _assertion_tokens(text):
+    """The distinctive tokens of an assertion or of what a beat said or wrote,
+    in every script -- the one comparator `resolve_authored_events` judges
+    narration, the committed diff and a retirement by.
+
+    Words of a SPACED script are `_content_tokens`' (stopword-stripped,
+    crudely stemmed), exactly as before: the unspaced runs are blanked out of
+    the text that reader sees, so English text reads byte for byte as it did.
+
+    An UNSPACED run was ONE token to that reader -- it splits on `[^\\w]+` --
+    so a Japanese assertion matched only a prose that repeated the identical
+    clause between punctuation, and was never narrated, covered or retired:
+    re-delivered as due, resolve-now, on the next two beats after it had
+    happened (story_scene_schema audit F6). It is read here as the words it
+    is written in, decided by script (`language_runtime.fold_words`):
+
+      * a katakana run is one loanword and is kept whole -- in pieces, a long
+        loanword would outweigh every other word of the sentence it is in;
+      * a kanji run is read by its character pairs, so a compound and its
+        parts meet (地下墜落 and 地下に墜落);
+      * hiragana -- particles, okurigana, inflection -- carries no content of
+        its own and is dropped;
+      * any other unspaced script (Hangul, Thai) is kept as the run it is.
+    """
+    from agents.common import _content_tokens
+    from language_runtime import UNSPACED_SCRIPT, fold_words, script_of
+    body = str(text or "")
+    tokens = set(_content_tokens(UNSPACED_SCRIPT.sub(" ", body)))
+    for run in fold_words(body):
+        script = script_of(run[:1])
+        if not script or script == "hiragana":
+            continue
+        if script == "han" and len(run) > 1:
+            tokens.update(run[i:i + 2] for i in range(len(run) - 1))
+        else:
+            tokens.add(run)
+    return tokens
 
 
 def resolve_authored_events(cid, turn_idx, resolved_text, state_diff=None):
@@ -243,22 +321,18 @@ def resolve_authored_events(cid, turn_idx, resolved_text, state_diff=None):
     page for that beat was a woman letting go of a doorframe (PR2, rush run
     turn 4, 2026-09-05).
     """
-    from agents.common import _content_tokens
     from core.pipeline_context import note_step_warning
-    rtoks = set(_content_tokens(resolved_text or ""))
+    rtoks = _assertion_tokens(resolved_text or "")
     # What the beat WROTE DOWN, and what it ENDED, judged by the same overlap
     # that judges what it narrated -- one comparator, three answers.
-    wtoks = set(_content_tokens(_changed_text(state_diff)))
-    xtoks = set(_content_tokens(_retired_text(state_diff)))
+    wtoks = _assertion_tokens(_changed_text(state_diff))
+    xtoks = _assertion_tokens(_retired_text(state_diff))
     fired = requeued = dropped = 0
     for ev in due_authored_events(cid, turn_idx):
         row = q("SELECT payload FROM scheduled_events WHERE chat_id=? AND event_id=?",
                 (cid, ev["event_id"]), one=True)
-        try:
-            payload = json.loads(row["payload"]) if row else {}
-        except (TypeError, ValueError):
-            payload = {}
-        stoks = set(_content_tokens(ev["summary"]))
+        payload = _payload_of(row)
+        stoks = _assertion_tokens(ev["summary"])
         narrated = _covers(stoks, rtoks)
         covered = narrated and _covers(stoks, wtoks)
         if narrated and not covered:

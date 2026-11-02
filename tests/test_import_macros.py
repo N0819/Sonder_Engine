@@ -38,9 +38,11 @@ class TestCharacterMacroSubstitution:
         assert "Aria" in greeting
         assert importers.PLAYER_TOKEN in greeting
 
-        summary = sheet["embodiment"]["visible"]["summary"]
-        assert "{{char}}" not in summary
-        assert "Aria" in summary
+        # CHANGED 2026-11-01: this pinned the description-as-visible-summary LEAK (story_attire_import audit F1).
+        described = " ".join(
+            e["content"] for e in sheet["knowledge"]["private_history"])
+        assert "{{char}}" not in described
+        assert "Aria" in described
 
     def test_angle_bracket_macros_are_resolved(self, temp_db):
         payload = {
@@ -66,9 +68,10 @@ class TestPersonaMacroSubstitution:
     def test_user_macro_is_normalized_in_persona(self, temp_db):
         payload = {"name": "Rin", "description": "A traveler {{user}} once met."}
         _pid, sheet = importers.import_persona(payload, reinterpret=False)
-        summary = sheet["embodiment"]["visible"]["summary"]
-        assert "{{user}}" not in summary
-        assert importers.PLAYER_TOKEN in summary
+        # CHANGED 2026-11-01: this pinned the description-as-visible-summary LEAK (story_attire_import audit F1).
+        described = sheet["narration"]["voice_setting"]
+        assert "{{user}}" not in described
+        assert importers.PLAYER_TOKEN in described
 
 
 class TestDisabledLorebookEntriesSkipped:

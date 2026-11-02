@@ -40,6 +40,10 @@ from __future__ import annotations
 import copy
 import re
 
+# Script-aware text primitives, no database: this module stays a pure leaf.
+from language_runtime import (UNSPACED_SCRIPT, fold_key, fold_words,
+                              name_boundary_regex, script_of)
+
 # Coarse and closed. Finer regions (chest vs. belly, thigh vs. calf) buy detail
 # that no part of the engine acts on, at the cost of an authoring burden nobody
 # would carry.
@@ -69,6 +73,13 @@ _NON_ATTIRE_TERMS = {
 }
 
 
+#: Where "N of N" stops naming the thing: "a cup of tea" is a cup. Not part of
+#: `_PLACEMENT_PHRASE`, which keeps "of" inside the garment phrase on purpose
+#: ("a ring of keys" is a ring, "a length of cord" a cord) for the question
+#: IT answers -- what the thing covers.
+_OF_TAIL = re.compile(r"\bof\b")
+
+
 def sanitize_attire_items(items):
     """A wearing list with the non-garments and the repeats taken out.
 
@@ -92,6 +103,14 @@ def sanitize_attire_items(items):
     thing in a wardrobe is visible and fixable next beat, and wrongly taking
     a garment off a body is neither.
 
+    AND THE HEAD COMES BEFORE THE PHRASE'S TAIL. Read as the clause's last
+    word, any tail made its place or contents the "head": "a cup of tea" was
+    tea, "the cup in her hand" -- this module's own example of what must
+    never be worn -- a hand, so both were kept as garments forever (story_
+    attire_import audit F13). English names the thing first in "N of N" and
+    "N in/at/on ...", so the head is the last word before an "of" or a
+    placement preposition, which is where `attaches_only` already cut it.
+
     Order is preserved: a wearing list is outermost-first by convention
     everywhere else in this module, and sorting it would silently relayer
     somebody.
@@ -104,7 +123,9 @@ def sanitize_attire_items(items):
         # The first clause, because a garment name routinely carries a
         # trailing one that says how it is worn ("..., pushed up on the hat
         # brim") and the head of THAT is not the thing.
-        if _garment_keys(text.split(",")[0])[1] in _NON_ATTIRE_TERMS:
+        thing = _PLACEMENT_PHRASE.split(text.split(",")[0].casefold(), 1)[0]
+        thing = _OF_TAIL.split(thing, 1)[0]
+        if _garment_keys(thing)[1] in _NON_ATTIRE_TERMS:
             continue
         if text not in result:
             result.append(text)
@@ -217,8 +238,14 @@ GARMENT_STATES = ("worn", "loosened", "open", "removed")
 # because putting it in the wrong region is more recoverable than dropping it.
 DEFAULT_REGION = "torso"
 
-# Words that place a garment, checked longest-first so "overcoat" is a coat and
-# "headscarf" is not a scarf around the waist.
+# Words that place a garment. The LAST cue in a phrase wins and a tie goes to
+# the longer cue (`region_of`). A CLOSED COMPOUND IS ITS OWN WORD: `\b` cannot
+# find "coat" inside "overcoat", and the last letters of a word are no
+# evidence of what it is -- a headdress is not a dress, a petticoat not a
+# coat -- so a compound is reached only by its own entry ("headscarf", and the
+# coats and the petticoat below, which fell to the torso default and were
+# reported as guessed spans while this comment claimed "overcoat" was a coat:
+# story_attire_import audit F10).
 _REGION_CUES = (
     ("head", ("hat", "cap", "hood", "helm", "helmet", "headscarf", "veil",
               "crown", "circlet", "mask", "goggles", "spectacles", "glasses",
@@ -232,14 +259,15 @@ _REGION_CUES = (
     ("hands", ("glove", "gauntlet", "mitten", "bracer", "ring", "watch")),
     ("legs", ("trouser", "trousers", "pants", "breeches", "leggings", "hose",
               "skirt", "kilt", "shorts", "hakama", "trews", "jeans",
-              "pantaloons", "culottes")),
+              "pantaloons", "culottes", "petticoat")),
     ("waist", ("belt", "sash", "girdle", "obi", "cord", "cincture", "apron")),
     ("groin", ("underwear", "undergarment", "undergarments", "smallclothes",
                "briefs", "boxers", "panties", "knickers", "drawers", "thong",
                "loincloth", "breechcloth", "breechclout", "fundoshi",
                "codpiece", "girdle-cloth")),
     ("arms", ("sleeve", "armband", "vambrace", "bangle", "bracelet")),
-    ("torso", ("shirt", "tunic", "blouse", "coat", "cloak", "robe", "jacket",
+    ("torso", ("shirt", "tunic", "blouse", "coat", "overcoat", "raincoat",
+               "trenchcoat", "greatcoat", "topcoat", "cloak", "robe", "jacket",
                "vest", "waistcoat", "dress", "gown", "shift", "chemise",
                "nightgown", "nightdress", "negligee", "slip", "haori", "kimono",
                "yukata", "toga", "chiton", "sari", "saree", "qipao",
@@ -279,10 +307,12 @@ _SPANNING_CUES = (
     # body in trousers whose groin reads as bare is the failure this split
     # exists to prevent.
     (("trouser", "trousers", "pants", "jeans", "breeches", "leggings", "hose",
-      "hakama", "trews", "pantaloons", "culottes", "skirt", "kilt", "shorts"),
+      "hakama", "trews", "pantaloons", "culottes", "skirt", "kilt", "shorts",
+      "petticoat"),
      ("legs", "groin")),
     # Has sleeves, stops at the waist or thereabouts.
-    (("coat", "cloak", "jacket", "haori", "cardigan", "sweater", "jumper",
+    (("coat", "overcoat", "raincoat", "trenchcoat", "greatcoat", "topcoat",
+      "cloak", "jacket", "haori", "cardigan", "sweater", "jumper",
       "hoodie", "mail", "armour", "armor"),
      ("torso", "arms", "waist")),
 )
@@ -363,16 +393,41 @@ def regions_covered(garment):
 
     One entry for most things. A kimono covers three, and must, or opening it
     uncovers a torso while the legs stay mysteriously dressed.
+
+    THE SPAN IS THE HEAD NOUN'S. It was any spanning cue anywhere in the
+    name, so a modifier spanned the garment like the garment it names: a
+    "dress belt" covered torso, groin and legs, a "kimono sash" the whole
+    body, "dress shoes" everything from the shoulders down -- a body in a
+    belt alone reading as dressed, the failure the waist/groin split exists
+    to prevent (story_attire_import audit F10). The noun is found the way
+    `attaches_only` finds it: the last cue of any region table, in the part
+    of the name before a placement preposition ("apron over the dress" is an
+    apron). Only that cue's span counts.
     """
     text = str(garment or "").casefold()
     anchor = region_of(garment)
+    head = _head_cue(text)
     for cues, regions in _SPANNING_CUES:
-        for cue in cues:
-            if re.search(r"\b%ss?\b" % re.escape(cue), text):
-                # The anchor stays whatever region_of decided -- a skirt is
-                # legs-anchored and a dress torso-anchored, and both are right.
-                return (anchor,) + tuple(r for r in regions if r != anchor)
+        if head in cues:
+            # The anchor stays whatever region_of decided -- a skirt is
+            # legs-anchored and a dress torso-anchored, and both are right.
+            return (anchor,) + tuple(r for r in regions if r != anchor)
     return (anchor,)
+
+
+def _head_cue(text):
+    """The cue the garment phrase in `text` ends on, or None: the last match
+    of any region table's cue before a placement preposition, the longer cue
+    on a tie -- `region_of`'s rule, read where `attaches_only` reads it."""
+    phrase = _PLACEMENT_PHRASE.split(str(text or "").casefold(), 1)[0]
+    best, best_key = None, None
+    for _region, cues in _REGION_CUES:
+        for cue in cues:
+            for match in re.finditer(r"\b%ss?\b" % re.escape(cue), phrase):
+                key = (match.start(), match.end() - match.start())
+                if best_key is None or key > best_key:
+                    best, best_key = cue, key
+    return best
 
 
 def region_of(garment):
@@ -1151,7 +1206,13 @@ _DECISIVE = re.compile(
     r"|fully undress\w*|completely undress\w*|naked|nude|bare(?:s|d)? (?:her|him|them)self)\b",
     re.IGNORECASE)
 
-_SENTENCE = re.compile(r"[^.!?\n]+")
+# A sentence of a script that spaces its words ends at `.!?`, and one of a
+# script that does not at its own full-width stops. Without them a Japanese
+# paragraph was ONE sentence to every reader below, so a clothing word in one
+# sentence and a name in the next were read as one claim (story_attire_import
+# audit F8). Widened rather than replaced by `language_runtime.
+# split_sentences`, so that English text is cut exactly where it always was.
+_SENTENCE = re.compile(r"[^.!?。！？｡\n]+")
 
 # Places a garment is pushed OFF while staying on the body. "Off her
 # shoulders" is a displacement; "off her back" is a removal; and the
@@ -1295,11 +1356,72 @@ def _garment_keys(name):
     The phrase is what a card wrote ("a silk sash"); prose says "the sash".
     English puts the noun last, so the last word is the handle a sentence is
     most likely to use.
+
+    So does Japanese -- 白いブラウス is a blouse, 絹の帯 a sash -- but an
+    unspaced name has no last WORD: the whole name was its own "head noun",
+    and no shorter handle could ever resolve to it (story_attire_import audit
+    F8). Its head is its last script run that is not hiragana, which is where
+    particles and okurigana are written (`_unspaced_head`).
     """
     text = _ARTICLE.sub("", " ".join(str(name or "").split())).casefold()
     if not text:
         return "", ""
-    return text, text.split()[-1]
+    last = text.split()[-1]
+    if UNSPACED_SCRIPT.search(last):
+        return text, _unspaced_head(last)
+    return text, last
+
+
+def _unspaced_head(word):
+    """The noun an unspaced garment name ends on: its last script run that is
+    not hiragana -- ブラウス of 白いブラウス, 帯 of 絹の帯, 帯締 of 帯締め (the
+    trailing め is the word's own okurigana). A name written in hiragana alone
+    is its own head."""
+    runs = fold_words(word)
+    content = [run for run in runs if script_of(run[:1]) != "hiragana"]
+    return (content or runs or [word])[-1]
+
+
+def _script_run_starts(text):
+    """Where each run of one script begins in `text`, after the first: the
+    places an unspaced name can be cut into a shorter handle. A run is broken
+    by a change of script or by anything that is not a letter."""
+    starts, previous = [], None
+    for index, ch in enumerate(text):
+        kind = (script_of(ch) or "spaced") if ch.isalnum() else None
+        if kind is not None and kind != previous and index > 0:
+            starts.append(index)
+        previous = kind
+    return starts
+
+
+def _whole_phrase(phrase):
+    """`phrase` as a whole-word pattern, compiled.
+
+    `\\b` at an edge written in a script that spaces its words, exactly as
+    every reader here always used; the engine's script-aware name boundary
+    (`language_runtime.name_boundary_regex`) at an edge that is not -- `\\b`
+    cannot fire between two kana, so `\\bブラウス\\b` never matched
+    「白いブラウス」, while bare containment would find 帯 inside 帯締め.
+    """
+    text = str(phrase or "")
+    if UNSPACED_SCRIPT.search(text[:1]) or UNSPACED_SCRIPT.search(text[-1:]):
+        return name_boundary_regex(text)
+    return re.compile(r"\b%s\b" % re.escape(text))
+
+
+#: How short a head noun in a script that SPACES its words may be before it
+#: stops counting on its own ("top", "cap", "tie" are three letters and also
+#: ordinary English). Unchanged; it now applies only where letters are
+#: counted in words that spaces separate -- one kanji is a whole word.
+HEAD_NOUN_FLOOR = 3
+
+
+def _head_noun_counts(noun):
+    """Is this head noun long enough to identify a garment by itself?"""
+    text = str(noun or "")
+    return bool(text) and (bool(UNSPACED_SCRIPT.search(text))
+                           or len(text) > HEAD_NOUN_FLOOR)
 
 
 #: Words inside a garment name that are never evidence the prose meant THAT
@@ -1377,11 +1499,11 @@ def resolve_garment(name, worn_names, allow_head_noun=True):
         if len(short.split()) < _CONTAINMENT_FLOOR_WORDS \
                 and len(short) < _CONTAINMENT_FLOOR_CHARS:
             continue
-        if re.search(r"\b%s\b" % re.escape(short), long):
+        if _whole_phrase(short).search(long):
             return original
-    if not allow_head_noun or len(head) <= 3:                   # 4
+    if not allow_head_noun or not _head_noun_counts(head):      # 4
         return None
-    noun = re.compile(r"\b%s\b" % re.escape(head))
+    noun = _whole_phrase(head)
     hits = [original for original, phrase, worn_head in keyed
             if worn_head == head or (phrase and noun.search(phrase))]
     return hits[0] if len(hits) == 1 else None
@@ -1892,7 +2014,10 @@ def _clothing_sentence(sentence, garment_phrases=()):
     if _CLOTHING_CONTEXT.search(sentence):
         return True
     folded = sentence.casefold()
-    return any(phrase and phrase in folded for phrase in garment_phrases)
+    return any(phrase and (_whole_phrase(phrase).search(folded)
+                           if _UNSEGMENTED.search(phrase)
+                           else phrase in folded)
+               for phrase in garment_phrases)
 
 
 def wardrobe_change_subjects(player_text, other_texts, wardrobe,
@@ -1938,11 +2063,21 @@ def wardrobe_change_subjects(player_text, other_texts, wardrobe,
     owns objective causality already asserted may land, never who may know
     what. See docs/UNBUILT.md §3.1 on why prose matching is not a boundary.
     """
-    phrases = {phrase
-               for garments in (wardrobe if isinstance(wardrobe, dict)
-                                else {}).values()
-               for phrase, _noun in (_garment_keys(g) for g in garments or [])
-               if phrase}
+    phrases = set()
+    for garments in (wardrobe if isinstance(wardrobe, dict) else {}).values():
+        for phrase, noun in (_garment_keys(g) for g in garments or []):
+            if phrase:
+                phrases.add(phrase)
+            # AN UNSPACED NAME'S HEAD IS ITS NOUN. `_clothing_sentence`
+            # refuses English head nouns because a last word may be no
+            # garment at all ("...that parts with every movement"); a
+            # head-final unspaced name has no such tail, and prose names the
+            # garment by that noun -- ブラウス for 白いブラウス. Without it no
+            # Japanese sentence that shortened a garment was about clothing,
+            # and the gate, which fails CLOSED, refused the undressing
+            # (story_attire_import audit F8).
+            if noun and _UNSEGMENTED.search(noun):
+                phrases.add(noun)
     return _attributed_targets(
         player_text, other_texts, wardrobe, player_name,
         lambda sentence: _clothing_sentence(sentence, phrases),
@@ -2023,6 +2158,11 @@ def _attributed_scoped(player_text, other_texts, wardrobe, player_name,
                 continue
             folded = sentence.casefold()
             words = set(re.findall(r"[a-z0-9\-\u2019\']+", folded))
+            # The words of an unspaced sentence are its script runs: the
+            # ASCII class above finds none in 「ヒナミはブラウスを脱いだ」.
+            # Only unspaced runs are added, so English reads as it did.
+            words.update(run for run in fold_words(folded)
+                         if script_of(run[:1]))
 
             by_phrase = {name: {g for g, phrase, _noun in entries
                                 if phrase and phrase in folded}
@@ -2053,7 +2193,7 @@ def _attributed_scoped(player_text, other_texts, wardrobe, player_name,
                     _mark(name, garments)
                 continue
             by_noun = {name: {g for g, _phrase, noun in entries
-                              if noun and len(noun) > 3 and noun in words}
+                              if _head_noun_counts(noun) and noun in words}
                        for name, entries in keys.items()}
             by_noun = {n: g for n, g in by_noun.items() if g}
             if len(by_noun) == 1:
@@ -2064,8 +2204,8 @@ def _attributed_scoped(player_text, other_texts, wardrobe, player_name,
                 _mark(player_name)
                 continue
             named = {name for name in wardrobe
-                     if str(name or "").strip() and re.search(
-                         r"\b%s\b" % re.escape(str(name).casefold()), folded)}
+                     if str(name or "").strip() and _whole_phrase(
+                         str(name).casefold()).search(folded)}
             if len(named) == 1:
                 # THE ACTOR IS NOT THE TARGET, and this fallback used to make
                 # them one. "Corin strips her clothes off in one motion" names
@@ -2347,7 +2487,18 @@ def garments_named_in(texts, handles, worn_names=()):
     pool = [str(w or "") for w in (worn_names or []) if str(w or "").strip()]
 
     def _says(phrase):
-        return bool(phrase) and bool(re.search(_named_pattern(phrase), folded))
+        if not phrase:
+            return False
+        pattern = _named_pattern(phrase)
+        if not (_UNSEGMENTED.match(phrase[:1])
+                or _UNSEGMENTED.match(phrase[-1:])):
+            return bool(re.search(pattern, folded))
+        # An unsegmented edge is left open by `_named_pattern` (no word
+        # boundary can fire there); the engine's script-aware boundary closes
+        # it, so 帯 is named in 「帯を解いた」 and not in 「帯締め」 or 「一帯」.
+        return any(name_boundary_regex(match.group(0)).match(
+                       folded, match.start())
+                   for match in re.finditer(pattern, folded))
 
     named = []
     for handle in (handles or []):
@@ -2394,6 +2545,21 @@ def garments_named_in(texts, handles, worn_names=()):
                 if _says(window):
                     hit = True
                     break
+            if not hit and unsegmented:
+                # (b') THE SHORTER HANDLES OF AN UNSPACED NAME are its
+                # script-run suffixes -- ブラウス of 白いブラウス -- which a
+                # whitespace split never finds, so the licence needed the
+                # ledger's whole spelling in the prose (story_attire_import
+                # audit F8). A suffix opening on hiragana opens on a particle
+                # or okurigana and names nothing, as a window opening on a
+                # function word does above.
+                for start in _script_run_starts(phrase):
+                    window = phrase[start:]
+                    if script_of(window[:1]) == "hiragana":
+                        continue
+                    if _says(window):
+                        hit = True
+                        break
             if hit:
                 break
             # (c) one distinctive word of the name, on `resolve_garment`'s
@@ -3174,9 +3340,34 @@ def apply_flat_change(previous, wanted, decisive=False, conditions=None,
         marks[resolved.casefold()] = _clean(text, CONDITION_LIMIT)
     displaced_keys = _displacement_targets(
         previous, displaces, worn_names, placement)
-    wanted_keys = {}
+    # MATCHED WITH THE TIER THE GATE USES. This resolved `wanted` without the
+    # head-noun tier while the commit's write gate -- and `remove`, `add`
+    # and `replace` -- resolve with it, and the encoder card promises the
+    # model "'robe' finds the one robe she is wearing". So `wearing:
+    # ["robe", ...]` read to the gate as nothing omitted and to this
+    # reconcile as the worn robe gone and a new one put on: `newly_removed`
+    # reported it, the commit minted it as a floor object, and the body went
+    # on wearing a second robe under the shorter name (story_attire_import
+    # audit F4 -- this docstring's measured case, still open for one-word
+    # handles). The stricter tier is right for MERGING two records
+    # (`dedupe_regions`); this is MATCHING a handle to a garment worn.
+    #
+    # In two passes, so that tier cannot merge two garments the list names:
+    # every handle that names a garment more exactly claims its own first,
+    # and the head noun resolves only to a garment nothing has claimed --
+    # ["white silk blouse", "cotton blouse"] is two blouses, not one.
+    first_pass = []
+    claimed = set()
     for name in (wanted or []):
-        resolved = resolve_garment(name, worn_names, allow_head_noun=False) or str(name)
+        resolved = resolve_garment(name, worn_names, allow_head_noun=False)
+        if resolved:
+            claimed.add(resolved.casefold())
+        first_pass.append((name, resolved))
+    unclaimed = [n for n in worn_names if n.casefold() not in claimed]
+    wanted_keys = {}
+    for name, resolved in first_pass:
+        if resolved is None:
+            resolved = resolve_garment(name, unclaimed) or str(name)
         if is_bare_garment_state(resolved):
             continue
         wanted_keys[resolved.casefold()] = resolved
@@ -3418,8 +3609,20 @@ def key_for(ledger, name):
     folded = str(name or "").strip().casefold()
     if not folded:
         return None
-    return next((key for key in ledger
-                 if str(key).strip().casefold() == folded), None)
+    found = next((key for key in ledger
+                  if str(key).strip().casefold() == folded), None)
+    if found is not None:
+        return found
+    # THEN THE ENGINE'S COMPARISON KEY, and only when exactly one key folds
+    # to it. "Dr. Sarah Moon" and "Dr Sarah Moon" are one body spelled two
+    # ways (width, punctuation and spacing are not identity); two keys that
+    # both fold to the name are two records this answer must not choose
+    # between.
+    key = fold_key(name)
+    if not key:
+        return None
+    hits = [k for k in ledger if fold_key(k) == key]
+    return hits[0] if len(hits) == 1 else None
 
 
 def entry_for(ledger, name):

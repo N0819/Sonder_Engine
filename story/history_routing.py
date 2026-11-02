@@ -167,7 +167,15 @@ def resolve_character_history_route(sheet, *, requested="auto", opening="",
 
     public = character_public_history(normalized)
     opening_context = " ".join((str(opening or ""), str(location_brief or "")))
-    travel = _matches(_TRAVEL_PATTERNS, public + " " + opening_context)
+    # TRAVEL IS READ FROM THE CARD ALONE. The opening is about the opening:
+    # greetings routinely begin on the PLAYER arriving ("Dana arrives at the
+    # Gilded Goose"), and searched there, that arrival routed a card whose
+    # history states twenty years at the inn as a visitor -- a journey was
+    # compiled for her and the Charter town was planned without her post
+    # (story_attire_import audit F12). What the opening can say about THIS
+    # person is the setting her residence names, and it still says that
+    # below (`shared`).
+    travel = _matches(_TRAVEL_PATTERNS, public)
     residence = _matches(_RESIDENCE_PATTERNS, public)
     shared = sorted(_distinct_words(public) & _distinct_words(opening_context))
     moving = _matches(_MOVING_PATTERNS, public)
@@ -176,7 +184,8 @@ def resolve_character_history_route(sheet, *, requested="auto", opening="",
     if travel:
         route = _manual_route("visitor")
         reasons.append({
-            "source": "card/opening", "claim": "explicit travel or arrival language"})
+            "source": "card.public_history",
+            "claim": "explicit travel or arrival language"})
         confidence = .94
     elif residence and shared:
         route = _manual_route(

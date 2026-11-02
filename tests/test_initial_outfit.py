@@ -34,10 +34,15 @@ def test_heuristic_character_import_separates_labeled_outfit():
     assert sheet["initial_outfit"]["wearing"] == [
         "a charcoal coat", "scuffed leather boots",
     ]
-    appearance = sheet["embodiment"]["visible"]["summary"]
-    assert "silver hair" in appearance
-    assert "charcoal coat" not in appearance
-    assert "boots" not in appearance
+    # CHANGED 2026-11-01: this pinned the description-as-visible-summary LEAK (story_attire_import audit F1).
+    # The description is the character's own knowledge, never the visible
+    # body; the outfit line is still lifted out of it.
+    kept = " ".join(e["content"]
+                    for e in sheet["knowledge"]["private_history"])
+    assert "silver hair" in kept
+    assert "charcoal coat" not in kept
+    assert "boots" not in kept
+    assert "silver hair" not in sheet["embodiment"]["visible"]["summary"]
 
 
 def test_heuristic_persona_import_separates_direct_outfit(temp_db):

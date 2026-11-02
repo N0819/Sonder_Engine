@@ -143,15 +143,29 @@ def extract_greeting(sheet: dict, greeting_prose: str) -> dict:
         payload=payload,
         temperature=0.2,
     )
-    # Deterministic information-boundary guard (never trust the model to tag it
-    # right): a "secret" seed that names the player is not actually asymmetric,
-    # so it can't be routed as private-from-the-player. Applied to the legacy
-    # top-level list and to every mind's own list -- the guard is about the
-    # seed's content, not about where the extraction filed it.
+    # A seed that names the player is marked revealed in a CHARACTER's mind
+    # -- the legacy top-level list (the card character's own) and every mind
+    # but the player's. There it changes nothing a reader acts on:
+    # `_route_mind_memories` writes every seed to that mind's private memory
+    # whatever the flag says. It is kept as the record of a seed about the
+    # player's own conduct.
+    #
+    # NEVER IN THE PLAYER'S MIND. The flag's one reader is `_seed_player_mind`,
+    # where it is the admission gate to `persona_private_history`, the one
+    # store the player can open -- and an implied player item is refused there
+    # because a guess can embed another mind's secret in its phrasing
+    # (DESIGN_GREETING_MINDS.md, revealed_in_prose point 2). Upgrading it for
+    # naming the player wrote "{{PLAYER}} drank the tea the innkeeper
+    # poisoned", which the model itself marked unrevealed, into the panel the
+    # player reads (story_attire_import audit F2). The model's own answer
+    # stands there.
     for seed in out.get("knowledge_seeds") or []:
         if PLAYER_TOKEN in str(seed.get("content", "")):
             seed["revealed_in_prose"] = True
     for mind in out.get("minds") or []:
+        who = str((mind or {}).get("who") or "")
+        if PLAYER_TOKEN in who or _PLAYER_SLOT.search(who):
+            continue
         for seed in (mind or {}).get("knowledge_seeds") or []:
             if PLAYER_TOKEN in str(seed.get("content", "")):
                 seed["revealed_in_prose"] = True
@@ -1077,9 +1091,22 @@ def start_story(char_id: int, persona_id: int, greeting_index: int = 0,
         # and record what each received in the chat's `greeting_minds` key.
         # BEFORE turn 0 runs, deliberately: the pipeline's checkpoint 0 then
         # snapshots the seeded state, so a rerun of the opening keeps it.
-        with language_scope(language or DEFAULT_LANGUAGE):
-            _seed_minds(cid, char_id, sheet, extraction, c_name, seed_handle,
-                        p_name, psheet)
+        #
+        # AND IT ASKS THE CHAT, like every stage around it. A start that
+        # failed after this stage -- turn 0, the journey history, the
+        # featured-resident handoff -- re-ran it on retry: every interior
+        # belief and relationship-ledger row written twice, the player's
+        # private history grown, and (the extraction being re-asked on
+        # resume) a reworded seed landing as a second memory (story_attire_
+        # import audit F5). `greeting_minds` is written as this stage's last
+        # act, so its presence is the chat's own record that it landed.
+        if isinstance(db.wget(cid, "greeting_minds", None), dict):
+            logger.info("quick start: chat %s already routed its greeting "
+                        "minds, resuming after them", cid)
+        else:
+            with language_scope(language or DEFAULT_LANGUAGE):
+                _seed_minds(cid, char_id, sheet, extraction, c_name,
+                            seed_handle, p_name, psheet)
 
         # Itinerant history is a separate topology. Canon/authored travelers get
         # a cited compiler; an invented journey runs only after the author chose

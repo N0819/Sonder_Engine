@@ -1,14 +1,14 @@
 # scene.py
 """Scene management with entity awareness, genre config, and world state."""
 
-import json, math, re, random
+import functools, json, math, re, random
 from core.db import active_frame_id, q, qi, wget, wset
 from world.spatial import room_of, spatial_rel
 from world.day_cycle import DAY_LENGTH_HOURS_DEFAULT
 
 _UNSET = object()
 
-from language_runtime import linguistic
+from language_runtime import fold_words, linguistic, script_of
 from story.character_schema import (
     EXTRA_PART_ASPECTS,
     fold_identity_key,
@@ -55,20 +55,30 @@ from story import attire as attire_model
 from story.attire import _NON_ATTIRE_TERMS, sanitize_attire_items  # noqa: F401
 
 
-def seed_initial_attire(scene, name, outfit):
+def seed_initial_attire(scene, name, outfit, aliases=()):
     """Seed one body's authored starting clothes without resetting live state.
 
-    This is where the card's two representations become one. Authored regions
-    are taken as written; the flat `wearing` list is sorted into whatever
-    regions they left unclaimed. The merge happens HERE rather than in the card
-    so a cue-table guess is never written back to something an author reads as
-    their own choice -- see `character_schema._normalize_initial_outfit`.
+    This is where the card's two representations become one: authored regions
+    are taken as written, and the flat `wearing` list is sorted into whatever
+    regions they left unclaimed (`attire.authored_entry`).
+
+    A BODY ALREADY HELD UNDER ANY SPELLING IS ALREADY DRESSED. The test was
+    `name in ledger`, an exact key, while the ledger's key is not reliably
+    canonical -- `attire.key_for` is the one statement of its matching rule.
+    A presence the Director dressed as `mirela`, promoted to a card named
+    `Mirela`, got a second record holding the card's outfit, and the next
+    commit's key heal folded the two by UNION: live clothes and the starting
+    outfit worn at once (story_scene_schema audit F4). `aliases` are further
+    spellings the caller knows this body by -- a card's own aliases -- and
+    any of them already in the ledger counts the same.
     """
     if not isinstance(scene, dict) or not str(name or "").strip():
         return False
     ledger = scene.setdefault("attire", {})
-    if name in ledger:
-        return False
+    for spelling in (name, *(aliases or ())):
+        if (str(spelling or "").strip()
+                and attire_model.key_for(ledger, spelling) is not None):
+            return False
     outfit = outfit if isinstance(outfit, dict) else {}
     wearing = sanitize_attire_items(outfit.get("wearing") or [])
     state = [
@@ -100,10 +110,26 @@ def _seed_scene_initial_attire(chat_id, scene, chat=None):
     persona = persona_of(chat_row)
     seed_initial_attire(
         scene, persona_name(persona), persona_initial_outfit(persona))
-    for row in active_cast(chat_id):
-        sheet = json.loads(row["sheet"])
+    # THE EXTANT CAST, NOT THE ACTIVE ONE. Clothing belongs to the body, not
+    # to its presence in the room, and this is the only moment a card's
+    # outfit is seeded for a body already attached: nothing seeds one on the
+    # way back in from `dormant`. Walking `active_cast` left a character made
+    # dormant before the opening with no clothing in any view until a beat
+    # happened to dress them (story_scene_schema audit F16). A departed
+    # character is not extant and is not dressed.
+    #
+    # One memoised normalization per row: two accessors on a plain dict paid
+    # two full normalizations each, 6.6 ms apiece on a 40 KB card, on every
+    # `get_scene` until the opening commits (audit E4).
+    for row in extant_cast(chat_id):
+        try:
+            sheet = normalized_character_from_text(row["sheet"])
+        except (TypeError, ValueError):
+            continue
         seed_initial_attire(
-            scene, character_name(sheet), character_initial_outfit(sheet))
+            scene, character_name(sheet), character_initial_outfit(sheet),
+            aliases=(character_identity_from_text(row["sheet"]) or {}).get(
+                "aliases") or ())
     for row in q(
         "SELECT p.sheet FROM chat_personas cp "
         "JOIN personas p ON p.id=cp.persona_id "
@@ -758,6 +784,34 @@ def active_disguises(chat_id):
     ))
 
 
+def _known_to_names(value):
+    """`known_to` as a list of names, whatever shape it arrived in.
+
+    A bare string is ONE name. Iterated as written, "The Doctor" became
+    eleven one-letter observers and the one person told was nobody.
+    """
+    if value is None:
+        return []
+    if isinstance(value, str):
+        value = [value]
+    if not isinstance(value, (list, tuple, set)):
+        return []
+    out = []
+    for who in value:
+        text = str(who or "").strip()
+        if text and text not in out:
+            out.append(text)
+    return out
+
+
+def _states_known_to(record):
+    """Did this record STATE `known_to` -- a list (even an empty one) or a
+    name? `None` and a missing key say nothing; see `disguises_from_rows`."""
+    if not isinstance(record, dict) or "known_to" not in record:
+        return False
+    return isinstance(record["known_to"], (list, tuple, set, str))
+
+
 def disguises_from_rows(rows):
     """`active_disguises`' shape from condition rows already chosen and
     ordered (`subject_id`, `payload`; active `physical_disguise` rows, oldest
@@ -792,10 +846,9 @@ def disguises_from_rows(rows):
         # been told was the only one fooled, for the rest of the story.
         prior = out.get(subject.casefold()) or {}
         carried = list(prior.get("known_to") or [])
-        for who in (pick("known_to") or []):
-            text = str(who).strip()
-            if text and text not in carried:
-                carried.append(text)
+        for who in _known_to_names(pick("known_to")):
+            if who not in carried:
+                carried.append(who)
         out[subject.casefold()] = {
             "subject": subject,
             "description": str(pick("description") or "").strip(),
@@ -803,6 +856,19 @@ def disguises_from_rows(rows):
             "concealed_terms": [str(t).strip() for t in (pick("concealed_terms") or [])
                                 if str(t).strip()],
             "known_to": carried,
+            # AN EMPTY LIST IS AN ANSWER: nobody was told. `known_to` is one
+            # field with THREE states -- a list naming people, a list naming
+            # nobody, and no list at all (a row from before the field
+            # existed) -- and `carried` above can say only the first. So
+            # whether ANY row stated the field travels beside it, and
+            # `disguise_known_to` applies its legacy backstop only to a
+            # disguise none of whose rows did. Collapsed, the encoder's
+            # correct `known_to: []` (3 of 18 live disguise rows, 2026-11-01)
+            # handed the disguise to every acquaintance -- the people it
+            # exists to fool (story_scene_schema audit F1).
+            "known_to_authored": bool(prior.get("known_to_authored")
+                                      or _states_known_to(state)
+                                      or _states_known_to(payload)),
             # Does this disguise cover what a body is RECOGNISED by -- a
             # face, a build, a voice -- or only a feature it hides? A glamour
             # over fox ears is the second, and someone who knows her still
@@ -1285,12 +1351,25 @@ def disguise_known_to(disguise, subject_name, known_map):
     only as a backstop for legacy conditions with no explicit list -- observers
     who already know the subject's identity (`known` map), a reasonable proxy
     for 'was present for / close enough to know the real form'. Everyone else
-    is unaware and perceives only the disguised outward form."""
+    is unaware and perceives only the disguised outward form.
+
+    "No explicit list" means the field was never STATED, and an empty list is
+    a statement: nobody was told. A disguise from `disguises_from_rows` says
+    which it is in `known_to_authored`; one handed in directly says it by
+    carrying the key with a list. Reading `[]` as "never filled in" let every
+    acquaintance see through a disguise nobody had been let in on (story_
+    scene_schema audit F1) -- the backstop is for rows older than the field,
+    never for an answer of nobody.
+    """
+    disguise = disguise if isinstance(disguise, dict) else {}
     who = {str(subject_name or "").casefold()}
-    listed = (disguise or {}).get("known_to") or []
+    listed = _known_to_names(disguise.get("known_to"))
     for n in listed:
-        who.add(str(n).strip().casefold())
-    if not listed:
+        who.add(n.casefold())
+    authored = disguise.get("known_to_authored")
+    if authored is None:
+        authored = _states_known_to(disguise)
+    if not listed and not authored:
         subj_cf = str(subject_name or "").casefold()
         for observer, knows in (known_map or {}).items():
             if any(subj_cf == str(k).casefold() for k in (knows or [])):
@@ -2141,11 +2220,39 @@ def director_context(chat_id, n=5, frame_id=_UNSET, *, entitled=True):
         })
     return out
 
-def _ability_mod(actor, ability, ctx):
-    levels = {"novice": 0, "competent": 2, "expert": 4, "master": 6}
-    actor_name = str(actor or "").lower().strip()
-    ability_name = str(ability or "").lower().strip()
-    persona = persona_of(ctx.chat)
+def _ability_pool(actor, ctx):
+    """The ability list of the body a dice row's `actor` names, or [].
+
+    THE ACTOR IS AN IDENTITY HANDLE in production: `flow.dice` is built from
+    causal-ledger rows whose `source_entity_id` `normalize_causal_ledger`
+    has already turned into `persona:<id>`, `persona:primary` or
+    `character:<row id>` -- the identity index perception keys on too. This
+    compared the handle to display names only, so every production roll read
+    a modifier of 0 (story_scene_schema audit F11; agents_director_core F6's
+    second half). A handle resolves through the ids it names; a display name
+    still resolves through the names, as before. A co-player's persona,
+    reachable by neither before, is reachable by both now.
+    """
+    raw = str(actor or "").strip()
+    folded = raw.casefold()
+    chat = ctx.chat or {}
+    extras = list(getattr(ctx, "extra_players", None) or [])
+    if folded.startswith("persona:"):
+        ref = folded.split(":", 1)[1].strip()
+        if ref == "primary" or ref == str(_chat_field(chat, "persona_id")
+                                          or "").strip():
+            return persona_abilities(persona_of(chat))
+        for player in extras:
+            if str(player.get("persona_id") or "").strip() == ref:
+                return persona_abilities(player.get("persona") or {})
+        return []
+    if folded.startswith("character:"):
+        ref = folded.split(":", 1)[1].strip()
+        for row in ctx.cast:
+            if str(row["id"]).strip() == ref:
+                return abilities_of(stored_card_from_text(row["sheet"]))
+        return []
+    persona = persona_of(chat)
     # persona_of returns the normalized native shape (identity.name /
     # competence.abilities nested) -- flat persona.get("name"/"abilities")
     # always returned ""/[] here (see _player_aliases below for the same
@@ -2154,15 +2261,26 @@ def _ability_mod(actor, ability, ctx):
     # name can't false-match as the player.
     alias = persona_name(persona).lower().strip()
     player_aliases = {a for a in (alias, "player", "the player", "you", "pc") if a}
-    pools = []
+    actor_name = raw.lower()
     if actor_name in player_aliases:
-        pools.append(persona_abilities(persona))
-    else:
-        for row in ctx.cast:
-            sheet = json.loads(row["sheet"])
-            if name_of(sheet).lower().strip() == actor_name:
-                pools.append(abilities_of(sheet))
-                break
+        return persona_abilities(persona)
+    for row in ctx.cast:
+        # The card as stored, carrying its normalization: the kind
+        # dispatchers route on the RAW sections, and every accessor after
+        # them reads the one normalization instead of building its own.
+        sheet = stored_card_from_text(row["sheet"])
+        if name_of(sheet).lower().strip() == actor_name:
+            return abilities_of(sheet)
+    for player in extras:
+        if str(player.get("name") or "").lower().strip() == actor_name:
+            return persona_abilities(player.get("persona") or {})
+    return []
+
+
+def _ability_mod(actor, ability, ctx):
+    levels = {"novice": 0, "competent": 2, "expert": 4, "master": 6}
+    ability_name = str(ability or "").lower().strip()
+    pools = [_ability_pool(actor, ctx)]
     for pool in pools:
         for candidate in pool:
             name = str(candidate.get("name", "")).lower().strip()
@@ -2170,17 +2288,77 @@ def _ability_mod(actor, ability, ctx):
                 return levels.get(str(candidate.get("level", "")).lower(), 0)
     return 0
 
+#: The words for the player that are not the player's name. Matched whole,
+#: and their own WORDS ("player", "protagonist") matched under
+#: `GENERIC_ALIAS_WORD_FLOOR` -- see `is_player_speaker`.
+_GENERIC_PLAYER_ALIASES = ("the player", "player", "you", "the protagonist",
+                           "PC")
+
+#: How long a word of a GENERIC alias must be before a speaker spelled as that
+#: word alone is the player. Unchanged from the floor that once applied to
+#: every alias: it is what keeps "the" (of "the player") from being the
+#: player. A word of the persona's OWN name is under no floor -- see
+#: `is_player_speaker`.
+GENERIC_ALIAS_WORD_FLOOR = 4
+
+#: Distinct persona sheet TEXTS whose name forms are held. A chat reads one
+#: persona; a process serving several stories holds a few. An evicted entry is
+#: recomputed on the next ask, never dropped.
+PLAYER_FORMS_CACHE_SIZE = 64
+
+
+def _persona_sheet_text(chat):
+    """The stored sheet text of the chat's persona, or None for no persona
+    (which `persona_of` reads as "The Stranger")."""
+    pid = _chat_field(chat, "persona_id")
+    if not pid:
+        return None
+    row = q("SELECT sheet FROM personas WHERE id=?", (pid,), one=True)
+    return row["sheet"] if row else None
+
+
+@functools.lru_cache(maxsize=PLAYER_FORMS_CACHE_SIZE)
+def _player_name_forms(sheet_text):
+    """`(name, name words)` for one persona sheet TEXT, computed once.
+
+    THE COST (story_scene_schema audit E1). `is_player_speaker` runs per
+    dialogue line, several times a beat, and each call queried the persona
+    and normalized it TWICE (`persona_of`, then `persona_name` over the
+    product): 0.36 ms per normalization on the median in-use persona and
+    3.2 ms on the largest, measured 2026-11-01. The answer is a pure function
+    of the stored text, so the text is the key and an edited persona is a
+    different entry.
+
+    The words are the name's own: its whitespace words, and the script runs
+    an unspaced name is written in -- "佐藤ヒナミ" is 佐藤 and ヒナミ, which no
+    whitespace split finds (`language_runtime.fold_words`). Folded with
+    `fold_identity_key`, the fold every comparison below uses.
+    """
+    if sheet_text is None:
+        persona = persona_of({})
+    else:
+        persona = normalize_persona_data(json.loads(sheet_text))
+    name = persona_name(persona)
+    words = {fold_identity_key(w) for w in name.split()}
+    words.update(fold_identity_key(run) for run in fold_words(name)
+                 if script_of(run[:1]))
+    words.discard("")
+    return name, frozenset(words)
+
+
 def _player_aliases(chat):
-    pers = persona_of(chat)
-    # persona_of returns the normalized native shape (identity.name nested),
-    # not a flat "name" key -- pers.get("name", "") silently returned ""
-    # for every real persona and only "worked" for persona_of's hardcoded
-    # fallback dict (which happens to be flat), so a chat with a real
-    # persona configured had no actual name in its own alias list.
-    return [persona_name(pers), "the player", "player", "you", "the protagonist", "PC"]
+    name, _words = _player_name_forms(_persona_sheet_text(chat))
+    # The persona's name read from the normalized native shape (identity.name
+    # nested), not a flat "name" key -- pers.get("name", "") silently
+    # returned "" for every real persona and only "worked" for persona_of's
+    # hardcoded fallback dict (which happens to be flat), so a chat with a
+    # real persona configured had no actual name in its own alias list.
+    return [name, *_GENERIC_PLAYER_ALIASES]
 
 def is_player_speaker(speaker, chat):
-    aliases = [a.lower().strip() for a in _player_aliases(chat) if a]
+    name, name_words = _player_name_forms(_persona_sheet_text(chat))
+    aliases = [a.lower().strip() for a in (name, *_GENERIC_PLAYER_ALIASES)
+               if a]
     s = (speaker or "").lower().strip()
     if s in aliases:
         return True
@@ -2204,9 +2382,21 @@ def is_player_speaker(speaker, chat):
     # her dialogue into the player's own line, drops it from every other
     # observer's view, and gets stored in NPC memories as something the
     # player said.
-    if s_norm and len(s_norm) >= 4:
-        for a in aliases:
-            a_words = {fold_identity_key(w) for w in a.split()}
+    #
+    # A WORD OF THE PLAYER'S OWN NAME IS UNDER NO LENGTH FLOOR. The floor of
+    # four code points existed to keep "the" (of "the player") out, because
+    # the generic aliases' words shared one pool with the name's. Four Latin
+    # letters are a short name and four kanji a whole one, so "ヒナミ"
+    # (persona 佐藤 ヒナミ) and "Kai" (Kai Rowan) were never the player: the
+    # Director skipped the player-speech authority check for the line and
+    # perception graded it from a bystander's room (story_scene_schema audit
+    # F5). Whole-word equality to a word of the name is the test; the generic
+    # aliases keep their own words and the floor they always had.
+    if s_norm and s_norm in name_words:
+        return True
+    if s_norm and len(s_norm) >= GENERIC_ALIAS_WORD_FLOOR:
+        for a in _GENERIC_PLAYER_ALIASES:
+            a_words = {fold_identity_key(w) for w in a.lower().split()}
             if s_norm in a_words:
                 return True
     return False
@@ -3148,6 +3338,57 @@ def _shares_with(viewer, known_by) -> bool:
     return bool(spelled) and any(_spelled(x) == spelled for x in names)
 
 
+#: The player slot a card carries once imported (`importers.PLAYER_TOKEN`),
+#: and the raw macros a card written elsewhere still carries.
+_PLAYER_TOKEN_RE = re.compile(r"\{\{\s*(?:player|user)\s*\}\}|<USER>",
+                              re.IGNORECASE)
+
+
+def player_handle_for_mind(chat, viewer_name):
+    """What one mind legitimately calls the player in text written for it.
+
+    The persona's NAME when this mind recognises it (the `known` map, read
+    through `_recognizes`, the identity floor's own predicate); otherwise a
+    description of the player's body (`greetings.player_handle_for`, the
+    greeting launch's answer to the same question). Never the name to a
+    stranger, and never "the player".
+    """
+    from agents.common_names import _recognizes
+    from story.greetings import player_handle_for
+    persona = persona_of(chat)
+    name = persona_name(persona)
+    viewer = str(viewer_name or "").strip().casefold()
+    recognized = set()
+    for observer, names in (wget(_chat_field(chat, "id"), "known", {})
+                            or {}).items():
+        if str(observer).strip().casefold() == viewer:
+            recognized.update(str(n) for n in (names or []) if n)
+    return player_handle_for(
+        persona, already_known=bool(viewer) and _recognizes(name, recognized))
+
+
+def resolve_player_token(text, handle):
+    """`text` with every player slot (`{{PLAYER}}`, `{{user}}`, `<USER>`)
+    replaced by `handle`, capitalised where it opens a sentence.
+
+    THE TOKEN ONLY. An in-fiction "the player" -- of a lute, of a game of
+    cards -- is a person in the story, and card text is the author's prose;
+    only the slot a card format puts there for the human is the engine's.
+    """
+    body = str(text or "")
+    if not handle or not _PLAYER_TOKEN_RE.search(body):
+        return body
+
+    def _swap(match):
+        before = body[:match.start()].rstrip()
+        out = str(handle)
+        if not before or before[-1] in ".!?。！？":
+            out = out[:1].upper() + out[1:]
+        return out
+
+    return _PLAYER_TOKEN_RE.sub(_swap, body)
+
+
 def private_knowledge_for(chat, viewer_name, frame_id=None, turn_idx=None):
     """What one mind privately knows: its own card's private history, what
     another card shares with it (`known_by`), what it knows of the player,
@@ -3192,4 +3433,15 @@ def private_knowledge_for(chat, viewer_name, frame_id=None, turn_idx=None):
         for title, truth in truths:
             out.append({"about": title or "", "content": truth["text"],
                         "source": source})
+    # THE PLAYER SLOT IS RESOLVED FOR THIS MIND, through the identity floor.
+    # A card imported from a format with a player macro carries `{{PLAYER}}`
+    # in its histories, and it reached the mind verbatim -- engine
+    # vocabulary inside a fictional memory, "{{PLAYER}} still owes me forty
+    # crowns" (story_attire_import audit F11). Resolved only when present:
+    # the handle costs a recognition read.
+    if any(_PLAYER_TOKEN_RE.search(str(entry.get("content") or ""))
+           for entry in out):
+        handle = player_handle_for_mind(chat, viewer_name)
+        for entry in out:
+            entry["content"] = resolve_player_token(entry["content"], handle)
     return out

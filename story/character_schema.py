@@ -7,18 +7,43 @@ import copy
 import functools
 import json
 import re
+import threading
 import uuid
 from typing import Any
 
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field
 
 from story import attire
-from llm.schemas import coerce_to_declared
+# The Pydantic major is read ONCE, by `llm.schemas`, which owns the version
+# branch (`tools/project_check.check_pydantic_major_reads_are_owned`). This
+# module used to read it again for itself.
+from llm.schemas import _PYDANTIC_V2, _validate, coerce_to_declared
 from language_runtime import referring
 
-_PYDANTIC_V2 = hasattr(BaseModel, "model_validate")
 if _PYDANTIC_V2:
-    from pydantic import field_validator
+    from pydantic import ConfigDict, field_validator
+else:  # the `pydantic1` CI job
+    from pydantic import validator
+
+
+def _before(*fields):
+    """A field validator that runs BEFORE type validation, on either major.
+
+    Pydantic 2 still accepts 1's `@validator(..., pre=True)` and `class
+    Config`, as a deprecated shim: thirteen `PydanticDeprecatedSince20`
+    warnings at this module's import on 2.11.7 (plus an `allow_reuse` one per
+    site), and Pydantic 3 removes the shim -- the declared range's upper bound
+    was the only thing holding the card schema off a hard failure. Each major
+    now gets its own API, with the same semantics: `pre=True` IS
+    `mode="before"`, and none of these validators ran on defaults
+    (`always=True` is not used here; it would be `validate_default=True`).
+
+    A validator body is written `(cls, value)`, which both majors call the
+    same way; Pydantic 2 makes it a classmethod from its first parameter.
+    """
+    if _PYDANTIC_V2:
+        return field_validator(*fields, mode="before")
+    return validator(*fields, pre=True, allow_reuse=True)
 
 CHARACTER_SCHEMA = "fiction-engine.character"
 CHARACTER_VERSION = 4
@@ -120,8 +145,11 @@ def _profile_float(value, default=0.5, low=0.0, high=1.0):
 
 
 class _PsychologyModel(BaseModel):
-    class Config:
-        extra = "allow"
+    if _PYDANTIC_V2:
+        model_config = ConfigDict(extra="allow")
+    else:
+        class Config:
+            extra = "allow"
 
     # A number where prose was declared. `_normalize_psychology` validates
     # with no try/except and is reached from
@@ -148,10 +176,10 @@ class TraitProfile(_PsychologyModel):
     activation_cues: list[str] = Field(default_factory=list)
     inhibited_by: list[str] = Field(default_factory=list)
 
-    _strength = validator("strength", pre=True, allow_reuse=True)(
+    _strength = _before("strength")(
         lambda cls, value: _profile_float(value)
     )
-    _lists = validator("activation_cues", "inhibited_by", pre=True, allow_reuse=True)(
+    _lists = _before("activation_cues", "inhibited_by")(
         lambda cls, value: _profile_str_list(value)
     )
 
@@ -162,10 +190,10 @@ class ValueProfile(_PsychologyModel):
     expression: str = ""
     conflicts_with: list[str] = Field(default_factory=list)
 
-    _priority = validator("priority", pre=True, allow_reuse=True)(
+    _priority = _before("priority")(
         lambda cls, value: _profile_float(value)
     )
-    _conflicts = validator("conflicts_with", pre=True, allow_reuse=True)(
+    _conflicts = _before("conflicts_with")(
         lambda cls, value: _profile_str_list(value)
     )
 
@@ -177,10 +205,10 @@ class BeliefProfile(_PsychologyModel):
     emotional_charge: float = 0.0
     source: str = ""
 
-    _confidence = validator("confidence", pre=True, allow_reuse=True)(
+    _confidence = _before("confidence")(
         lambda cls, value: _profile_float(value)
     )
-    _charge = validator("emotional_charge", pre=True, allow_reuse=True)(
+    _charge = _before("emotional_charge")(
         lambda cls, value: _profile_float(value, default=0.0, low=-1.0, high=1.0)
     )
 
@@ -192,7 +220,7 @@ class CopingStrategyProfile(_PsychologyModel):
     effectiveness: float = 0.5
     costs: str = ""
 
-    _effectiveness = validator("effectiveness", pre=True, allow_reuse=True)(
+    _effectiveness = _before("effectiveness")(
         lambda cls, value: _profile_float(value)
     )
 
@@ -225,10 +253,10 @@ class AssociationProfile(_PsychologyModel):
     strength: float = 0.5
     generalization_tags: list[str] = Field(default_factory=list)
 
-    _strength = validator("strength", pre=True, allow_reuse=True)(
+    _strength = _before("strength")(
         lambda cls, value: _profile_float(value)
     )
-    _tags = validator("generalization_tags", pre=True, allow_reuse=True)(
+    _tags = _before("generalization_tags")(
         lambda cls, value: _profile_str_list(value)
     )
 
@@ -268,13 +296,13 @@ class PsychologyProfile(_PsychologyModel):
     # which is the exact silent-failure shape this dial was written to avoid.
     capacity: str = ""
 
-    @validator("capacity", pre=True)
+    @_before("capacity")
     def _capacity(cls, value):
         from mind import affect
         key = str(value or "").strip().casefold()
         return key if key in affect.CAPACITY_LADDER else ""
 
-    @validator("traits", pre=True)
+    @_before("traits")
     def _traits(cls, value):
         value = _as_profile_list(value, "name", TraitProfile, "strength")
         return [
@@ -283,7 +311,7 @@ class PsychologyProfile(_PsychologyModel):
             if isinstance(item, (str, dict))
         ]
 
-    @validator("values", pre=True)
+    @_before("values")
     def _values(cls, value):
         value = _as_profile_list(value, "name", ValueProfile, "priority")
         return [
@@ -292,9 +320,7 @@ class PsychologyProfile(_PsychologyModel):
             if isinstance(item, (str, dict))
         ]
 
-    @validator(
-        "drive", "self_model", "coping", "stress_profile", "learning", pre=True
-    )
+    @_before("drive", "self_model", "coping", "stress_profile", "learning")
     def _mapping_fields(cls, value):
         return value if isinstance(value, dict) else {}
 
@@ -305,11 +331,16 @@ def _profile(model_cls, raw):
     `parse_obj`/`.dict()` still work on 2.x but are deprecated there and go
     away in 3.x, and the declared range (`pydantic>=1.10.13,<3`) is the only
     thing holding that off. One seam rather than six call sites.
+
+    Validation is `llm.schemas._validate`, the owned branch. The dump is NOT
+    `llm.schemas._dump`, deliberately: that one drops `None` fields and
+    flattens enums for model OUTPUT, and a card's profile keeps every field
+    an author wrote -- extension keys holding `None` included -- exactly as
+    this dump always has. It branches on the owned flag rather than probing
+    the instance for an attribute.
     """
-    validate = getattr(model_cls, "model_validate", None)
-    model = validate(raw) if validate is not None else model_cls.parse_obj(raw)
-    dump = getattr(model, "model_dump", None)
-    return dump() if dump is not None else model.dict()
+    model = _validate(model_cls, raw)
+    return model.model_dump() if _PYDANTIC_V2 else model.dict()
 
 
 def _normalize_psychology(value: Any) -> dict:
@@ -1412,13 +1443,42 @@ class CardWithNormalization(dict):
     nothing another call holds. The `NormalizedCharacterSheet` contract still
     applies to the product: mutate it into a shape normalization would have
     to repair, and hand back a plain dict.
+
+    BUILT ON THE FIRST QUESTION, NOT BEFORE (story_scene_schema audit E3).
+    `stored_card_from_text` built it eagerly: a deep copy of the memoised
+    product on every call, 1.23 ms per call at a 40 KB card (0.77 ms of it
+    the copy), whether or not the caller ever asked a normalized question --
+    and most `sheet_state` callers read only the committed mood and stance.
+    It is built now when `normalized` is first read, from the sheet text the
+    card was parsed from, once per card; every later read is the same object.
     """
 
-    __slots__ = ("normalized",)
+    __slots__ = ("_text", "_normalized")
 
-    def __init__(self, raw, normalized):
+    def __init__(self, raw, normalized=None, *, text=None):
         super().__init__(raw)
-        self.normalized = normalized
+        self._normalized = normalized
+        self._text = text
+
+    @property
+    def normalized(self):
+        built = getattr(self, "_normalized", None)
+        if built is None:
+            with _LAZY_CARD_LOCK:
+                built = getattr(self, "_normalized", None)
+                if built is None:
+                    text = getattr(self, "_text", None)
+                    built = (normalized_character_from_text(text)
+                             if text is not None
+                             else normalize_character_data(dict(self)))
+                    self._normalized = built
+        return built
+
+
+#: One build per card even when two threads ask at once: a card with no
+#: authored uid is minted one on each build, and a card must not answer two
+#: identities to the same question.
+_LAZY_CARD_LOCK = threading.Lock()
 
 
 #: How many distinct sheet TEXTS `normalized_character_from_text` holds. The
@@ -1497,7 +1557,7 @@ def stored_card_from_text(sheet_text: str | None) -> CardWithNormalization:
     raw = json.loads(sheet_text or "{}")
     if not isinstance(raw, dict):
         raw = {}
-    return CardWithNormalization(raw, normalized_character_from_text(sheet_text))
+    return CardWithNormalization(raw, text=sheet_text)
 
 
 def normalized_character_of_row(row) -> dict | None:
@@ -1798,12 +1858,17 @@ def normalize_persona_data(value: dict) -> dict:
 #: Letters that can continue a word in a script that separates words with
 #: spaces: Latin (with its supplements), Greek, Cyrillic, plus digits and the
 #: underscore. Deliberately NOT `\w`, which also covers scripts that do not
-#: space their words.
-_SPACED_WORD_CHARS = (
-    r"A-Za-z0-9_À-ɏḀ-ỿͰ-ϿЀ-ӿ")
+#: space their words. ONE CLASS, `language_runtime`'s -- this was a second
+#: spelling of it, byte-identical today and free to drift.
+from language_runtime import SPACED_WORD_CHARS as _SPACED_WORD_CHARS
 #: Scripts written without spaces between words: kana, CJK ideographs and
 #: their compatibility blocks, Hangul, Thai. A name in one of these is
 #: followed directly by a particle or the next morpheme.
+#:
+#: NOT YET `language_runtime.UNSPACED_SCRIPT`, which is wider (half-width
+#: katakana, the CJK supplementary planes, Hangul jamo) and leaves out the
+#: middle dot: swapping it changes what four `agents/` readers call unspaced,
+#: a behaviour change for their owners to make, not this module's.
 _UNSPACED_SCRIPT = re.compile(
     r"[぀-ヿ㐀-䶿一-鿿豈-﫿"
     r"가-힯฀-๿]")
@@ -1826,8 +1891,12 @@ def name_boundary_pattern(form: str) -> str:
 
 
 def name_boundary_regex(form: str, flags: int = 0):
-    """`name_boundary_pattern` compiled; cached by the pattern cache."""
-    return re.compile(name_boundary_pattern(form), flags)
+    """`name_boundary_pattern` compiled -- a delegate to
+    `language_runtime.name_boundary_regex`, which caches the compiled form
+    itself rather than in `re`'s shared 512-entry cache that every dynamic
+    pattern in a long story competes for (dressing audit E7)."""
+    from language_runtime import name_boundary_regex as _compiled
+    return _compiled(form, flags)
 
 
 def fold_identity_key(value: Any) -> str:
@@ -2545,6 +2614,12 @@ def _dead_sibling_keys(sheet):
     return found
 
 
+def _section(value):
+    """A card section as a mapping: anything that is not one reads as empty,
+    which is what an absent section already read as."""
+    return value if isinstance(value, dict) else {}
+
+
 def character_card_warnings(sheet):
     """What is missing from a character CARD that will make them read as
     passive, as a list of human-readable strings.
@@ -2562,17 +2637,32 @@ def character_card_warnings(sheet):
     ever reacts -- which looks like a dull character rather than a missing
     field, so it has to be said out loud at import time. The heuristic
     (LLM-free) path cannot invent either one by construction.
+
+    TWO READINGS OF ONE CARD, and each question is asked of the one that can
+    answer it (story_scene_schema audit F12). The SEMANTIC questions -- a
+    drive, goals, capacity, what the summary names, undeclared parts -- are
+    asked of the NORMALIZED card, which has one shape whatever arrived: the
+    raw body sheet `confirm_promotion` hands in raised `AttributeError` on a
+    scalar where a section belongs ("psychology": "brave") after the
+    promotion had already written the character. The STRUCTURAL questions --
+    a station with no name, more stations than are built, clothing at a
+    region nothing declares, a flag written as text, content under a dead
+    key -- are asked of the card AS WRITTEN, because normalization is what
+    repairs them away: on a normalized card they can never fire. A surface
+    that holds the author's raw input should hand that in.
     """
+    raw = sheet if isinstance(sheet, dict) else {}
+    card = normalize_character_data(raw)
     warnings = []
-    psychology = sheet.get("psychology") or {}
-    drive = psychology.get("drive") or {}
+    psychology = _section(card.get("psychology"))
+    drive = _section(psychology.get("drive"))
     if not str(drive.get("essence") or "").strip():
         warnings.append(
             "No drive was authored for this character, so they will react "
             "rather than pursue anything. Add psychology.drive in the "
             "character editor, or re-import with AI reinterpretation."
         )
-    if not (sheet.get("initial_state") or {}).get("goals"):
+    if not _section(card.get("initial_state")).get("goals"):
         warnings.append(
             "No standing goals were authored, so this character has nothing "
             "they are trying to achieve between beats."
@@ -2603,7 +2693,7 @@ def character_card_warnings(sheet):
     # before the field existed. Warning on any of them would fire on every
     # one of the owner's cards on all ten surfaces, which is how a warning
     # teaches people to stop reading warnings (`attire.spans_guessed`).
-    visible = (sheet.get("embodiment") or {}).get("visible") or {}
+    visible = _section(_section(card.get("embodiment")).get("visible"))
     # A SUMMARY THAT NAMES NO BODY. Every view, memory and page that does
     # not know this character by name calls them by a label cut from the
     # summary's opening clause, and the label is a noun phrase whose head
@@ -2641,7 +2731,7 @@ def character_card_warnings(sheet):
     # the card behaves as written; the author should still be told, because a
     # field the schema declares as a checkbox holding a string means something
     # upstream is writing this card by hand.
-    simulation = sheet.get("simulation") or {}
+    simulation = _section(raw.get("simulation"))
     if "offscreen_agent" in simulation and not isinstance(
             simulation.get("offscreen_agent"), bool):
         warnings.append(
@@ -2653,7 +2743,7 @@ def character_card_warnings(sheet):
     # AUTHORED AND DROPPED. A station with no name is no handle -- nothing can
     # route to it, so `_normalize_interior` drops it -- and an author who typed
     # a description into it has every reason to think the room exists.
-    authored_interior = (sheet.get("embodiment") or {}).get("interior")
+    authored_interior = _section(raw.get("embodiment")).get("interior")
     if isinstance(authored_interior, (list, tuple)):
         nameless = [n for n, item in enumerate(authored_interior, start=1)
                     if not _interior_station_name(item)]
@@ -2695,14 +2785,16 @@ def character_card_warnings(sheet):
     # re-homes onto the region a DECLARED part emerges from, and onto the
     # torso when nothing declares it (A89). The torso case is the one worth
     # saying out loud, because the clothes are somewhere the author did not
-    # put them. Read off the authored keys, so it answers on the raw card the
-    # import and editor surfaces hand in -- the same best effort
-    # `embodiment.interior`'s warnings above make.
-    authored_outfit = sheet.get("initial_outfit")
+    # put them. Read off the AUTHORED keys, so it answers only where a
+    # surface hands in the card as written -- normalization re-homes the
+    # region, and nine of the ten surfaces pass the normalized card (F12a,
+    # which routes pass what is theirs to change). The same holds for
+    # `embodiment.interior`'s warnings above.
+    authored_outfit = raw.get("initial_outfit")
     authored_regions = (authored_outfit or {}).get("regions") \
         if isinstance(authored_outfit, dict) else None
     if isinstance(authored_regions, dict):
-        known = extra_part_regions((sheet.get("embodiment") or {})
+        known = extra_part_regions(_section(card.get("embodiment"))
                                    .get("extra_parts"))
         stray = [str(key) for key in authored_regions
                  if str(key or "").strip().casefold() not in attire.REGIONS
@@ -2715,8 +2807,8 @@ def character_card_warnings(sheet):
                 "worn on the torso instead — declare the part, or move "
                 "them to the region they belong on."
                 % ", ".join(sorted(stray)))
-    if _prose_names_a_part(sheet) and not (
-            (sheet.get("embodiment") or {}).get("extra_parts")):
+    if _prose_names_a_part(card) and not (
+            _section(card.get("embodiment")).get("extra_parts")):
         warnings.append(
             "This card describes a body part in prose that is not declared in "
             "embodiment.extra_parts, so the engine cannot see, cover or touch "
@@ -2730,7 +2822,7 @@ def character_card_warnings(sheet):
     # skeleton beside it. Measured on a stored card carrying stance numbers
     # under `psychology.baseline_stances` while `social.baseline_stances` --
     # the only one `character_initial_stance` reads -- stayed all zeros.
-    for path, home in _dead_sibling_keys(sheet):
+    for path, home in _dead_sibling_keys(raw):
         warnings.append(
             "This card fills %s, which nothing in the engine reads. The same "
             "field is read at %s, and there it is still empty \u2014 move the "

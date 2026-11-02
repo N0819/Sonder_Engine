@@ -92,7 +92,11 @@ def parse_structure(entries):
 
     out = []
     section = subsection = parent = None
-    for entry in sorted(entries, key=order_key):
+    # `index` is the entry's position in the list it was GIVEN, so a caller
+    # can carry these facts by position -- the import does, because a
+    # rewrite changes an entry's text and the structure must survive it.
+    for index, entry in sorted(enumerate(entries),
+                               key=lambda pair: order_key(pair[1])):
         raw = str(entry.get("comment") or "").strip()
         level = classify_title(raw)
         name = clean_title(raw)
@@ -103,6 +107,7 @@ def parse_structure(entries):
         elif level == "leaf":
             parent = name
         out.append({
+            "index": index,
             "uid": entry.get("uid"),
             "title": name,
             "raw_title": raw,

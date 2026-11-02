@@ -11,7 +11,8 @@ from llm.providers import (
     request_timeout, clamp_read_timeout,
 )
 from llm.prompts import get_prompt
-from language_runtime import language_pack
+from language_runtime import (fold_words, join_sentences, language_pack,
+                              split_sentences)
 from story.character_schema import (
     _outfit_items as character_schema_outfit_items,
     character_card_warnings,
@@ -257,11 +258,12 @@ def _card_data(payload):
     return payload if isinstance(payload, dict) else {}
 
 def _first_sentences(text, n=2):
-    parts = re.split(
-        r"(?<=[.!?])\s+",
-        (text or "").strip(),
-    )
-    return " ".join(parts[:n]).strip()
+    """The first `n` sentences of `text`, in whatever script it is written.
+
+    The split was `(?<=[.!?])\\s+`, so a Japanese text -- `。`, no spaces --
+    was ONE sentence and came back whole (story_attire_import audit F1).
+    """
+    return join_sentences(split_sentences(text or "")[:n]).strip()
 
 # Canonical player token left in imported text. We deliberately do NOT
 # substitute in a persona/player name at import time -- imported cards are
@@ -420,6 +422,34 @@ def _heuristic_appearance_and_outfit(card):
     return appearance, {"wearing": wearing, "state": []}
 
 
+#: A line of a card's description that says it IS appearance -- the labelled
+#: shape `_OUTFIT_LINE_RE` reads for clothing. A card-format convention the
+#: engine owns, not a guess about prose.
+_APPEARANCE_LINE_RE = re.compile(
+    r"(?im)^[ \t]*(?:appearance|physical description)[ \t]*:[ \t]*(.+?)[ \t]*$")
+
+
+def _explicit_appearance(card):
+    """The body appearance a card STATES as such, or "".
+
+    THE VISIBLE BODY IS NEVER CUT FROM FREE PROSE BY POSITION. The heuristic
+    import took the first three sentences of `description` as
+    `embodiment.visible.summary` -- what every observer is delivered, the
+    stranger's label, the narrator's body facts -- and a card description
+    mixes appearance, backstory and secrets in any order: "She secretly
+    spies for the thieves guild" was the second sentence of one, and in
+    Japanese (no `.!?`) the whole description landed (story_attire_import
+    audit F1). Only a field, or a labelled line, that says it is appearance
+    is read as one; otherwise the summary stays the default a blank card has,
+    and the appearance fill can write it.
+    """
+    direct = card.get("appearance")
+    if isinstance(direct, str) and direct.strip():
+        return direct.strip()
+    match = _APPEARANCE_LINE_RE.search(str(card.get("description") or ""))
+    return match.group(1).strip() if match else ""
+
+
 def heuristic_character_sheet(d):
     name = d.get("name") or "Unnamed"
     # Resolve {{char}}/{{user}} before any card text is copied into the sheet,
@@ -430,10 +460,16 @@ def heuristic_character_sheet(d):
 
     sheet = default_character_data(name)
     sheet["initial_outfit"] = initial_outfit
-    sheet["embodiment"]["visible"]["summary"] = (
-        _first_sentences(desc, 3)
-        or "A person of unremarkable appearance."
-    )
+    appearance = _explicit_appearance(d)
+    if appearance:
+        sheet["embodiment"]["visible"]["summary"] = appearance
+    if desc:
+        # The description is what the card's author wrote ABOUT this person,
+        # and this person knows all of it -- the secrets included. Their own
+        # private history is the store that reaches them and nobody else
+        # (`known_by` empty), so nothing authored is lost by not showing it.
+        sheet["knowledge"]["private_history"] = [
+            {"content": desc, "about": name, "known_by": []}]
 
     traits = [
         value.strip()
@@ -485,10 +521,52 @@ def __getattr__(name):
     return get_prompt(pid)
 
 
+#: The fields a card format defines for what a person IS -- SillyTavern V1-V3,
+#: Pygmalion, and the appearance/outfit fields the heuristic import reads. A
+#: closed set the engine owns: it is the formats', not a guess about prose.
+_CARD_CONTENT_FIELDS = (
+    "description", "personality", "scenario", "first_mes", "mes_example",
+    "alternate_greetings", "char_persona", "world_scenario", "char_greeting",
+    "example_dialogue", "appearance", "initial_outfit", "outfit", "clothing",
+    "attire")
+_CARD_NAME_FIELDS = ("name", "char_name")
+
+
+def _require_card(card, kind):
+    """Refuse a payload that is not a `kind` card, saying what was expected.
+
+    The import dialog accepts any JSON that parses, and a mapping with no card
+    field in it became a default sheet named "Unnamed" (or "Player") and a
+    200 -- a junk row made silently (story_attire_import audit F20). A World
+    Info book is named as one, so the author knows where it belongs. Called
+    before any model call: a payload that is not a card is not worth one.
+    """
+    card = card if isinstance(card, dict) else {}
+
+    def _filled(field):
+        value = card.get(field)
+        return value not in (None, "", [], {})
+
+    if any(_filled(field) for field in _CARD_CONTENT_FIELDS):
+        return
+    if card.get("entries") is not None:
+        raise ValueError(
+            "That file is a lorebook (World Info), not a %s card: import it "
+            "as a lorebook instead." % kind)
+    if any(_filled(field) for field in _CARD_NAME_FIELDS):
+        return
+    raise ValueError(
+        "That file is not a %s card: it carries none of the fields a card "
+        "defines (name, description, personality, scenario, first_mes)."
+        % kind)
+
+
 def import_character(payload, reinterpret=False):
     native = _native_payload(payload, "character")
     source_payload = _reinterpret_payload(payload)
     card = _card_data(source_payload)
+    if native is None:
+        _require_card(card, "character")
 
     # A payload already in this project's native schema round-trips
     # exactly via normalize_character_data -- that must win regardless
@@ -523,6 +601,13 @@ def import_character(payload, reinterpret=False):
                     )
                 _require_whole_json(raw)
                 sheet = normalize_character_data(parsed)
+                # THE MACROS ARE RESOLVED HERE TOO. The card is sent raw and
+                # the model copies what it sees, so a reinterpreted sheet kept
+                # `{{user}}`, `<USER>` and `{{char}}` verbatim -- not even the
+                # canonical token the heuristic path writes -- and a mind read
+                # them as written (story_attire_import audit F11).
+                sheet = normalize_character_data(
+                    _substitute_card_macros(sheet, character_name(sheet)))
                 # The model does not get to name the engine's key for this
                 # character. identity.uid IS the scene entity id (scene.py's
                 # entity_id falls back to it) and one of the forms character
@@ -617,6 +702,8 @@ def import_persona(payload, reinterpret=False):
     native = _native_payload(payload, "persona")
     source_payload = _reinterpret_payload(payload)
     card = _card_data(source_payload)
+    if native is None:
+        _require_card(card, "persona")
 
     # See import_character: native-schema payloads round-trip exactly
     # and must bypass the reinterpret flag entirely.
@@ -638,6 +725,9 @@ def import_persona(payload, reinterpret=False):
                     )
                 _require_whole_json(raw)
                 sheet = normalize_persona_data(parsed)
+                # The card's macros resolved, as on the character path.
+                sheet = normalize_persona_data(
+                    _substitute_card_macros(sheet, persona_name(sheet)))
                 # Same as the character path above: a reconstructed sheet does
                 # not carry a model-chosen identity key.
                 sheet["identity"]["uid"] = new_uid("persona")
@@ -653,10 +743,12 @@ def import_persona(payload, reinterpret=False):
             desc = card.get("personality") or ""
         sheet = default_persona_data(name)
         sheet["initial_outfit"] = initial_outfit
-        sheet["embodiment"]["visible"]["summary"] = (
-            _first_sentences(desc, 3)
-            or "A person of unremarkable appearance."
-        )
+        # The player's visible body too: never cut from the description by
+        # position (see `_explicit_appearance`). The description itself is
+        # kept where it always was, in the narration's voice setting.
+        appearance = _explicit_appearance(card)
+        if appearance:
+            sheet["embodiment"]["visible"]["summary"] = appearance
         sheet["narration"]["voice_setting"] = desc
 
     name = persona_name(sheet)
@@ -1648,15 +1740,68 @@ def _batch_entries_by_chars(entries, max_batch_chars):
 def _structure_key(content):
     """A stable handle for matching a prepared entry back to its source.
 
-    Index alignment cannot be used: the rewrite SPLITS entries (the live
-    Re:Zero import produced 310 rows from 300 sources), so position drifts.
-    The opening of the text survives a rewrite far better than its length or
-    its keys do, and both halves of a split entry legitimately inherit the same
+    Index alignment across a whole BOOK cannot be used: the rewrite SPLITS
+    entries (the live Re:Zero import produced 310 rows from 300 sources), so
+    position drifts. Within one batch that came back entry for entry it can,
+    and `_rewrite_source` tries that first; this key is its fallback. The
+    opening of the text survives a rewrite far better than its length or its
+    keys do, and both halves of a split entry legitimately inherit the same
     structural facts -- both halves of "Lugunica Currency" are still local
     knowledge about Lugunica.
     """
     text = " ".join(str(content or "").split()).casefold()
     return text[:120] if text else ""
+
+
+def _rewrite_source(entry, n, written, batch):
+    """The position (in `_reinterpret_entries`' input) of the entry that
+    rewritten `entry` came from, or None when nothing says.
+
+    In order of how much each reading can be trusted:
+
+      * a `source` the model echoed, when it names an entry of this batch;
+      * BY POSITION, when the batch came back one entry for one: a rewrite
+        that neither merged nor split keeps the order it was handed;
+      * the source whose opening this one's opens with, or whose keys it
+        kept (`_structure_key`'s prefix tolerance, as `reinterpret_lorebook`
+        matched);
+      * the source in this batch it shares the most DISTINCTIVE words with --
+        a word every source of the batch carries cannot tell them apart, so
+        it is not counted -- when exactly one source has the most.
+
+    Both halves of a split entry legitimately inherit one source's structure:
+    both halves of "Lugunica Currency" are still local knowledge about
+    Lugunica.
+    """
+    positions = [position for _k, _c, _l, position in batch]
+    echoed = entry.get("source")
+    if isinstance(echoed, int) and not isinstance(echoed, bool) \
+            and echoed in positions:
+        return echoed
+    if len(written) == len(batch):
+        return positions[n]
+    new_key = _structure_key(entry.get("content"))
+    if new_key:
+        for _k, content, _l, position in batch:
+            src_key = _structure_key(content)
+            if src_key and (src_key.startswith(new_key)
+                            or new_key.startswith(src_key)):
+                return position
+    keys = " ".join(str(entry.get("keys") or "").split()).casefold()
+    if keys:
+        for source_keys, _c, _l, position in batch:
+            if " ".join(str(source_keys or "").split()).casefold() == keys:
+                return position
+    words = set(fold_words(entry.get("content")))
+    sources = [(position, set(fold_words(content)))
+               for _k, content, _l, position in batch]
+    shared = set.intersection(*(source for _p, source in sources)) \
+        if sources else set()
+    scores = [(len((words & source) - shared), position)
+              for position, source in sources]
+    best = max((score for score, _p in scores), default=0)
+    winners = [position for score, position in scores if score == best]
+    return winners[0] if best > 0 and len(winners) == 1 else None
 
 
 def _reinterpret_entries(entries):
@@ -1671,11 +1816,31 @@ def _reinterpret_entries(entries):
     # max_tokens off each batch's actual volume with real headroom.
     out = []
     failures = []
-    batches = _batch_entries_by_chars(entries, max_batch_chars=6000)
+    # EVERY OUTPUT CARRIES `source`: the position in `entries` of the entry
+    # it was rewritten from, or None when nothing can say. The rewrite
+    # merges, splits and rephrases, so a rewritten entry's TEXT cannot find
+    # its source -- and the structure an import recovered from the book's
+    # titles (title, parent, knowledge tag and range, importance) was looked
+    # up by exactly that text, so the better the rewrite the more was lost
+    # (story_attire_import audit F6). See `_rewrite_source`.
+    #
+    # A LOCKED entry is never sent: `constant` in World Info is the author
+    # saying this one stands as written, and `reinterpret_lorebook` already
+    # skips locked rows. The import used to rewrite it and store it unlocked.
+    positioned = [(keys, content, locked, position)
+                  for position, (keys, content, locked) in enumerate(entries)]
+    for keys, content, locked, position in positioned:
+        if locked:
+            out.append({"keys": keys, "content": content, "locked": locked,
+                        "category": guess_category(keys, content),
+                        "source": position})
+    batches = _batch_entries_by_chars(
+        [entry for entry in positioned if not entry[2]],
+        max_batch_chars=6000)
 
     with _silent_provider_stream():
         for i, batch in enumerate(batches):
-            batch_chars = sum(len(k) + len(c) for k, c, _ in batch)
+            batch_chars = sum(len(k) + len(c) for k, c, _l, _p in batch)
             # Rewritten content plus JSON structure/escaping overhead can
             # exceed the source's own size -- budget generously rather
             # than tightly against the estimate.
@@ -1687,7 +1852,7 @@ def _reinterpret_entries(entries):
                     get_prompt("lore_reinterpret"),
                     json.dumps([
                         {"keys": k, "content": c}
-                        for k, c, _ in batch
+                        for k, c, _l, _p in batch
                     ], ensure_ascii=False),
                     temperature=0.2,
                     max_tokens=max_tokens,
@@ -1699,21 +1864,22 @@ def _reinterpret_entries(entries):
                         "model returned no usable entries (raw response, "
                         f"first 300 chars: {raw[:300]!r})"
                     )
-                for e in es:
-                    if e.get("content"):
-                        cat = e.get("category")
-                        out.append({
-                            "keys": e.get("keys", ""),
-                            "content": e["content"],
-                            "category": (
-                                cat
-                                if cat in LORE_CATEGORIES
-                                else guess_category(
-                                    e.get("keys"), e["content"]
-                                )
-                            ),
-                            "locked": 0,
-                        })
+                written = [e for e in es if e.get("content")]
+                for n, e in enumerate(written):
+                    cat = e.get("category")
+                    out.append({
+                        "keys": e.get("keys", ""),
+                        "content": e["content"],
+                        "category": (
+                            cat
+                            if cat in LORE_CATEGORIES
+                            else guess_category(
+                                e.get("keys"), e["content"]
+                            )
+                        ),
+                        "locked": 0,
+                        "source": _rewrite_source(e, n, written, batch),
+                    })
             except Exception as exc:
                 # ONE BAD BATCH USED TO LOSE THE WHOLE BOOK. This raised, and
                 # `import_lorebook` turned it into "AI lore reinterpretation
@@ -1754,17 +1920,18 @@ def _reinterpret_entries(entries):
                     except Exception:
                         recovered = None
                 if recovered:
-                    for e in recovered:
-                        if e.get("content"):
-                            cat = e.get("category")
-                            out.append({
-                                "keys": e.get("keys", ""),
-                                "content": e["content"],
-                                "category": (cat if cat in LORE_CATEGORIES
-                                             else guess_category(e.get("keys"),
-                                                                 e["content"])),
-                                "locked": 0,
-                            })
+                    written = [e for e in recovered if e.get("content")]
+                    for n, e in enumerate(written):
+                        cat = e.get("category")
+                        out.append({
+                            "keys": e.get("keys", ""),
+                            "content": e["content"],
+                            "category": (cat if cat in LORE_CATEGORIES
+                                         else guess_category(e.get("keys"),
+                                                             e["content"])),
+                            "locked": 0,
+                            "source": _rewrite_source(e, n, written, batch),
+                        })
                     failures.append(
                         f"batch {i + 1}/{len(batches)}: recovered by repair "
                         f"after {first_error}")
@@ -1774,9 +1941,10 @@ def _reinterpret_entries(entries):
                 #    text, categorised heuristically. Losing the model's
                 #    polish on a few entries is a far smaller harm than losing
                 #    the entries, and the import stays a complete book.
-                for k, c, locked in batch:
+                for k, c, locked, position in batch:
                     out.append({"keys": k, "content": c, "locked": locked,
-                                "category": guess_category(k, c)})
+                                "category": guess_category(k, c),
+                                "source": position})
                 failures.append(
                     f"batch {i + 1}/{len(batches)}: kept {len(batch)} "
                     f"entries unrewritten after {first_error}")
@@ -1877,14 +2045,19 @@ def import_lorebook(payload, name=None, reinterpret=False,
     # knowledge about Lugunica, which is what lets an innkeeper there be
     # expected to know it. Asking a model that per entry would cost 300 calls
     # and answer worse -- the author already encoded it, in the layout.
+    # KEYED BY THE SOURCE ENTRY'S POSITION in `src`, not by its text: a
+    # rewrite changes the text, and both the AI path and a split carry the
+    # position (`_reinterpret_entries`, `_rewrite_source`). Keyed by text,
+    # every rephrased entry lost its title, parent link and knowledge fields
+    # -- and an entry with no knowledge tag reaches no mind (`add_lore`:
+    # "Director-only"); story_attire_import audit F6.
     structure = {}
     try:
         from story.lore_structure import derive_knowledge, parse_structure
         for record in parse_structure(src):
-            body = _structure_key(record.get("content"))
-            if body:
+            if str(record.get("content") or "").strip():
                 tag, rng, locs = derive_knowledge(record)
-                structure[body] = {
+                structure[record["index"]] = {
                     "title": record.get("title") or "",
                     # The `[>]` parent, by TITLE. Ids do not exist yet, so the
                     # link is resolved in a second pass after every row has one.
@@ -1901,7 +2074,8 @@ def import_lorebook(payload, name=None, reinterpret=False,
         structure = {}
 
     entries = []
-    for e in src:
+    entry_src = []          # entries[i] was read from src[entry_src[i]]
+    for position, e in enumerate(src):
         keys = e.get("key") or e.get("keys") or []
         if isinstance(keys, list):
             keys = ", ".join(map(str, keys))
@@ -1913,6 +2087,7 @@ def import_lorebook(payload, name=None, reinterpret=False,
                 content,
                 1 if e.get("constant") else 0,
             ))
+            entry_src.append(position)
 
     if book_type not in LOREBOOK_TYPES:
         book_type = guess_book_type(entries)
@@ -1932,9 +2107,16 @@ def import_lorebook(payload, name=None, reinterpret=False,
                 "content": content,
                 "locked": locked,
                 "category": guess_category(keys, content),
+                "source": position,
             }
-            for keys, content, locked in entries
+            for position, (keys, content, locked) in enumerate(entries)
         ]
+
+    def _structure_of(entry):
+        position = entry.get("source")
+        if isinstance(position, int) and 0 <= position < len(entry_src):
+            return structure.get(entry_src[position]) or {}
+        return {}
 
     vectors = _prepared_lore_embeddings(prepared_entries)
     with transaction():
@@ -1956,7 +2138,7 @@ def import_lorebook(payload, name=None, reinterpret=False,
         )
         inserted = []
         for entry, vector in zip(prepared_entries, vectors):
-            meta = structure.get(_structure_key(entry["content"])) or {}
+            meta = _structure_of(entry)
             inserted.append((meta, add_lore(
                 lb,
                 entry["keys"],
@@ -2042,6 +2224,9 @@ def reinterpret_lorebook(lid):
     # entry that matches nothing keeps engine defaults, which is exactly what
     # every entry got before.
     def _source_for(entry):
+        position = entry.get("source")
+        if isinstance(position, int) and 0 <= position < len(unlocked):
+            return unlocked[position]
         new_key = _structure_key(entry.get("content"))
         if new_key:
             for r, src_key in keyed:

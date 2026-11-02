@@ -55,9 +55,10 @@ import contextvars
 #: deliberately GENEROUS -- an id missed here makes an honest claim look
 #: unsupported, which is the expensive direction of the error, while an id
 #: gathered that nobody would cite costs a set entry.
-ID_KEYS = ("uid", "id", "room", "room_id", "to", "entry_id", "need_uid",
-           "package_uid", "mandate_uid", "charter", "body", "post", "key",
-           "subject_id", "book_id", "char_id", "turn_id", "structure")
+ID_KEYS = ("uid", "id", "citation", "room", "room_id", "to", "entry_id",
+           "need_uid", "package_uid", "mandate_uid", "charter", "body",
+           "post", "key", "subject_id", "book_id", "char_id", "turn_id",
+           "structure")
 
 #: Rows remembered per reply. A LIMIT THE OWNER SHOULD KNOW ABOUT: past it
 #: further reads are not remembered and a claim citing one of them reads as
@@ -155,6 +156,19 @@ def _harvest(value, rows, depth):
 
 
 def _add(rows, value):
+    """Record one id as the room would cite it: a string as written, an
+    integer as its digits.
+
+    `search_lore`/`read_lore`/`scan_lore` hand out `{"citation": "lore:42",
+    "id": 42}` and their tool description says to cite an entry by its
+    citation -- and neither the `citation` key nor any integer id was ever
+    recorded, so a claim citing exactly what it was told to cite was demoted
+    to a proposal (story_attire_import audit F17). A flag is not an id.
+    """
+    if isinstance(value, bool):
+        return
+    if isinstance(value, int):
+        value = str(value)
     if isinstance(value, str) and value.strip() and len(rows) < ROWS_READ_CAP:
         rows.add(value.strip())
 

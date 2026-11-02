@@ -30,10 +30,14 @@ only the place travels onward into prose.
 
 PURE: strings in, strings out. No database, no model, no scene.
 
-The patterns below are a deterministic FLOOR, not the fix. The fix is upstream:
-the mapping prompt now asks for a structured `provenance` field and forbids the
-sentence. A floor is kept anyway because a leak is an engine failure, never a
-model's -- nothing here may depend on a model choosing to cooperate. Every
+The patterns below are a deterministic FLOOR, and today they are the whole
+mechanism: the mapping prompt that once asked for a structured `provenance`
+field is gone with the mapping model role, and no card under
+`language_packs/*/cards/system_prompts` asks for one (story_scene_schema audit
+F22) -- `persist/commit_mapping` still reads `op.get("provenance")` for a
+producer that may return. A floor is kept regardless because a leak is an
+engine failure, never a model's -- nothing here may depend on a model choosing
+to cooperate. Every
 pattern is written in the engine's own vocabulary (retrieval, candidates,
 canon, entries, placeholders) and names no story, no place and no character;
 a sentence of fiction cannot match one without talking about the engine.
@@ -42,6 +46,8 @@ a sentence of fiction cannot match one without talking about the engine.
 from __future__ import annotations
 
 import re
+
+from language_runtime import join_sentences, split_sentences
 
 #: A sentence matches when it talks about how this text came to exist, rather
 #: than about what it describes. Multi-word wherever a single word could
@@ -71,11 +77,19 @@ _PROVENANCE_RE = re.compile("|".join(_PROVENANCE_PATTERNS), re.IGNORECASE)
 # landing (generated because no candidate described this floor)" -- and it does
 # not end a sentence, so the sentence splitter alone would keep it. Bounded and
 # single-line: an unpaired bracket in ordinary prose must not swallow the rest.
-_BRACKETED_RE = re.compile(r"[\(\[][^\)\]\n]{1,300}[\)\]]")
+# Full-width brackets too: a Japanese description encloses its asides in
+# （ ） and 【 】, and an engine note there was delivered to the view because
+# only the ASCII pair was a bracket (story_scene_schema audit F7).
+_OPEN_BRACKETS = "([（［【〔"
+_CLOSE_BRACKETS = ")]）］】〕"
+_BRACKETED_RE = re.compile(
+    "[%s][^%s\n]{1,300}[%s]" % (re.escape(_OPEN_BRACKETS),
+                                re.escape(_CLOSE_BRACKETS),
+                                re.escape(_CLOSE_BRACKETS)))
 
-# Split AFTER terminal punctuation, keeping it, so the surviving prose reads
-# exactly as it was written.
-_SENTENCE_RE = re.compile(r"[^.!?\n]*(?:[.!?\n]+|$)")
+# Punctuation a removed parenthetical leaves a space in front of, closed up
+# below. The full-width stops belong to the same class as the ASCII ones.
+_CLOSE_UP_RE = re.compile(r"\s+([.,;:!?。、，！？])")
 
 
 def looks_like_engine_provenance(text):
@@ -102,27 +116,33 @@ def split_engine_provenance(text):
     def _take_bracket(match):
         span = match.group(0)
         if _PROVENANCE_RE.search(span):
-            provenance.append(span.strip("()[] \t"))
+            provenance.append(span.strip(_OPEN_BRACKETS + _CLOSE_BRACKETS
+                                         + " \t"))
             return " "
         return span
 
     body = _BRACKETED_RE.sub(_take_bracket, raw)
 
+    # ONE SENTENCE AT A TIME, IN EVERY SCRIPT. The splitter ended a sentence
+    # only at ASCII `.!?`, so a Japanese description -- 「港の事務所。机が並
+    # ぶ。」 followed by a note -- was ONE "sentence", matched, and filed
+    # whole: the view and the persisted description got nothing (story_
+    # scene_schema audit F7). It also cut "3.5 metres" into "3." and "5
+    # metres". The engine's one splitter knows both, and a line break still
+    # ends whatever was on its line, as it did.
     kept = []
-    for match in _SENTENCE_RE.finditer(body):
-        sentence = match.group(0)
-        if not sentence.strip():
-            continue
-        if _PROVENANCE_RE.search(sentence):
-            provenance.append(sentence.strip())
-        else:
-            kept.append(sentence.strip())
+    for line in body.split("\n"):
+        for sentence in split_sentences(line):
+            if _PROVENANCE_RE.search(sentence):
+                provenance.append(sentence.strip())
+            else:
+                kept.append(sentence.strip())
 
-    prose = re.sub(r"\s+", " ", " ".join(kept)).strip()
+    prose = re.sub(r"\s+", " ", join_sentences(kept)).strip()
     # A parenthetical taken out of the middle of a sentence leaves its own
     # space in front of the punctuation that followed it. Close it up, so what
     # a mind receives reads as the sentence the author would have written.
-    prose = re.sub(r"\s+([.,;:!?])", r"\1", prose)
+    prose = _CLOSE_UP_RE.sub(r"\1", prose)
     note = re.sub(r"\s+", " ", " ".join(p for p in provenance if p)).strip()
     return prose, note
 

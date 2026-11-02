@@ -229,62 +229,69 @@ def test_no_schema_model_is_declared_without_anything_reaching_it():
     Twenty-nine such models were deleted: the fiction/time/authority models,
     the early entity ontology, and the shapes naming the
     fiction_worlds/fiction_locations/transit_edges/world_placements tables
-    the movement/space phases decommissioned. Reachability is computed the
-    way it has to be for this file -- a model is live if any `.py` outside it
-    names it, or if anything at module level here does (SCHEMA_MAP, the
-    helpers, the aliases), or if a live model's own body annotates a field
-    with it.
+    the movement/space phases decommissioned.
+
+    REACHABILITY IS READ OFF CODE, NEVER OFF TEXT. A model is live if an
+    ENGINE module refers to it (an import, an attribute, a name, or a string
+    spelling it exactly), if a module-level statement of this file does
+    (`SCHEMA_MAP`, the helpers, the aliases), or if a live model's own body
+    does (an annotation, a base, a default, a quoted forward reference). It
+    used to be a regex over the raw text of every `.py` in the repository --
+    tests, tools, comments, docstrings -- so the English word "Engagement" in
+    a comment kept the `Engagement` model alive, and two enums named only in
+    comments passed too (tooling_gate F5, 2026-11-01). A model only a TEST
+    reaches is kept by name in `kept` below, with the test that needs it.
     """
     import ast
-    import collections
     import pathlib
-    import re
+    import sys
 
     root = pathlib.Path(__file__).resolve().parents[1]
-    source = (root / "llm/schemas.py").read_text(encoding="utf-8")
-    tree = ast.parse(source)
+    sys.path.insert(0, str(root / "tools"))
+    import project_check
+
+    schemas_path = root / "llm" / "schemas.py"
+    tree = ast.parse(schemas_path.read_text(encoding="utf-8"))
     classes = {n.name: n for n in tree.body if isinstance(n, ast.ClassDef)}
-    pattern = re.compile(
-        r"\b(" + "|".join(sorted(classes, key=len, reverse=True)) + r")\b")
+
+    def refs(node):
+        """Class names a subtree refers to in code: names, attributes,
+        imported aliases, and a string that spells one exactly -- or is a
+        type expression naming one (`"list[Observation]"`)."""
+        found = set()
+        for sub in ast.walk(node):
+            if isinstance(sub, ast.Name):
+                found.add(sub.id)
+            elif isinstance(sub, ast.Attribute):
+                found.add(sub.attr)
+            elif isinstance(sub, ast.alias):
+                found.add(sub.asname or sub.name.rpartition(".")[2])
+            elif isinstance(sub, ast.Constant) and isinstance(sub.value, str):
+                if sub.value in classes:
+                    found.add(sub.value)
+                elif "[" in sub.value and len(sub.value) < 120:
+                    try:
+                        expr = ast.parse(sub.value, mode="eval")
+                    except SyntaxError:
+                        continue
+                    found |= {n.id for n in ast.walk(expr)
+                              if isinstance(n, ast.Name)}
+        return found & set(classes)
 
     seed = set()
-    for path in root.rglob("*.py"):
-        rel = path.relative_to(root)
-        if any(part.startswith(".") for part in rel.parts):
+    for path in project_check.engine_python_paths():
+        if path == schemas_path:
             continue
-        if rel.as_posix() == "llm/schemas.py":
-            continue
-        try:
-            text = path.read_text(encoding="utf-8", errors="ignore")
-        except OSError:                       # pragma: no cover - unreadable
-            continue
-        seed.update(m.group(1) for m in pattern.finditer(text))
-
-    lines = source.splitlines()
-
-    def _names_in(node):
-        body = "\n".join(
-            lines[node.lineno - 1:(node.end_lineno or node.lineno)])
-        return {m.group(1) for m in pattern.finditer(body)}
-
-    edges = collections.defaultdict(set)
-    for name, node in classes.items():
-        edges[name] = _names_in(node) - {name}
+        seed |= refs(ast.parse(path.read_text(encoding="utf-8")))
     for node in tree.body:
         if not isinstance(node, ast.ClassDef):
-            seed.update(_names_in(node))
+            seed |= refs(node)
 
-    reached, stack = set(), list(seed)
-    while stack:
-        name = stack.pop()
-        if name in reached:
-            continue
-        reached.add(name)
-        stack.extend(edges.get(name, ()))
-
-    # Kept deliberately, each for a stated reason. Removing a name from this
-    # allowlist means deleting the model, not silencing the test.
-    allowed = {
+    # Kept deliberately, each for a stated reason -- and each a ROOT, so the
+    # models its own fields name are kept with it. Removing a name here means
+    # deleting the model, not silencing the test; adding one is a decision
+    # that the engine will not validate the shape it states.
+    kept = {
         # `PersistentCondition` used to sit here, held while one open
         # question stood: build the due-tick sweep, or drop the prompt
         # field, the NULL `next_tick` column and the index that serves no
@@ -293,17 +300,40 @@ def test_no_schema_model_is_declared_without_anything_reaching_it():
         # clamped by `world.mechanics._tick_spec` from the lenient dict the
         # channel actually carries, so the unvalidated model went with the
         # other twenty-nine. One fewer name here is the point of the test.
-        # Fixtures: tests/test_schema_leniency.py exercises the shared
-        # coercion through these two, and tests/test_speech_concealment.py
-        # through SpeechElement.
-        "CausalRegime", "FictionFrame", "SpeechElement",
+        "CausalRegime": "tests/test_schema_leniency.py exercises the shared "
+                        "coercion through it",
+        "FictionFrame": "tests/test_schema_leniency.py, as CausalRegime",
+        "SpeechElement": "tests/test_speech_concealment.py",
+        # Found by reading code instead of text (2026-11-01): every action
+        # and speech element rides a `sequence: list[dict]`, so these are
+        # validated by tests alone. Kept as the fixtures they are; whether
+        # the engine should validate against them is the owner's question.
+        "ActionElement": "tests/test_world_model_action_stage.py and "
+                         "tests/test_prompt_deconstraint.py validate the "
+                         "element's stage and fields through it",
+        "LoreOp": "tests/test_schema_leniency.py (book_id's int-or-handle "
+                  "union)",
+        "DestructionEffect": "tests/test_director_diff_channels.py reads its "
+                             "fields",
+        "Observation": "tests/test_schemas.py and "
+                       "tests/test_schema_leniency.py validate through it",
     }
-    unreached = sorted(set(classes) - reached - allowed)
+    edges = {name: refs(node) - {name} for name, node in classes.items()}
+    reached, stack = set(), list(seed | set(kept))
+    while stack:
+        name = stack.pop()
+        if name in reached:
+            continue
+        reached.add(name)
+        stack.extend(edges.get(name, ()))
+
+    assert set(kept) <= set(classes), sorted(set(kept) - set(classes))
+    unreached = sorted(set(classes) - reached)
     assert not unreached, (
         f"{unreached} are declared in llm/schemas.py and reachable from "
-        "nothing -- no SCHEMA_MAP entry, no other model's field, no module "
-        "outside the file. Wire it up or delete it; a shape nothing "
-        "validates is not a contract.")
+        "nothing -- no SCHEMA_MAP entry, no other model's field, no engine "
+        "module's code. Wire it up or delete it; a shape nothing validates "
+        "is not a contract.")
 
 
 def test_greeting_interpret_asks_only_for_what_the_launch_reads():
