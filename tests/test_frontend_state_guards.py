@@ -332,7 +332,7 @@ def test_every_engine_plan_step_has_a_friendly_progress_label():
             handlers = {k.value for k in node.value.keys}
     assert handlers, "STEP_HANDLERS not found in agents/runtime.py"
 
-    block = _between(CHAT, "const FRIENDLY_STEP_LABELS = {", "const FRIENDLY_SUBAGENTS")
+    block = _between(CHAT, "const FRIENDLY_STEP_LABELS = {", "function friendlyPhase(")
     labelled = set(re.findall(r"^  (\w+):", block, re.MULTILINE))
     assert not handlers - labelled, \
         f"plan steps with no friendly label: {sorted(handlers - labelled)}"

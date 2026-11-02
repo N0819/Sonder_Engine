@@ -135,8 +135,18 @@ async function api(method, url, body) {
   // this call almost always originates from a click -- which is the gesture
   // the browser will let us unlock audio with, and the last one available
   // before the reader tabs away. See chime.js.
-  const chimed = typeof chimeWatches === "function" && chimeWatches(method, url);
-  if (chimed && typeof chimeArm === "function") chimeArm();
+  //
+  // An OPTIONAL module never fails a request: chime.js once threw from
+  // `chimeWatches` on every call (blocked storage left its constants in the
+  // temporal dead zone), and because this line runs before the fetch, every
+  // request in the app failed with it (frontend audit 2026-11-01).
+  let chimed = false;
+  try {
+    chimed = typeof chimeWatches === "function" && chimeWatches(method, url);
+    if (chimed && typeof chimeArm === "function") chimeArm();
+  } catch (e) {
+    chimed = false;
+  }
   const startedAt = performance.now();
   let response;
   try {
@@ -152,10 +162,10 @@ async function api(method, url, body) {
         : JSON.stringify(body)
     });
   } catch (error) {
-    throw new Error(
-      "Could not reach the server. "
-      + (error?.message || "Network error")
-    );
+    // The catalog's sentence, then the cause: joined before any lookup, the
+    // whole was a string no key could equal and stayed English (F11).
+    throw new Error(t("Could not reach the server.") + " "
+                    + (error?.message || t("Network error")));
   }
   if (!response.ok) {
     if (response.status === 401) {
@@ -184,7 +194,11 @@ async function api(method, url, body) {
   // Only on the way out, and only on success: a rejection has already thrown
   // above, and every failure path in this app raises its own toast.
   if (chimed && typeof chimeWorkFinished === "function") {
-    chimeWorkFinished(method, url, performance.now() - startedAt);
+    try {
+      chimeWorkFinished(method, url, performance.now() - startedAt);
+    } catch (e) {
+      // the request succeeded; a chime that cannot sound is not its failure
+    }
   }
   const ct = response.headers.get("content-type") || "";
   return ct.includes("json")
@@ -209,7 +223,35 @@ function reportStaleCode(info) {
   }
 }
 
-async function streamPost(url, body, onEvt) {
+// `api()` for a READ whose 404 is an answer rather than a failure: the turn
+// status route says 404 for a run that saved no stage (its row was discarded),
+// and a story read says it for a story that is gone. Resolves null for those;
+// a 401 leaves for the sign-in page exactly as `api()` does, and anything else
+// that is not ok throws.
+async function apiOrNull(url) {
+  let response;
+  try {
+    response = await fetch(url, {
+      cache: "no-store",
+      headers: { "Cache-Control": "no-cache" }
+    });
+  } catch (error) {
+    throw new Error(t("Could not reach the server.") + " "
+                    + (error?.message || t("Network error")));
+  }
+  if (response.status === 404) return null;
+  if (response.status === 401) {
+    window.location.href = "/login";
+    throw new Error("Unauthorized");
+  }
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  return response.json();
+}
+
+// `onOpen` is called once the server has ACCEPTED the request and the stream
+// is about to be read: from that moment a broken read is a dropped connection
+// with the work still going on server-side, not a refusal (`runStream`).
+async function streamPost(url, body, onEvt, onOpen) {
   const response = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body || {}) });
   if (!response.ok) {
     // Same 401 contract as api() above: no valid host session means the
@@ -229,6 +271,7 @@ async function streamPost(url, body, onEvt) {
     throw new Error(message ? t(message) : `HTTP ${response.status}`);   // as api() does
   }
   if (!response.body) throw new Error("No response stream.");
+  if (typeof onOpen === "function") onOpen();
   const reader = response.body.getReader(), dec = new TextDecoder(); let buf = "";
   for (;;) {
     const { done, value } = await reader.read(); if (done) break;

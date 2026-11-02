@@ -126,11 +126,10 @@ function renderSide() {
   } else if (S.tab === "personas") {
     renderPersonaSidebar(list, actions);
   } else if (S.tab === "lore") {
-    if (typeof renderLoreLibrarySidebar === "function") {
-      renderLoreLibrarySidebar(list, actions);
-    } else {
-      renderLegacyLoreSidebar(list, actions);
-    }
+    // lorebooks.js is a core script and, by index.html's rule, not guarded.
+    // The fallback that stood here ran only when it had failed to load, and
+    // then called it anyway (frontend audit 2026-11-01, F14).
+    renderLoreLibrarySidebar(list, actions);
   } else if (typeof S.tab === "string" && S.tab.startsWith("ext:")) {
     // An extension owns this tab. If it has been retired since the reader
     // selected it, fall back to the stories list rather than showing an empty
@@ -198,8 +197,15 @@ function renderChatSidebar(list, actions) {
       list.append(failedSetupRow(chat, failure));
       continue;
     }
+    // A NAME IS NEVER LOOKED UP IN THE UI CATALOG. el() translated this
+    // label and its tooltip before they existed, so a story named "Tavern" was
+    // listed as 酒場 under the ja pack (frontend audit 2026-11-01, F8). Every
+    // element below that carries the name opts out (`translate: "no"`, which
+    // el() and the observer both honour), and a label that names it is the
+    // catalog's words with the name filled in AFTER the lookup.
     const storyName = el("span", {
       class: "item-label",
+      translate: "no",
       title: chat.name,
     }, chat.name);
     const storyActions = el(
@@ -207,14 +213,16 @@ function renderChatSidebar(list, actions) {
       {
         class: "item-actions",
         role: "group",
-        "aria-label": `Actions for ${chat.name}`,
+        translate: "no",
+        "aria-label": t("Actions for {name}", { name: chat.name }),
       },
         el(
           "button",
           {
             class: "icon-button story-action",
-            title: "Rename",
-            "aria-label": `Rename ${chat.name}`,
+            translate: "no",
+            title: t("Rename"),
+            "aria-label": t("Rename {name}", { name: chat.name }),
             onclick: async event => {
               event.stopPropagation();
               const name = await promptModal("Rename story:", chat.name);
@@ -236,8 +244,9 @@ function renderChatSidebar(list, actions) {
           "button",
           {
             class: "icon-button story-action",
-            title: "Export",
-            "aria-label": `Export ${chat.name}`,
+            translate: "no",
+            title: t("Export"),
+            "aria-label": t("Export {name}", { name: chat.name }),
             onclick: event => {
               event.stopPropagation();
               exportChat(chat.id);
@@ -249,8 +258,9 @@ function renderChatSidebar(list, actions) {
           "button",
           {
             class: "icon-button story-action danger",
-            title: "Delete",
-            "aria-label": `Delete ${chat.name}`,
+            translate: "no",
+            title: t("Delete"),
+            "aria-label": t("Delete {name}", { name: chat.name }),
             onclick: async event => {
               event.stopPropagation();
 
@@ -278,7 +288,8 @@ function renderChatSidebar(list, actions) {
       {
         class: "item story-item" + (chat.id === S.chatId ? " on" : ""),
         tabindex: "0",
-        "aria-label": `Open ${chat.name}`,
+        translate: "no",
+        "aria-label": t("Open {name}", { name: chat.name }),
         "aria-current": chat.id === S.chatId ? "true" : "false",
         onclick: () => openChat(chat.id),
         onkeydown: event => {
@@ -317,7 +328,7 @@ function failedSetupRow(chat, failure) {
   const title = `Setup failed${who ? " — " + who : ""}: ${detail}`;
   return el("div", { class: "item story-item failed-setup", title },
     el("span", { class: "badge err", "aria-hidden": "true" }, "⚠"),
-    el("span", { class: "item-label" }, chat.name),
+    el("span", { class: "item-label", translate: "no" }, chat.name),
     el("div", { class: "item-actions", role: "group",
                 "aria-label": `Actions for the failed setup ${chat.name}` },
       el("button", {
@@ -494,7 +505,7 @@ function wizardFromScratch() {
   const books = S.boot.lorebooks || [];
   const lore = el("select", { style: "width:100%" },
     el("option", { value: "" }, "— no lorebook —"),
-    ...books.map(book => el("option", { value: String(book.id) }, book.name)));
+    ...books.map(book => el("option", { value: String(book.id), translate: "no" }, book.name)));
   const lived = livedLocationControl();
   const preludeCb = el("input", { type: "checkbox" });
   modal("Build story from scratch", body => body.append(
@@ -557,7 +568,7 @@ function renderWizardPersona(b, state) {
   b.innerHTML = "";
 
   const genOpt = el("option", { value: "generate" }, "✨ Describe a new persona");
-  const existingOpts = S.boot.personas.map(p => el("option", { value: String(p.id) }, p.name));
+  const existingOpts = S.boot.personas.map(p => el("option", { value: String(p.id), translate: "no" }, p.name));
   const modeSel = el("select", {}, genOpt, ...existingOpts);
   modeSel.value = state.personaMode === "generate" ? "generate" : String(state.personaId);
 
@@ -653,7 +664,8 @@ function renderWizardCharacters(b, state) {
         }
         knownCb.disabled = !cb.checked;
       };
-      return el("label", { class: "row", style: "gap:6px" }, cb, c.name,
+      return el("label", { class: "row", style: "gap:6px" }, cb,
+        el("span", { translate: "no" }, c.name),
         el("span", { class: "small dim", style: "margin-left:8px" }, "already knows you"),
         knownCb);
     }));
@@ -708,7 +720,7 @@ function renderWizardScenario(b, state) {
   const books = S.boot.lorebooks || [];
   const lore = el("select", { style: "width:100%" },
     el("option", { value: "" }, "— no lorebook —"),
-    ...books.map(book => el("option", { value: String(book.id) }, book.name)));
+    ...books.map(book => el("option", { value: String(book.id), translate: "no" }, book.name)));
   lore.value = state.lorebookId ? String(state.lorebookId) : "";
   const lived = livedLocationControl({
     enabled: !!state.livedLocation,
@@ -858,7 +870,8 @@ function renderCharacterSidebar(list, actions) {
       {
         class: "item library-item",
         tabindex: "0",
-        "aria-label": `Edit ${character.name}`,
+        translate: "no",
+        "aria-label": t("Edit {name}", { name: character.name }),
         onclick: () => charEditor(character),
         onkeydown: event => {
           if (event.target !== event.currentTarget) return;
@@ -868,16 +881,18 @@ function renderCharacterSidebar(list, actions) {
           }
         },
       },
-      el("span", { class: "item-label", title: character.name }, character.name),
+      el("span", { class: "item-label", translate: "no", title: character.name }, character.name),
       el(
         "div",
-        { class: "item-actions", role: "group", "aria-label": `Actions for ${character.name}` },
+        { class: "item-actions", role: "group", translate: "no",
+          "aria-label": t("Actions for {name}", { name: character.name }) },
         el(
           "button",
           {
             class: "icon-button story-action",
-            title: "Export",
-            "aria-label": `Export ${character.name}`,
+            translate: "no",
+            title: t("Export"),
+            "aria-label": t("Export {name}", { name: character.name }),
             onclick: event => {
               event.stopPropagation();
               exportCharacter(character.id);
@@ -889,8 +904,9 @@ function renderCharacterSidebar(list, actions) {
           "button",
           {
             class: "icon-button story-action danger",
-            title: "Delete",
-            "aria-label": `Delete ${character.name}`,
+            translate: "no",
+            title: t("Delete"),
+            "aria-label": t("Delete {name}", { name: character.name }),
             onclick: async event => {
               event.stopPropagation();
 
@@ -937,7 +953,8 @@ function renderPersonaSidebar(list, actions) {
       {
         class: "item library-item",
         tabindex: "0",
-        "aria-label": `Edit ${persona.name}`,
+        translate: "no",
+        "aria-label": t("Edit {name}", { name: persona.name }),
         onclick: () => personaEditor(persona),
         onkeydown: event => {
           if (event.target !== event.currentTarget) return;
@@ -947,16 +964,18 @@ function renderPersonaSidebar(list, actions) {
           }
         },
       },
-      el("span", { class: "item-label", title: persona.name }, persona.name),
+      el("span", { class: "item-label", translate: "no", title: persona.name }, persona.name),
       el(
         "div",
-        { class: "item-actions", role: "group", "aria-label": `Actions for ${persona.name}` },
+        { class: "item-actions", role: "group", translate: "no",
+          "aria-label": t("Actions for {name}", { name: persona.name }) },
         el(
           "button",
           {
             class: "icon-button story-action",
-            title: "Export",
-            "aria-label": `Export ${persona.name}`,
+            translate: "no",
+            title: t("Export"),
+            "aria-label": t("Export {name}", { name: persona.name }),
             onclick: event => {
               event.stopPropagation();
               exportPersona(persona.id);
@@ -968,8 +987,9 @@ function renderPersonaSidebar(list, actions) {
           "button",
           {
             class: "icon-button story-action danger",
-            title: "Delete",
-            "aria-label": `Delete ${persona.name}`,
+            translate: "no",
+            title: t("Delete"),
+            "aria-label": t("Delete {name}", { name: persona.name }),
             onclick: async event => {
               event.stopPropagation();
 
@@ -1009,52 +1029,6 @@ function renderPersonaSidebar(list, actions) {
   );
 }
 
-function renderLegacyLoreSidebar(list, actions) {
-  for (const book of S.boot.lorebooks) {
-    list.append(el(
-      "div",
-      {
-        class: "item",
-        onclick: () => openLoreWorkspace(book.id)
-      },
-      el(
-        "span",
-        { class: "item-label", title: book.name },
-        book.name,
-        " ",
-        el(
-          "span",
-          { class: "badge" },
-          book.book_type || "general"
-        )
-      )
-    ));
-  }
-
-  actions.append(
-    el(
-      "button",
-      {
-        onclick: async () => {
-          const name = await promptModal("Lorebook name?") || "New lorebook";
-          const result = await api("POST", "/api/lorebooks", {
-            name
-          });
-
-          await boot();
-          await openLoreWorkspace(result.id);
-        }
-      },
-      "+ Lorebook"
-    ),
-    el(
-      "button",
-      { onclick: () => importModal("lorebook") },
-      "⤓ Import"
-    )
-  );
-}
-
 // ---- NSFW ----
 
 function updateNSFWBtn() {
@@ -1064,7 +1038,9 @@ function updateNSFWBtn() {
     return;
   }
 
-  button.textContent = "NSFW: " + (S.nsfw ? "ON" : "OFF");
+  // Both states spelled whole: "NSFW: " + "ON" was a string no key equalled,
+  // so the button changed language when pressed (F11).
+  button.textContent = S.nsfw ? "NSFW: ON" : "NSFW: OFF";
   button.classList.toggle("on", S.nsfw);
 }
 
@@ -1135,24 +1111,28 @@ $("#send").onclick = () => {
     return;
   }
 
+  // THE LINE IS PLAYED INTO THE STORY ON SCREEN. While another story loads,
+  // `S.chatId` already names it and the page still shows the old one
+  // (`openChat`), so a line typed for what is shown would be posted to what
+  // is not (frontend audit 2026-11-01, F2). It stays in the composer until
+  // the reader can see where it would go.
+  const shown = S.chat && S.chat.chat ? S.chat.chat.id : null;
+  if (String(shown) !== String(S.chatId)) return;
+
   const input = $("#input");
   const text = input.value.trim();
 
   input.value = "";
   resizeComposer();
 
+  // A run that ends with no turn holding the line -- refused before it
+  // started, or failed before any stage saved -- gives the line back itself
+  // (`giveLineBack` in chat.js), because only it knows which ending it was.
   runStream(
     `/api/chats/${S.chatId}/turns`,
     { input: text, frame_id: S.currentFrameId },
     { chatId: S.chatId, frameId: S.currentFrameId, playerInput: text }
-  ).then(ok => {
-    // The turn never started (e.g. immediate POST failure) -- give the
-    // player their typed input back instead of silently eating it.
-    if (ok === false && !input.value.trim()) {
-      input.value = text;
-      resizeComposer();
-    }
-  });
+  );
 };
 
 $("#stop").onclick = () => {

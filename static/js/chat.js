@@ -150,7 +150,16 @@ async function openChat(id, { sinceTurnId = null } = {}) {
   if (switching) {
     closeAllModals();
     window.clearVitalsHud?.();
+    // The drawer is the outgoing story's too (`openPipeline`).
+    closePipeline();
   }
+  // What the page shows until this load lands, so a load that FAILS can put
+  // `S.chatId` back on it. It used to stay on the story that failed while the
+  // transcript, header and frame pills were still the previous story's -- and
+  // Send posts to `S.chatId`, so the next line typed for the story on screen
+  // was played into the other one (frontend audit 2026-11-01, F2).
+  const shownChatId = S.chatId;
+  const shownFrameId = S.currentFrameId;
   S.chatId = id;
   let chat;
   try {
@@ -160,6 +169,12 @@ async function openChat(id, { sinceTurnId = null } = {}) {
     // A superseded request failing after a newer navigation succeeded is no
     // longer actionable and must not produce a misleading global error toast.
     if (loadSeq !== _chatLoadSeq || S.chatId !== id) return false;
+    if (switching) {
+      S.chatId = shownChatId;
+      S.currentFrameId = shownFrameId;
+      // Cleared above for the story being left; it is the one still shown.
+      window.refreshVitalsHud?.();
+    }
     throw error;
   }
   if (loadSeq !== _chatLoadSeq || S.chatId !== id) return false;
@@ -168,9 +183,11 @@ async function openChat(id, { sinceTurnId = null } = {}) {
   // reply is the whole story and replaces what the page held, as it always
   // has. What is kept is defined by turn id, not by position, so it survives
   // any reordering the payload does.
+  let heldIds = null;
   if (heldTurns && chat.turns_since != null) {
-    chat.turns = heldTurns.filter(t => t.id <= chat.turns_since)
-      .concat(chat.turns || []);
+    const kept = heldTurns.filter(t => t.id <= chat.turns_since);
+    heldIds = new Set(kept.map(t => t.id));
+    chat.turns = kept.concat(chat.turns || []);
   }
 
   S.chat = chat;
@@ -180,12 +197,19 @@ async function openChat(id, { sinceTurnId = null } = {}) {
   const frameStillExists = (chat.frames || []).some(
     frame => (frame.id ?? null) === S.currentFrameId
   );
+  const frameShown = S.currentFrameId;
   if (switching || !frameStillExists) S.currentFrameId = null;
   renderSide();
-  renderChat();
+  // A slice is appended to the transcript on screen (`renderChatAppend`) when
+  // the page is still on the frame it showed; anything else, or a page not
+  // showing what it held, is rebuilt whole.
+  if (!(heldIds && S.currentFrameId === frameShown && renderChatAppend(heldIds))) renderChat();
   // Then populate for the story now open -- including the case where it does
   // not track condition at all and the panel simply stays away.
   window.refreshVitalsHud?.();
+  // A story opened mid-beat -- after a reload, or with the beat played from
+  // another tab -- follows that beat to its end (`followRunningTurn`).
+  if (switching) followRunningTurn();
   // Offered here rather than at boot: opening a story is the moment its own
   // memory bank is about to be read, and the moment the answer is about
   // something the host recognises. `embedding_bank` is null unless this
@@ -498,7 +522,7 @@ function paintProse(host, prose, speech, colors) {
     if (span.start > cursor) {
       appendEmphasized(host, text, runs, cursor, span.start);
     }
-    const mark = el("span", { class: "said", title: span.speaker });
+    const mark = el("span", { class: "said", translate: "no", title: span.speaker });
     appendEmphasized(mark, text, runs, span.start, span.end);
     mark.style.color = color;
     host.append(mark);
@@ -531,18 +555,24 @@ function renderFrameBar() {
   if (frames.length <= 1) return; // just the implicit present -- nothing to switch between
 
   for (const f of frames) {
+    // A frame's label is the story's ("Bubble — Tamamo"); "Present" and the
+    // tooltip are the page's, translated here because the pill opts out.
     bar.append(el("button", {
       class: "frame-pill" + (S.currentFrameId === f.id ? " on" : ""),
-      title: f.id === null ? "The present" : `${f.kind} · ordinal ${f.ordinal}`,
+      translate: "no",
+      title: f.id === null ? t("The present") : t(`${f.kind} · ordinal ${f.ordinal}`),
       onclick: () => switchFrame(f.id)
-    }, f.id === null ? "Present" : f.label));
+    }, f.id === null ? t("Present") : f.label));
   }
 }
 
 function switchFrame(frameId) {
   S.currentFrameId = frameId;
+  // A turn's drawer belongs to the thread it is a turn of.
+  closePipeline();
   renderFrameBar();
   renderChat();
+  followRunningTurn();
 }
 
 // A THREAD THAT HAS REJOINED TAKES NO NEW BEAT (`turn_new` refuses it). A
@@ -595,8 +625,10 @@ function renderChat() {
   if (typeof ambienceResetForRender === "function") ambienceResetForRender();
 
   if (!S.chat) {
-    $("#chatname").textContent = "No story selected";
-    $("#chatname").title = "No story selected";
+    // #chatname holds a story's NAME, so it opts out of the catalog
+    // (index.html); its one interface phrase is translated here instead.
+    $("#chatname").textContent = t("No story selected");
+    $("#chatname").title = t("No story selected");
     const ready = hasDefaultModel();
     M.append(el("div", { class: "empty-state", style: "margin:auto;max-width:440px" },
       el("div", { style: "font-size:15px;margin-bottom:14px" },
@@ -652,93 +684,7 @@ function renderChat() {
   const turnEntries = [];
 
   for (const t of frameTurns) {
-    const isLast = last && t.id === last.id;
-    const d = el("div", {
-      // Story text, not engine text: everything under a turn was written by
-      // a model or by the reader, so the UI catalog must never touch it.
-      // Without this a narrator line containing "Close" rendered 閉じる.
-      translate: "no",
-      class: "turn" + (t.stale ? " stale" : ""),
-      // Findable by id from outside this render. The narration preview needs
-      // it to repaint a turn that is ALREADY on screen instead of appending a
-      // second copy of the same beat below it.
-      "data-turn": t.id,
-    });
-
-    if (t.player_input) {
-      d.append(el("div", { class: "pin" }, txt(t.player_input)));
-    }
-
-    d.append(proseEl(t.prose || "…", t.speech));
-
-    // A dim tells a reader something is off but not what. stale_from names
-    // the earliest step that was re-run without the rest being recomputed.
-    if (t.stale_from) {
-      d.append(el("div", { class: "stale-note small dim" },
-        t.prose_stale
-          ? `Superseded — this text was written before “${t.stale_from.label}” was re-run.`
-          : `Partly out of date — steps from “${t.stale_from.label}” onward were not recomputed.`));
-    }
-
-    const btns = el("div", { class: "tbtns" },
-      el("button", {
-        title: "Pipeline",
-        onclick: () => openPipeline(t.id)
-      }, "📖"),
-      el("button", {
-        title: "Edit input",
-        onclick: () => editTurnInput(t)
-      }, "✏"),
-      el("button", {
-        title: "Edit narration",
-        onclick: () => editTurnProse(t)
-      }, "📝"),
-      el("button", {
-        title: "Branch here",
-        onclick: () => branchTurn(t.id)
-      }, "⎇"));
-
-    if (isLast) {
-      // The rerolls of THIS beat, browsable in place. Rendered empty and
-      // filled asynchronously: the count needs a request, and blocking the
-      // transcript on it would make every story load wait for a control most
-      // turns do not need.
-      d.append(el("div", { class: "rerollnav hidden" }));
-      _mountRerollNav(t.id, d);
-      btns.append(
-        el("button", {
-          title: "Reroll",
-          onclick: () => rerollTurn(t.id)
-        }, "🔁"),
-        el("button", {
-          title: "Delete",
-          onclick: async event => {
-            // Capture the button NOW: event.currentTarget is reset to null
-            // once click dispatch ends, and this handler suspends across
-            // `await confirmModal`, so reading it afterward would be null.
-            const btn = event.currentTarget;
-            if (!await confirmModal("Delete last turn?", { danger: true, confirmLabel: "Delete" })) return;
-            await buttonTask(
-              btn,
-              "…",
-              async () => {
-                const done = await api("DELETE", "/api/turns/" + t.id);
-                await openChat(S.chatId);
-                // The off-screen beats the delete took back with it
-                // (`persist.beat_order`). `t` is the turn in this loop, so
-                // the translator is reached by its global name.
-                const carried = Number((done || {}).carried) || 0;
-                if (carried > 0) {
-                  toast(window.t("This delete took back {count} off-screen beat(s) nobody saw; they are lived again after the next page.",
-                                 { count: carried }), "ok", 8000);
-                }
-              }
-            );
-          }
-        }, "✕"));
-    }
-
-    d.append(btns);
+    const d = turnElement(t, last && t.id === last.id);
     M.append(d);
     turnEntries.push({ el: d, prose: t.prose || "", turnId: t.id });
   }
@@ -758,6 +704,145 @@ function renderChat() {
     M.scrollTo({ top: M.scrollHeight, behavior: "instant" });
   });
   observeVisibleTurn(M, turnEntries);
+}
+
+// One turn of the transcript. The newest turn of the frame carries what only
+// it may have: the reroll arrows and the Reroll and Delete buttons.
+function turnElement(t, isLast) {
+  const d = el("div", {
+    // Story text, not engine text: everything under a turn was written by
+    // a model or by the reader, so the UI catalog must never touch it.
+    // Without this a narrator line containing "Close" rendered 閉じる.
+    translate: "no",
+    class: "turn" + (t.stale ? " stale" : ""),
+    // Findable by id from outside this render. The narration preview needs
+    // it to repaint a turn that is ALREADY on screen instead of appending a
+    // second copy of the same beat below it.
+    "data-turn": t.id,
+  });
+
+  if (t.player_input) {
+    d.append(el("div", { class: "pin" }, txt(t.player_input)));
+  }
+
+  d.append(proseEl(t.prose || "…", t.speech));
+
+  // A dim tells a reader something is off but not what. stale_from names
+  // the earliest step that was re-run without the rest being recomputed.
+  if (t.stale_from) {
+    d.append(el("div", { class: "stale-note small dim" },
+      t.prose_stale
+        ? `Superseded — this text was written before “${t.stale_from.label}” was re-run.`
+        : `Partly out of date — steps from “${t.stale_from.label}” onward were not recomputed.`));
+  }
+
+  const btns = el("div", { class: "tbtns" },
+    el("button", {
+      title: "Pipeline",
+      onclick: () => openPipeline(t.id)
+    }, "📖"),
+    el("button", {
+      title: "Edit input",
+      onclick: () => editTurnInput(t)
+    }, "✏"),
+    el("button", {
+      title: "Edit narration",
+      onclick: () => editTurnProse(t)
+    }, "📝"),
+    el("button", {
+      title: "Branch here",
+      onclick: () => branchTurn(t.id)
+    }, "⎇"));
+
+  if (isLast) {
+    // The rerolls of THIS beat, browsable in place. Rendered empty and
+    // filled asynchronously: the count needs a request, and blocking the
+    // transcript on it would make every story load wait for a control most
+    // turns do not need.
+    d.append(el("div", { class: "rerollnav hidden" }));
+    _mountRerollNav(t.id, d);
+    btns.append(
+      el("button", {
+        title: "Reroll",
+        onclick: () => rerollTurn(t.id)
+      }, "🔁"),
+      el("button", {
+        title: "Delete",
+        onclick: async event => {
+          // Capture the button NOW: event.currentTarget is reset to null
+          // once click dispatch ends, and this handler suspends across
+          // `await confirmModal`, so reading it afterward would be null.
+          const btn = event.currentTarget;
+          if (!await confirmModal("Delete last turn?", { danger: true, confirmLabel: "Delete" })) return;
+          await buttonTask(
+            btn,
+            "…",
+            async () => {
+              const done = await api("DELETE", "/api/turns/" + t.id);
+              await openChat(S.chatId);
+              // The off-screen beats the delete took back with it
+              // (`persist.beat_order`). `t` is the turn in this loop, so
+              // the translator is reached by its global name.
+              const carried = Number((done || {}).carried) || 0;
+              if (carried > 0) {
+                toast(window.t("This delete took back {count} off-screen beat(s) nobody saw; they are lived again after the next page.",
+                               { count: carried }), "ok", 8000);
+              }
+            }
+          );
+        }
+      }, "✕"));
+  }
+
+  d.append(btns);
+  return d;
+}
+
+// A BEAT THAT WAS APPENDED IS APPENDED. `openChat` fetches only the turns
+// after the one the page holds, and `renderChat` then threw the whole
+// transcript away and painted every turn again -- 80-130 ms of main thread a
+// beat on a 300-turn story in Chromium, growing with the story (frontend
+// audit 2026-11-01, E3). The page keeps the turns it holds, redraws the one
+// that WAS newest (its arrows and Delete belong to the newest turn only), and
+// adds the new ones; everything else `renderChat` does is done the same way.
+// Answers false -- and the caller rebuilds whole -- unless the transcript on
+// screen is exactly the turns the page held, in order.
+function renderChatAppend(heldIds) {
+  const M = $("#msgs");
+  if (!S.chat || S.chat.awaiting_begin) return false;
+  const frameTurns = S.chat.turns.filter(t => (t.frame_id ?? null) === S.currentFrameId);
+  const held = frameTurns.filter(t => heldIds.has(t.id));
+  const fresh = frameTurns.filter(t => !heldIds.has(t.id));
+  const shown = [...M.children].filter(node => node.dataset && node.dataset.turn !== undefined);
+  if (shown.length !== held.length
+      || shown.some((node, i) => node.dataset.turn !== String(held[i].id))) return false;
+
+  clearNarrationEarly();
+  updateChatScopedButtons();
+  renderFrameBar();
+  syncComposerToFrame();
+  // The name can have changed in another tab; the header is cheap to keep true.
+  $("#chatname").textContent = S.chat.chat.name;
+  $("#chatname").title = S.chat.chat.name;
+  if (typeof backdropResetForRender === "function") backdropResetForRender();
+  if (typeof ambienceResetForRender === "function") ambienceResetForRender();
+  if (fresh.length) {
+    if (shown.length) shown[shown.length - 1].replaceWith(turnElement(held[held.length - 1], false));
+    fresh.forEach((t, i) => M.append(turnElement(t, i === fresh.length - 1)));
+  }
+
+  const turnEntries = [...M.children]
+    .filter(node => node.dataset && node.dataset.turn !== undefined)
+    .map(node => ({ el: node, turnId: Number(node.dataset.turn) }));
+  // Scrolled at the next frame only. Reading scrollHeight here would force a
+  // layout of the whole transcript straight after the append -- most of what
+  // this path costs (measured ~15 of ~20 ms on 300 turns) -- while the page is
+  // already scrolled where it was, which a rebuild's scrollTop of 0 is not.
+  requestAnimationFrame(() => {
+    M.scrollTo({ top: M.scrollHeight, behavior: "instant" });
+  });
+  observeVisibleTurn(M, turnEntries);
+  return true;
 }
 
 // THE PLAYER SAID GO (`docs/design/DESIGN_ROOM_PRELUDE.md`). What this runs
@@ -882,26 +967,18 @@ const FRIENDLY_STEP_LABELS = {
   background_react: "Bringing the room to life",
 };
 
-// Sub-agents that run INSIDE a stage rather than as their own step. They can
-// dominate a stage's wall-clock (a blurb mint for a new cohort, an image
-// prompt), so the progress line names them instead of leaving the stage
-// looking stuck.
-const FRIENDLY_SUBAGENTS = {
-  blurb_mint: "Giving the extras personalities",
-  scene_life: "Voicing the room",
-  backdrop_prompt: "Describing the room for a picture",
-  ambience_prompt: "Describing the room's sound",
-  background_react: "A bystander reacts",
-};
-
 function friendlyPhase(key, label) {
-  // A stage whose plan label already names the mode (the scene manager) should
-  // keep that name rather than be flattened back to a generic one.
-  if (/^Scene life/.test(String(label || ""))) return "Bringing the room to life";
+  // By the step KEY, never the server's English label: `background_react`
+  // reads the same whichever path (scene manager or bystander) it took.
   if (FRIENDLY_STEP_LABELS[key]) return FRIENDLY_STEP_LABELS[key];
   if (String(key).startsWith("character:")) {
+    // The name, then the catalog's own phrase for the rest -- the entry was
+    // written for exactly this ("Hinami 何をすべきか決めている"), and never
+    // fired because the phrase was joined to the name BEFORE any lookup, into
+    // a string no key could equal (frontend audit 2026-11-01, F11). The name
+    // rides on the server's English label.
     const name = String(label || "").replace(/^Character\s*·\s*/, "").trim();
-    return (name || "A character") + " is deciding what to do";
+    return (name || t("A character")) + " " + t("is deciding what to do");
   }
   // An extension step keeps its own label rather than being flattened: the
   // extension author wrote it, and no table here could name a stage this
@@ -998,13 +1075,29 @@ function liveAppend(key, delta) {
 // genuinely overlap were rendering as an ordinary flat list, so a concurrent
 // pair read as two sequential steps that happened to be fast -- which is why
 // the parallelism was reported as missing when it was running.
+// A step's label in the reader's language. A character's step arrives as
+// "Character · <name>", formatted server-side from STEP_LABELS' template, and
+// the catalog holds only the template -- so it was translated by accident,
+// through an unrelated settings.js template, and a decorated label ("▸ …",
+// "✓ …", "… (stale)") was never translated at all (F11). Rebuilt here from
+// the key and the name; every other label is its own catalog key. The
+// elements that show it opt out of the catalog: the label is translated once,
+// here, and a name in it is never looked up.
+function stepLabel(key, label) {
+  if (String(key).startsWith("character:")) {
+    const name = String(label || "").replace(/^Character\s*·\s*/, "").trim();
+    return t("Character · {name}", { name });
+  }
+  return t(String(label || key || ""));
+}
+
 function liveStep(key, label, group) {
   const L = $("#live");
   const sid = safeId(key);
   const parallel = Array.isArray(group) && group.length > 1;
   L.append(el("div", { class: "lk" + (parallel ? " lk-parallel" : ""),
-                       id: "lk-" + sid },
-    (parallel ? "⇉ " : "▸ ") + label));
+                       id: "lk-" + sid, translate: "no" },
+    (parallel ? "⇉ " : "▸ ") + stepLabel(key, label)));
   L.append(el("pre", { id: "lt-" + sid }));
   L.scrollTop = L.scrollHeight;
 }
@@ -1052,7 +1145,7 @@ function handleEvt(ev) {
     );
   } else if (ev.type === "step") {
     const h = document.getElementById("lk-" + safeId(ev.key));
-    if (h) h.textContent = "✓ " + ev.label;
+    if (h) h.textContent = "✓ " + stepLabel(ev.key, ev.label);
     showNarrationEarly(ev);
   } else if (ev.type === "error") {
     // The engine's sentence translated AS a sentence first: wrapped, a
@@ -1329,6 +1422,16 @@ async function abortActiveRun() {
   return api("POST", `/api/chats/${run.chatId}/abort${query}`);
 }
 
+// HOW A RUN ENDED IS SAID BY ITS OWN STREAM, and only `done` is a success. A
+// pipeline that raises arrives as an in-stream `error` (`_drain_on_own_thread`
+// in web/app.py) and one that is stopped as `aborted` (`run_pipeline`), both on
+// an HTTP 200 -- and a stream that closed was read as a run that succeeded: the
+// "ready" chime sounded, the newest (older) turn was marked just-generated, and
+// the typed line was lost although the server had deleted the turn holding it
+// (frontend audit 2026-11-01, F4). A stream that ends WITHOUT one of the three
+// did not end the run at all: the connection did (`followRun`).
+const RUN_ENDINGS = new Set(["done", "error", "aborted"]);
+
 async function runStream(url, body, context = {}) {
   if (S.busy) return false;
   const run = {
@@ -1343,7 +1446,8 @@ async function runStream(url, body, context = {}) {
     // the preview is honestly uncoloured until it does.
     turnId: context.turnId !== undefined ? context.turnId : null,
     // What the player typed, so a preview of a turn that does not exist yet
-    // can show it above the prose and look like the finished beat.
+    // can show it above the prose and look like the finished beat -- and so a
+    // run that ends with no turn holding it can give it back (`giveLineBack`).
     playerInput: context.playerInput || "",
   };
   // The newest turn this page already holds, read BEFORE the beat runs, and
@@ -1356,52 +1460,181 @@ async function runStream(url, body, context = {}) {
     && Array.isArray(S.chat.turns) && S.chat.turns.length)
     ? S.chat.turns.reduce((m, t) => (t.id > m ? t.id : m), 0)
     : null;
+  beginRun(run);
+  // Unlock the audio context on the gesture that STARTS the wait, not on the
+  // one that ends it -- by then the reader is in another tab and there is no
+  // gesture left to spend. See chime.js.
+  if (typeof chimeArm === "function") chimeArm();
+
+  let ending = null;
+  let opened = false;
+  let ok = true;
+  try {
+    try {
+      await streamPost(url, body, ev => {
+        if (ev && RUN_ENDINGS.has(ev.type)) ending = ev.type;
+        handleEvt(ev);
+      }, () => { opened = true; });
+    } catch (e) {
+      // Refused before it opened (a 409, a 404, no server): there is no run.
+      // After it opened, a broken read is a dropped connection, and the run
+      // goes on without us -- followed below rather than abandoned.
+      if (!opened) toast(`Pipeline failed: ${e.message}`, "err");    // translated where it was made (`streamPost`)
+    }
+    if (opened && ending === null) ending = await followRun(run, heldTurnId);
+    ok = ending === "done";
+  } finally {
+    await finishRun(run, ok, heldTurnId);
+  }
+  return ok;
+}
+
+// The page's half of a run starting: one run at a time, Stop bound to it.
+function beginRun(run) {
   _activeRun = run;
   S.busy = true;
   $("#send").disabled = true;
   $("#stop").classList.remove("hidden");
   liveReset();
   turnStatusStart();
-  // Unlock the audio context on the gesture that STARTS the wait, not on the
-  // one that ends it -- by then the reader is in another tab and there is no
-  // gesture left to spend. See chime.js.
-  if (typeof chimeArm === "function") chimeArm();
+}
 
-  let ok = true;
-  try {
-    await streamPost(url, body, handleEvt);
-  } catch (e) {
-    ok = false;
-    toast(`Pipeline failed: ${e.message}`, "err");    // translated where it was made (`streamPost`)
-  } finally {
-    if (_activeRun === run) _activeRun = null;
-    S.busy = false;
-    $("#send").disabled = false;
-    $("#stop").classList.add("hidden");
-    $("#live").classList.add("hidden");
-    turnStatusStop();
-    if (S.chatId) {
-      try {
-        // The re-render below lands the reader on a brand-new turn. Mark it so
-        // its picture and sound are fetched at once rather than after a dwell:
-        // waiting two seconds for a beat you just watched arrive is a stall.
-        // Only when the reader is still on the story that ran: this marks the
-        // newest turn of whatever renders next as just-generated, and on
-        // another story that commissions a backdrop for a beat nobody just
-        // wrote (A73).
-        if (ok && S.chatId === run.chatId) _freshRunPending = true;
-        await openChat(S.chatId, (ok && heldTurnId && S.chatId === run.chatId)
-          ? { sinceTurnId: heldTurnId } : {});
-        // After the re-render, so the beat is on screen when it sounds. Only
-        // on success: a failure already raised a toast, and a chime that means
-        // "ready" must not also mean "gone wrong".
-        if (ok && typeof chimePlay === "function") chimePlay();
-      } catch (e) {
-        toast("Could not refresh story.", "err");
-      }
+// The page's half of a run ending, however it ended.
+async function finishRun(run, ok, heldTurnId) {
+  if (_activeRun === run) _activeRun = null;
+  S.busy = false;
+  $("#send").disabled = false;
+  $("#stop").classList.add("hidden");
+  $("#live").classList.add("hidden");
+  turnStatusStop();
+  if (S.chatId) {
+    try {
+      // The re-render below lands the reader on a brand-new turn. Mark it so
+      // its picture and sound are fetched at once rather than after a dwell:
+      // waiting two seconds for a beat you just watched arrive is a stall.
+      // Only when the reader is still on the story that ran: this marks the
+      // newest turn of whatever renders next as just-generated, and on
+      // another story that commissions a backdrop for a beat nobody just
+      // wrote (A73).
+      if (ok && S.chatId === run.chatId) _freshRunPending = true;
+      await openChat(S.chatId, (ok && heldTurnId && S.chatId === run.chatId)
+        ? { sinceTurnId: heldTurnId } : {});
+      // After the re-render, so the beat is on screen when it sounds. Only
+      // on success: a failure already raised a toast, and a chime that means
+      // "ready" must not also mean "gone wrong".
+      if (ok && typeof chimePlay === "function") chimePlay();
+    } catch (e) {
+      toast("Could not refresh story.", "err");
     }
   }
-  return ok;
+  if (!ok) giveLineBack(run, heldTurnId);
+}
+
+// THE PLAYER'S LINE COMES BACK WHEN NO TURN KEPT IT. A run that died before
+// any stage saved is deleted server-side (`_discard_stepless_turn`), and its
+// line with it; one that died later left a resumable turn that holds the line,
+// and putting it back in the box as well would play it twice. Read from the
+// refreshed transcript, and only for the story and frame the line was typed
+// in -- anywhere else the composer belongs to another story.
+function giveLineBack(run, heldTurnId) {
+  if (!run.playerInput || !inCurrentScope(run)) return;
+  const kept = S.chat && (S.chat.turns || []).some(turn =>
+    (heldTurnId == null || turn.id > heldTurnId)
+    && (turn.player_input || "") === run.playerInput);
+  if (kept) return;
+  const input = $("#input");
+  if (!input || input.value.trim()) return;
+  input.value = run.playerInput;
+  if (typeof resizeComposer === "function") resizeComposer();
+}
+
+// A RUN THE PAGE LOST ITS STREAM TO IS STILL A RUN. The server carries on
+// after a dropped connection (`_detach` in web/app.py says so), and the page
+// used to give up on it: Stop hidden, Send re-enabled, the line put back -- so
+// Send met a 409, or played the line twice once the turn finished (frontend
+// audit 2026-11-01, F6). It is followed from `GET /api/turns/{tid}/status`
+// instead, with Stop still bound to it, until the server says it ended.
+// Two rates, named because they are numbers someone may tune: the poll while
+// the server answers, and the ceiling the wait doubles to while it does not.
+const RUN_FOLLOW_POLL_MS = 2000;
+const RUN_FOLLOW_POLL_MAX_MS = 30000;
+
+// Resolves "done" (committed), "ended" (stopped with a turn left to resume)
+// or "gone" (nothing saved: the server discarded the turn).
+async function followRun(run, heldTurnId, phase = "Connection lost — following this beat on the server…") {
+  let tid = run.turnId;
+  let wait = RUN_FOLLOW_POLL_MS;
+  for (;;) {
+    const said = $("#turnstatus-phase");
+    if (said) said.textContent = t(phase);
+    try {
+      if (tid == null) {
+        tid = await newestTurnOfRun(run, heldTurnId);
+        if (tid == null) return followEnded("gone");
+      }
+      const status = await apiOrNull(`/api/turns/${tid}/status`);
+      // 404 is an answer: the run saved no stage and its row was discarded.
+      if (status === null) return followEnded("gone");
+      if (!status.running) return status.committed ? "done" : followEnded("ended");
+      wait = RUN_FOLLOW_POLL_MS;
+    } catch (e) {
+      // No answer at all: the connection is still down, or the server is
+      // restarting. Keep asking, less often.
+      wait = Math.min(RUN_FOLLOW_POLL_MAX_MS, wait * 2);
+    }
+    await new Promise(resolve => setTimeout(resolve, wait));
+  }
+}
+
+function followEnded(ending) {
+  // The stream that would have said why is gone; the transcript shows where.
+  toast("This beat stopped before it finished.", "warn");
+  return ending;
+}
+
+// A turn row exists from the moment the stream opens (`turn_new` writes it
+// first), but a composer run learns its id only from `done`. The run's own
+// turn is the newest one past what the page held, in the run's frame.
+async function newestTurnOfRun(run, heldTurnId) {
+  const story = await apiOrNull(`/api/chats/${run.chatId}`
+    + (heldTurnId != null ? "?since_turn_id=" + heldTurnId : ""));
+  if (story === null) return null;
+  const fresh = (story.turns || []).filter(
+    turn => heldTurnId == null || turn.id > heldTurnId);
+  const own = fresh.filter(
+    turn => (turn.frame_id ?? null) === (run.frameId ?? null));
+  return (own.length ? own : fresh).reduce(
+    (best, turn) => (best == null || turn.id > best ? turn.id : best), null);
+}
+
+// A BEAT THIS PAGE DID NOT START CAN STILL BE RUNNING: the page was reloaded
+// mid-turn, or the beat was played from another tab or detached (`?detach=1`).
+// Only the newest beat of the frame on screen can be, and only while it has no
+// prose; its status says whether it is, and a running one is followed exactly
+// as a lost stream is -- Stop bound to it, Send held, the transcript refreshed
+// when it ends (F6, the reload half).
+async function followRunningTurn() {
+  if (S.busy || !S.chat) return;
+  const scope = { chatId: S.chatId, frameId: S.currentFrameId };
+  const shown = (S.chat.turns || []).filter(
+    turn => (turn.frame_id ?? null) === (scope.frameId ?? null));
+  const last = shown[shown.length - 1];
+  if (!last || last.prose) return;
+  let status;
+  try {
+    status = await apiOrNull(`/api/turns/${last.id}/status`);
+  } catch (e) {
+    return;
+  }
+  if (!status || !status.running || S.busy || !inCurrentScope(scope)) return;
+  const run = { ...scope, turnId: last.id, playerInput: "" };
+  beginRun(run);
+  let ok = false;
+  try {
+    ok = (await followRun(run, null, "Following this beat on the server…")) === "done";
+  } finally {
+    await finishRun(run, ok, null);
+  }
 }
 
 // Rerolling/resuming/rerunning-from-a-stage all restore world/memory/lore
@@ -1470,13 +1703,13 @@ function importChatModal() {
   fileIn.onchange = () => {
     const f = fileIn.files[0];
     if (!f) return;
-    status.textContent = "Reading " + f.name + "…";
+    status.textContent = t("Reading {file}…", { file: f.name });
     status.className = "small dim";
     const r = new FileReader();
     r.onload = () => {
       try {
         fileContent = JSON.parse(r.result);
-        status.textContent = "Loaded " + f.name + " ✓";
+        status.textContent = t("Loaded {file} ✓", { file: f.name });
         status.className = "small";
       } catch (e) {
         fileContent = null;
@@ -2038,7 +2271,7 @@ function renderEngineNotes(box, content) {
   if (!notes) return;
   if (Array.isArray(notes.parallel_with) && notes.parallel_with.length) {
     box.append(el("div", { class: "dim" },
-      "⇉ ran concurrently with " + notes.parallel_with.join(", ")));
+      t("⇉ ran concurrently with {steps}", { steps: notes.parallel_with.join(", ") })));
   }
   // The step's per-call ledger (runtime._with_engine_notes `llm_calls`):
   // one line per provider call, so a slow stage explains itself from the
@@ -2067,7 +2300,7 @@ function renderEngineNotes(box, content) {
 
 // The drawer's map panel (see `openPipeline`). Lazy: nothing is fetched
 // until the panel is opened.
-function pipelineMapPanel(p) {
+function pipelineMapPanel(p, scope) {
   const outcome = (p.steps || []).find(s => s.key === "perception_outcome");
   let room = null;
   try {
@@ -2093,11 +2326,11 @@ function pipelineMapPanel(p) {
     loaded = true;
     host.append(el("div", { class: "small dim" }, "Loading…"));
     try {
-      const index = await api("GET", `/api/chats/${S.chatId}/rooms`);
-      const first = await api("GET", `/api/chats/${S.chatId}/rooms/${encodeURIComponent(room)}/grid`);
+      const index = await api("GET", `/api/chats/${scope.chatId}/rooms`);
+      const first = await api("GET", `/api/chats/${scope.chatId}/rooms/${encodeURIComponent(room)}/grid`);
       const player = Object.entries(first.bodies || {}).find(([, b]) => b.kind === "player");
       const view = player
-        ? await api("GET", `/api/chats/${S.chatId}/rooms/${encodeURIComponent(room)}/grid?sight_from=${encodeURIComponent(player[0])}`)
+        ? await api("GET", `/api/chats/${scope.chatId}/rooms/${encodeURIComponent(room)}/grid?sight_from=${encodeURIComponent(player[0])}`)
         : first;
       // THE DRAWER'S MAP IS READ ONLY. The room renderer asks its context
       // for the room's slice and for the writers its drags and clicks call,
@@ -2152,22 +2385,50 @@ function pipelineMapPanel(p) {
       }
     } catch (e) {
       host.innerHTML = "";
-      host.append(el("div", { class: "small dim" }, "Map unavailable: " + (e?.message || e)));
+      host.append(el("div", { class: "small dim" },
+        t("Map unavailable:") + " " + (e?.message || e)));
     }
   });
   return panel;
 }
 
 // ---- Pipeline drawer ----
-async function openPipeline(tid) {
+//
+// THE DRAWER BELONGS TO THE STORY AND FRAME IT WAS OPENED IN. It used to
+// capture neither, and nothing closed it on a switch: open story A's drawer,
+// switch to B, press "Run from here", and the run was stamped with B -- Stop
+// posted B's abort, A's narration preview was appended into B's transcript,
+// and B's newest turn was marked just-generated (frontend audit 2026-11-01,
+// F5; the A73 rule at `inCurrentScope`, missed on this surface). So the scope
+// is captured once, every run, export and map read here carries it, and a
+// story or frame switch closes the drawer (`closePipeline`).
+//
+// Only the newest open may draw: the payload carries every variant's
+// reasoning, so a fetch takes seconds, and two quick 📖 clicks used to stack
+// two turns' steps in one drawer (F16).
+let _pipelineSeq = 0;
+
+function closePipeline() {
+  _pipelineSeq++;
   const D = $("#drawer");
-  D.classList.remove("hidden");
+  if (!D) return;
+  D.classList.add("hidden");
   D.innerHTML = "";
+}
+
+async function openPipeline(tid, scope = { chatId: S.chatId, frameId: S.currentFrameId }) {
+  const D = $("#drawer");
+  const seq = ++_pipelineSeq;
+  // A re-open after a run the reader has since left behind stays closed.
+  if (!inCurrentScope(scope)) return;
+  D.classList.remove("hidden");
 
   const p = await api(
     "GET",
     `/api/turns/${tid}/pipeline`
   );
+  if (seq !== _pipelineSeq || !inCurrentScope(scope)) return;
+  D.innerHTML = "";
 
   const headerRow = el(
     "div",
@@ -2222,8 +2483,8 @@ async function openPipeline(tid) {
           const btn = event.currentTarget;
           btn.disabled = true;
           try {
-            const d = await api("GET", `/api/chats/${S.chatId}/debug`);
-            downloadJSON(d, `chat-${S.chatId}-debug.json`);
+            const d = await api("GET", `/api/chats/${scope.chatId}/debug`);
+            downloadJSON(d, "chat-" + scope.chatId + "-debug.json");
             toast(
               d.turns_exported < d.turns_total
                 ? `Exported the last ${d.turns_exported} of `
@@ -2260,9 +2521,9 @@ async function openPipeline(tid) {
                   await runStream(
                     `/api/turns/${tid}/resume`,
                     {},
-                    { turnId: tid }
+                    Object.assign({ turnId: tid }, scope)
                   );
-                  await openPipeline(tid);
+                  await openPipeline(tid, scope);
                 }
               );
             }
@@ -2274,7 +2535,7 @@ async function openPipeline(tid) {
       "button",
       {
         title: "Close pipeline",
-        onclick: () => D.classList.add("hidden")
+        onclick: () => closePipeline()
       },
       "✕"
     )
@@ -2289,7 +2550,7 @@ async function openPipeline(tid) {
   // missing from the page can be read off the cone, the line and the ear
   // in one glance instead of a probe script. Drawn from the scene as it
   // stands now: exact for the latest turn, which is the one anyone reruns.
-  D.append(pipelineMapPanel(p));
+  D.append(pipelineMapPanel(p, scope));
 
   // The server computes `blocked_by_other_frame` separately from `editable`
   // for exactly this: "so the UI can explain WHY a frame-latest turn is still
@@ -2455,7 +2716,7 @@ async function openPipeline(tid) {
                   variant_id: variants[cur].id
                 }
               );
-              await openPipeline(tid);
+              await openPipeline(tid, scope);
             }
           },
           "✔ use"
@@ -2478,9 +2739,9 @@ async function openPipeline(tid) {
               await runStream(
                 `/api/steps/${s.id}/reroll`,
                 {},
-                { turnId: tid }
+                Object.assign({ turnId: tid }, scope)
               );
-              await openPipeline(tid);
+              await openPipeline(tid, scope);
             }
           },
           "🔁 Reroll only"
@@ -2495,9 +2756,9 @@ async function openPipeline(tid) {
               await runStream(
                 `/api/turns/${tid}/rerun`,
                 { from_key: s.key },
-                { turnId: tid }
+                Object.assign({ turnId: tid }, scope)
               );
-              await openPipeline(tid);
+              await openPipeline(tid, scope);
             }
           },
           "▶ Run from here"
@@ -2556,7 +2817,7 @@ async function openPipeline(tid) {
                             );
 
                             closeModal();
-                            await openPipeline(tid);
+                            await openPipeline(tid, scope);
                           }
                         },
                         "Save"
@@ -2581,9 +2842,9 @@ async function openPipeline(tid) {
       },
       el(
         "h4",
-        {},
-        s.label
-          + (s.stale ? "  (stale)" : "")
+        { translate: "no" },
+        stepLabel(s.key, s.label)
+          + (s.stale ? "  " + t("(stale)") : "")
       ),
       notes,
       controls,
@@ -2643,19 +2904,20 @@ async function relationshipModal(p, boundChatId = null) {
     body.innerHTML = "";
     const names = Object.keys(rels || {});
     if (!names.length) {
-      body.append(emptyState(p.name + " hasn't formed any tracked opinions of anyone yet."));
+      body.append(el("div", { class: "empty-state", translate: "no" },
+        p.name + " " + t("hasn't formed any tracked opinions of anyone yet.")));
       return;
     }
-    body.append(el("div", { class: "small dim", style: "margin-bottom:10px" },
-      "How " + p.name + " currently feels about each character they've interacted with — read-only, drawn from the same data the character agent itself sees each turn."));
+    body.append(el("div", { class: "small dim", style: "margin-bottom:10px", translate: "no" },
+      t("How {name} currently feels about each character they've interacted with — read-only, drawn from the same data the character agent itself sees each turn.", { name: p.name })));
     for (const name of names) {
       const r = rels[name];
       body.append(el("div", { class: "card" },
         el("div", { class: "row" },
-          el("b", {}, name.replace(/_/g, " ")),
+          el("b", { translate: "no" }, name.replace(/_/g, " ")),
           el("span", { class: "spacer" }),
           r.last_interaction_turn != null
-            ? el("span", { class: "badge" }, "last: turn " + r.last_interaction_turn)
+            ? el("span", { class: "badge" }, t("last: turn") + " " + r.last_interaction_turn)
             : null),
         relMeter("trust", r.trust, true),
         relMeter("familiarity", r.familiarity, false),
@@ -2670,7 +2932,7 @@ async function relationshipModal(p, boundChatId = null) {
         // with it.
         r.salient_event
           ? el("div", { class: "small dim", style: "margin-top:4px" },
-              "last shift triggered by event " + r.salient_event)
+              t("last shift triggered by event {event}", { event: r.salient_event }))
           : null));
     }
   });
@@ -2827,13 +3089,13 @@ function importCharacterMemoriesModal() {
   const fileIn = el("input", { type: "file", accept: ".json,application/json", style: "display:none" });
   const drop = el("div", { class: "filedrop", onclick: () => fileIn.click() },
     "Choose a memories export",
-    el("div", { class: "small", style: "margin-top:5px" },
-      "Adds to " + p.name + "'s existing memories -- never replaces or deletes anything."));
+    el("div", { class: "small", style: "margin-top:5px", translate: "no" },
+      t("Adds to {name}'s existing memories -- never replaces or deletes anything.", { name: p.name })));
 
   fileIn.onchange = () => {
     const f = fileIn.files[0];
     if (!f) return;
-    status.textContent = "Reading " + f.name + "…";
+    status.textContent = t("Reading {file}…", { file: f.name });
     status.className = "small dim";
     const r = new FileReader();
     r.onload = () => {
@@ -2921,7 +3183,7 @@ async function loadMemoryBrowse() {
   } catch (e) {
     ui.listBox.innerHTML = "";
     ui.listBox.append(
-      emptyState("Load error: " + e.message));
+      emptyState(t("Load error:") + " " + e.message));
     toast("Could not load memories.", "err");
   }
 }
@@ -2954,31 +3216,32 @@ function renderMemorySummary() {
       class: "section-title",
       style: "margin-top:0"
     }, "Long-term autobiographical summary"),
-    el("div", { class: "memory-summary-text" },
-      s.summary || "No autobiographical summary yet."),
+    s.summary
+      ? el("div", { class: "memory-summary-text", translate: "no" }, s.summary)
+      : el("div", { class: "memory-summary-text" }, "No autobiographical summary yet."),
     (s.key_phrases || []).length
       ? el("div", { style: "margin-top:9px" },
           el("div", { class: "small dim" }, "Retrieval cues"),
           el("div", { class: "mem-scroll" },
             ...(s.key_phrases || []).map(p =>
-              el("span", { class: "chip" }, p))))
+              el("span", { class: "chip", translate: "no" }, p))))
       : null,
     (s.unresolved_threads || []).length
       ? el("div", { style: "margin-top:9px" },
           el("div", { class: "small dim" }, "Unresolved threads"),
           el("div", { class: "mem-scroll" },
-            ...(s.unresolved_threads || []).map(t =>
+            ...(s.unresolved_threads || []).map(thread =>
               el("div", {
                 class: "small",
+                translate: "no",
                 style: "margin-top:4px"
-              }, "• " + t))))
+              }, "• " + thread))))
       : null,
     el("div", {
       class: "small dim",
       style: "margin-top:10px"
     }, s.updated
-      ? "Summary through turn "
-        + (s.end_turn_idx ?? 0)
+      ? t("Summary through turn {n}", { n: s.end_turn_idx ?? 0 })
       : "Not consolidated"));
 }
 
@@ -3011,10 +3274,11 @@ function renderMemoryList() {
   );
   ui.listBox.innerHTML = "";
   const mode = ui.layout._mode || "browse";
-  ui.resultLabel.textContent =
-    `${mems.length} `
-    + (mems.length === 1 ? "memory" : "memories")
-    + (mode === "search" ? " recalled" : "");
+  // One sentence per form, looked up whole (F11): "12 " + "memories" +
+  // " recalled" was a string no catalog key could equal.
+  ui.resultLabel.textContent = t(mode === "search"
+    ? (mems.length === 1 ? "{n} memory recalled" : "{n} memories recalled")
+    : (mems.length === 1 ? "{n} memory" : "{n} memories"), { n: mems.length });
 
   if (!mems.length) {
     ui.listBox.append(emptyState(
@@ -3026,12 +3290,12 @@ function renderMemoryList() {
 
   let lastTurn = Symbol("none");
   for (const m of mems) {
-    const t = m.turn_idx ?? null;
-    if (t !== lastTurn) {
+    const turnIdx = m.turn_idx ?? null;
+    if (turnIdx !== lastTurn) {
       ui.listBox.append(el("div",
         { class: "memory-turn-group" },
-        t === null ? "Unplaced" : "Turn " + t));
-      lastTurn = t;
+        turnIdx === null ? "Unplaced" : t("Turn") + " " + turnIdx));
+      lastTurn = turnIdx;
     }
     ui.listBox.append(memoryCard(m));
   }
@@ -3171,6 +3435,7 @@ function memoryCard(m) {
       el("span", { class: "badge" }, prov),
       el("span", {
         class: "memory-gist-line",
+        translate: "no",
         title: gist
       }, gist),
       m.score !== undefined
@@ -3255,7 +3520,7 @@ async function runMemorySearch() {
   } catch (e) {
     ui.listBox.innerHTML = "";
     ui.listBox.append(
-      emptyState("Search error: " + e.message));
+      emptyState(t("Search error:") + " " + e.message));
     toast("Search failed.", "err");
   }
 }
@@ -3381,15 +3646,20 @@ function backfillMemoryEras() {
   const cid = memCharId();
   if (!cid) return;
   const name = S.memoryCharacter?.name || "character";
+  // The story and character this job runs for: the reopen below happens
+  // minutes later, and reopening `S.memoryCharacter` in whatever story is
+  // open by then showed one story's character in another (F5).
+  const chatId = S.chatId;
+  const who = S.memoryCharacter;
   // backgroundTask closes the modal and onSuccess reopens it, exactly as
   // Consolidate does -- one long model job, the panel rebuilt from the result.
-  backgroundTask(`Rebuilding ${name + "'s earlier eras"}`,
+  backgroundTask(t("Rebuilding {name}'s earlier eras", { name }),
     () => api("POST",
-      `/api/chats/${S.chatId}/characters/${cid}/memories/backfill`, {}),
+      `/api/chats/${chatId}/characters/${cid}/memories/backfill`, {}),
     {
       onSuccess: async () => {
-        if (S.memoryCharacter)
-          await memModal(S.memoryCharacter);
+        if (who && S.chatId === chatId)
+          await memModal(who);
       },
       successMessage: r =>
         r?.windows
@@ -3403,14 +3673,17 @@ function consolidateMemories() {
   const cid = memCharId();
   if (!cid) return;
   const name = S.memoryCharacter?.name || "character";
-  backgroundTask(`Consolidating ${name + "'s memory"}`,
+  // See backfillMemoryEras: the reopen belongs to the story the job ran in.
+  const chatId = S.chatId;
+  const who = S.memoryCharacter;
+  backgroundTask(t("Consolidating {name}'s memory", { name }),
     () => api("POST",
-      `/api/chats/${S.chatId}/characters/${cid}/memories/consolidate`,
+      `/api/chats/${chatId}/characters/${cid}/memories/consolidate`,
       { archive_old: true }),
     {
       onSuccess: async () => {
-        if (S.memoryCharacter)
-          await memModal(S.memoryCharacter);
+        if (who && S.chatId === chatId)
+          await memModal(who);
       },
       successMessage: r =>
         `Consolidated ${r?.memory_count || 0} memories.`,
@@ -3460,7 +3733,7 @@ async function previewMemoryContext() {
       JSON.stringify(ctx, null, 2)));
   } catch (e) {
     preview.innerHTML = "";
-    preview.append(emptyState("Error: " + e.message));
+    preview.append(emptyState(t("Error:") + " " + e.message));
   }
 }
 
@@ -3480,8 +3753,7 @@ async function chatPH(p, boundChatId = null) {
   modal(`Private history (this story) — ${p.name}`, b => {
     b.append(
       el("div", { class: "small dim" },
-        "Source: " + d.source
-        + ". Saving stores a story-local override."),
+        t("Source:") + " " + d.source + t(". Saving stores a story-local override.")),
       ph.node,
       el("div", {
         class: "row",
@@ -3510,7 +3782,7 @@ async function personaPH(boundChatId = null) {
   modal("Persona private history (this story)", b => {
     b.append(
       el("div", { class: "small dim" },
-        "Source: " + d.source + "."),
+        t("Source:") + " " + d.source + "."),
       ph.node,
       el("div", {
         class: "row",

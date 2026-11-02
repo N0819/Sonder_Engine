@@ -16,6 +16,14 @@ function txt(value) {
 
 function el(tag, attrs = {}, ...kids) {
   const e = document.createElement(tag);
+  // An element that opts out of the catalog opts out for its chrome
+  // attributes too. Its tooltip used to be translated here even under
+  // `translate: "no"` -- the walk in i18n-core.js has skipped such a subtree's
+  // attributes since B25, but this loop runs first -- so a name in a title
+  // came out translated (frontend audit 2026-11-01, F8). A caller mixing
+  // chrome and a name on one opted-out element translates the chrome itself:
+  // `title: t("Rename")`, `"aria-label": t("Rename {name}", { name })`.
+  const optedOut = attrs.translate === "no" || "data-no-i18n" in attrs;
   for (const [k, v] of Object.entries(attrs)) {
     if (k === "class") e.className = v;
     else if (k.startsWith("on")) e.addEventListener(k.slice(2), v);
@@ -23,7 +31,7 @@ function el(tag, attrs = {}, ...kids) {
     else if (k === "selected") e.selected = true;
     else if (k === "checked") e.checked = true;
     else if (v !== null && v !== false) {
-      const value = ["title", "aria-label", "placeholder", "alt"].includes(k)
+      const value = !optedOut && ["title", "aria-label", "placeholder", "alt"].includes(k)
         ? t(String(v)) : v;
       e.setAttribute(k, value);
     }
@@ -199,18 +207,75 @@ function _confirmOverlay(buildBody, onKeydown) {
       + "display:flex;align-items:center;justify-content:center;animation:fade-in .12s ease",
   });
   const box = el("div", {
+    role: "dialog", "aria-modal": "true",
     style: "width:min(380px,92vw);background:var(--bg2);border:1px solid var(--bd);"
       + "border-radius:12px;padding:16px;box-shadow:var(--shadow)",
   });
   backdrop.append(box);
   document.body.append(backdrop);
+  // Handed back on close: a keyboard reader returns to where they asked.
+  const opener = document.activeElement;
+  // What Tab can reach inside the box, by the browser's own measure rather
+  // than a selector list that has to name every focusable kind.
+  const focusables = () => [...box.querySelectorAll("*")]
+    .filter(node => node.tabIndex >= 0 && !node.disabled);
 
-  const cleanup = () => { backdrop.remove(); document.removeEventListener("keydown", keyHandler) };
-  const keyHandler = e => {
-    if (e.key === "Escape") onKeydown?.dismiss();
-    if (e.key === "Enter") onKeydown?.confirm();
+  const cleanup = () => {
+    backdrop.remove();
+    document.removeEventListener("keydown", keyHandler, true);
+    if (opener && opener.isConnected && typeof opener.focus === "function") opener.focus();
   };
-  document.addEventListener("keydown", keyHandler);
+  // THE KEYBOARD ANSWERS THE CONTROL THAT HAS FOCUS. Enter used to confirm
+  // whatever had focus -- this listener runs before a focused button's own
+  // activation -- so Enter on Cancel (or on "Not now" for the paid embeddings
+  // rebuild) confirmed the delete; and nothing kept focus in the box, so Tab
+  // walked out to the sidebar and Enter there confirmed AND opened a story
+  // (frontend audit 2026-11-01, F3). Capture phase, so a control behind the
+  // overlay never sees a key meant for the decision in front of it.
+  const keyHandler = e => {
+    // Only the topmost overlay answers the keyboard.
+    const overlays = document.querySelectorAll(".confirm-overlay");
+    if (overlays[overlays.length - 1] !== backdrop) return;
+    const inside = box.contains(e.target);
+    if (e.key === "Escape") {
+      e.preventDefault();
+      e.stopPropagation();
+      onKeydown?.dismiss();
+      return;
+    }
+    if (e.key === "Tab") {
+      const items = focusables();
+      if (!items.length) { e.preventDefault(); return; }
+      const first = items[0], last = items[items.length - 1];
+      if (!inside) {
+        e.preventDefault();
+        (e.shiftKey ? last : first).focus();
+      } else if (e.shiftKey && e.target === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && e.target === last) {
+        e.preventDefault();
+        first.focus();
+      }
+      return;
+    }
+    if (e.key !== "Enter") return;
+    if (!inside) {
+      // Nothing behind a decision is reachable from it.
+      e.preventDefault();
+      e.stopPropagation();
+      focusables()[0]?.focus();
+      return;
+    }
+    // A focused button (or link) answers by its own activation, and a
+    // textarea takes the newline; a field or a toggle submits the dialog.
+    const target = e.target;
+    if (target instanceof HTMLButtonElement || target instanceof HTMLAnchorElement
+        || target instanceof HTMLTextAreaElement) return;
+    e.preventDefault();
+    onKeydown?.confirm();
+  };
+  document.addEventListener("keydown", keyHandler, true);
   backdrop.addEventListener("click", e => { if (e.target === backdrop) onKeydown?.dismiss() });
 
   buildBody(box);
@@ -773,8 +838,10 @@ function fCoveragePicker(covers, auto, attaches, coveredZones = {}) {
     zoneBoxes.forEach((zoneMap, region) => zoneMap.forEach(b => {
       b.disabled = autoBox.checked || !boxes.get(region).checked;
     }));
-    summary.textContent = (attachBox.checked ? "worn at: " : "covers: ") + (
-      autoBox.checked ? "auto" : (on.length ? on.join(", ") : "nothing yet"));
+    // One sentence per form, the regions filled in after the lookup (F11).
+    summary.textContent = t(attachBox.checked ? "worn at: {regions}" : "covers: {regions}", {
+      regions: autoBox.checked ? t("auto") : (on.length ? on.join(", ") : t("nothing yet")),
+    });
   };
   autoBox.onchange = sync;
   attachBox.onchange = sync;
@@ -808,7 +875,7 @@ function fCoveragePicker(covers, auto, attaches, coveredZones = {}) {
       el("div", { class: "row small", style: "flex-wrap:wrap;gap:8px;margin-top:6px" },
         el("span", { class: "dim" },
           (attireRegionZones()[region]
-            ? region + " zones still covered:"
+            ? region + " " + t("zones still covered:")
             : "still covering:")),
         ...[...zoneMap.entries()].map(([zone, box]) =>
           el("label", {}, box, " " + zone)))),
@@ -1204,15 +1271,30 @@ function phEditor(entries, withAbout) {
 }
 
 // ---- Model picker ----
+// ONE REQUEST PER CATALOGUE AT A TIME. Opening ⚙ API builds a combobox per
+// role row and each primes its catalogue, and the cache below filled only once
+// a request RESOLVED -- so every row started its own, about 17 identical
+// upstream requests for catalogues of 336-652 models with no server cache
+// behind them (frontend audit 2026-11-01, settings/world E2). The in-flight
+// promise is shared; a failure is answered with an empty list, as before, and
+// is not cached, so the next open asks again.
+const _catalogueRequests = new Map();
+
+function cachedCatalogue(cache, pid, url) {
+  if (cache[pid]) return Promise.resolve(cache[pid]);
+  if (_catalogueRequests.has(url)) return _catalogueRequests.get(url);
+  const request = api("GET", url)
+    .then(r => { cache[pid] = r.models; return r.models; })
+    .catch(() => [])
+    .finally(() => _catalogueRequests.delete(url));
+  _catalogueRequests.set(url, request);
+  return request;
+}
 async function fetchModels(pid) {
-  if (S.models[pid]) return S.models[pid];
-  try { const r = await api("GET", `/api/providers/${pid}/models`); S.models[pid] = r.models; return r.models }
-  catch (e) { return [] }
+  return cachedCatalogue(S.models, pid, `/api/providers/${pid}/models`);
 }
 async function fetchImageModels(pid) {
-  if (S.imageModels[pid]) return S.imageModels[pid];
-  try { const r = await api("GET", `/api/providers/${pid}/image_models`); S.imageModels[pid] = r.models; return r.models }
-  catch (e) { return [] }
+  return cachedCatalogue(S.imageModels, pid, `/api/providers/${pid}/image_models`);
 }
 // `opts.fetch`/`opts.cache` let the same widget drive a different catalogue
 // (image models) without duplicating the dropdown, filtering and

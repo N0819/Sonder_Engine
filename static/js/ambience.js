@@ -71,7 +71,6 @@ const AMB = {
   blocked: false,        // playback refused pending a user gesture
   muted: false,
   volume: 0.35,
-  primed: null,          // one element touched by the unlock gesture
 };
 
 // Long enough that one room becomes another rather than cutting, short enough
@@ -90,8 +89,30 @@ const AMB_POLL_MS = 2500, AMB_POLL_LIMIT = 30;
 // nothing is commissioned until the reader has actually stopped to read.
 const AMB_SETTLE_MS = 260, AMB_DWELL_MS = 2000;
 
+// The reader's own knobs live in localStorage, which private windows and
+// hardened profiles refuse -- by throwing, or by being null. Read bare at the
+// bottom of this file, that throw stopped the file before its four controls
+// were bound (frontend audit 2026-11-01, frontend_lorebooks_editors F1; the
+// same throw in chime.js failed every request). A refused store costs the
+// knob its memory and nothing else.
+function ambienceStoredRaw(key) {
+  try {
+    return localStorage.getItem("ambience." + key);
+  } catch (e) {
+    return null;
+  }
+}
+
+function ambienceStore(key, value) {
+  try {
+    localStorage.setItem("ambience." + key, value);
+  } catch (e) {
+    // The knob still works for this page.
+  }
+}
+
 function ambienceStored(key, fallback) {
-  const raw = localStorage.getItem("ambience." + key);
+  const raw = ambienceStoredRaw(key);
   if (raw === null) return fallback;
   const num = parseFloat(raw);
   return Number.isFinite(num) ? num : fallback;
@@ -120,14 +141,6 @@ function entryAudios(entry) {
   return [entry.audio, entry.spare].filter(Boolean);
 }
 
-// Kept for the gesture that unlocks autoplay: a click has to touch an audio
-// element synchronously, before any await, or some engines refuse the later
-// play() as un-gestured.
-function ambiencePlayers() {
-  if (!AMB.primed) AMB.primed = ambienceElement("");
-  return [AMB.primed];
-}
-
 function applyAmbienceMute() {
   // `muted` rather than volume 0: it is instant, it survives a crossfade
   // mid-flight, and it keeps each loop's playhead where it was, so unmuting
@@ -136,12 +149,11 @@ function applyAmbienceMute() {
     for (const audio of entryAudios(entry)) audio.muted = AMB.muted;
   }
   for (const audio of AMB.retiring) audio.muted = AMB.muted;
-  if (AMB.primed) AMB.primed.muted = AMB.muted;
 }
 
 function setAmbienceVolume(value) {
   AMB.volume = Math.min(1, Math.max(0, Number(value) || 0));
-  localStorage.setItem("ambience.volume", String(AMB.volume));
+  ambienceStore("volume", String(AMB.volume));
   // Every sounding layer follows the slider live, each keeping its own share
   // of it. The retiring mix is left alone: it is mid-fade, and re-targeting it
   // would make the fade jump.
@@ -181,7 +193,7 @@ function setLayerGain(index, gain) {
 
 function toggleAmbienceMute() {
   AMB.muted = !AMB.muted;
-  localStorage.setItem("ambience.muted", AMB.muted ? "1" : "0");
+  ambienceStore("muted", AMB.muted ? "1" : "0");
   applyAmbienceMute();
   updateAmbienceBtn();
 }
@@ -360,6 +372,10 @@ function stopAmbience() {
 // already faded out and the new one has not begun -- and so the layers of one
 // room start together rather than trickling in.
 function playAmbience(layers, token) {
+  // SWITCHED OFF MEANS SILENT, checked where sound starts: a bed still being
+  // searched for when the reader turned ambience off landed ~30 s later and
+  // started under a button reading "off" (frontend audit 2026-11-01, F9).
+  if (!AMB.enabled) return;
   if (!token || AMB.token === token) return;
   layers = layers || [];
   if (!layers.length) {
@@ -543,6 +559,10 @@ function resolveAmbience(turnId, signature, opts = {}) {
 async function ambienceForTurn(turnId, opts = {}) {
   if (turnId == null) return;
   const seq = ++AMB.turnSeq;
+  // The story this turn is in. Every answer below arrives after an await, and
+  // an answer for a story the reader has left plays that story's room under
+  // the new one (F8) -- the `inCurrentScope` rule chat.js keeps.
+  const chatId = S.chatId;
   AMB.turnId = turnId;
   let state = AMB.byTurn.get(turnId);
   if (!state) {
@@ -551,9 +571,10 @@ async function ambienceForTurn(turnId, opts = {}) {
     } catch (e) {
       return;                        // a transcript that scrolls is worth more
     }
+    if (S.chatId !== chatId) return;
     AMB.byTurn.set(turnId, state);
   }
-  if (seq !== AMB.turnSeq) return;
+  if (seq !== AMB.turnSeq || S.chatId !== chatId) return;
   AMB.enabled = !!state.enabled;
   AMB.configured = !!state.configured;
   AMB.source = state.source || AMB.source;
@@ -605,7 +626,7 @@ async function ambienceForTurn(turnId, opts = {}) {
   if (!AMB.configured || AMB.failed.has(state.signature)) return;
 
   const found = await resolveAmbience(turnId, state.signature);
-  if (!found) return;
+  if (!found || !AMB.enabled || S.chatId !== chatId) return;
   AMB.silent = !!found.silent;
   AMB.reason = found.reason || "";
   // Gated on the BED still being wanted, not on the turn the request started
@@ -634,9 +655,10 @@ async function rerollAmbience(layer = null) {
     toast("This room's sound is pinned — clear the pin to reroll it.", "warn");
     return;
   }
+  const chatId = S.chatId;
   const found = await resolveAmbience(AMB.turnId, AMB.signature,
                                       { reroll: true, layer });
-  if (!found) return;
+  if (!found || !AMB.enabled || S.chatId !== chatId) return;
   AMB.silent = !!found.silent;
   AMB.reason = found.reason || "";
   AMB.track = found.silent ? null : (found.layers[0] || null);
@@ -690,6 +712,16 @@ function ambienceResetForRender() {
     AMB.wanted = null;
     AMB.room = null;
     AMB.playingRoom = null;
+    // Everything else that names the outgoing story's room goes too. Kept,
+    // `turnId` and `signature` left 🎲 lit in an empty story -- rerolling the
+    // last story's room, which the server remembers -- and the toggle and the
+    // autoplay unlock replayed that room's bed in this one (F8).
+    AMB.turnId = null;
+    AMB.signature = null;
+    AMB.roomName = null;
+    AMB.pinned = false;
+    AMB.silent = false;
+    AMB.reason = "";
     stopAmbience();
   }
   if (!S.chatId) stopAmbience();
@@ -773,7 +805,8 @@ async function playAmbienceOneshot(name, level = 0.7) {
       url = takes.length ? pick() : null;    // silent flash beats an error toast
     }
   }
-  if (!url) return;
+  // The same gates again: the request above can outlive an Off or a mute.
+  if (!url || !AMB.enabled || AMB.muted || !S.chatId) return;
   // Its own element, not one of the crossfade pair: a one-shot must not
   // interrupt the bed underneath it, and two claps can overlap.
   const clip = new Audio(url);
@@ -822,7 +855,11 @@ function ambienceLayerRow(layer) {
     ? el("span", { class: "small dim" },
         layer.username ? ` by ${layer.username}` : "",
         layer.license ? ` (${layer.license})` : "",
-        layer.credit_url
+        // Only a web address is a source link. The URL comes from a stored
+        // pin, and pins travel in story archives, so an imported one could
+        // carry any scheme -- `javascript:` included (frontend audit
+        // 2026-11-01, F3; the server's own check is a separate change).
+        /^https?:\/\//i.test(String(layer.credit_url || ""))
           ? el("a", { href: layer.credit_url, target: "_blank", rel: "noreferrer",
                       style: "margin-left:6px" }, "source")
           : "")
@@ -1042,10 +1079,12 @@ function openAmbiencePanel() {
 async function toggleAmbience() {
   AMB.enabled = !AMB.enabled;
   if (AMB.enabled) AMB.failed.clear();
-  // Create the players inside the click itself: this gesture is what a browser
-  // accepts as permission to make noise, and doing it after an await no longer
-  // counts as user-initiated in some engines.
-  ambiencePlayers();
+  // This click is a user gesture, which is what engines with page-wide
+  // ("sticky") activation need before any later play(). There used to be an
+  // element "touched by the unlock gesture" here; nothing ever played it, so
+  // it unlocked nothing anywhere (frontend audit 2026-11-01, F21). An engine
+  // that wants activation per element refuses the later play(), and
+  // `armAmbienceUnlock` retries it on the reader's next click.
   updateAmbienceBtn();
   try {
     await api("PUT", "/api/ambience", { enabled: AMB.enabled });
@@ -1083,7 +1122,7 @@ function syncAmbience() {
 // slider that reads 0.35 for as long as bootstrap takes is showing a number
 // that is not true.
 AMB.volume = ambienceStored("volume", 0.35);
-AMB.muted = localStorage.getItem("ambience.muted") === "1";
+AMB.muted = ambienceStoredRaw("muted") === "1";
 updateAmbienceBtn();
 
 $("#b-ambience").onclick = openAmbiencePanel;

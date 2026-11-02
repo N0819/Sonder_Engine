@@ -83,6 +83,9 @@ function i18nCompileTemplates(messages) {
         names: [...key.matchAll(/\$\{([^}]+)\}/g)].map(found => found[1]),
         regex: I18N_LINE_BREAK.test(literals.join(""))
           ? new RegExp(`^${parts.join("(.+?)")}$`) : null,
+        // Kept so a lookup can tell a translation from an entry that maps
+        // the message to itself (`i18nTranslate`'s whitespace retry).
+        key,
         value,
         weight: literals.join("").trim().length,
       };
@@ -125,14 +128,107 @@ function i18nMatchTemplate(rule, source, broken) {
   return captures;
 }
 
-// Exact key first, then the compiled templates in anchor order.
-function i18nTranslate(messages, rules, source) {
-  source = String(source ?? "");
-  const catalog = messages || {};
-  if (catalog[source] !== undefined) return catalog[source];
+// THE RULES, INDEXED BY THE TEXT A MATCH MUST BEGIN OR END WITH. Every
+// string the page adds reaches `i18nTranslate`, and most are misses -- names,
+// prose, numbers -- which tried every one of the 446 rules in turn: 0.11 ms a
+// miss, in English as much as in Japanese, and about 45 misses a card for up
+// to 1,000 cards in the memory browser (frontend audit 2026-11-01, E1). A
+// rule can match only a string that starts with its first literal and ends
+// with its last, so the candidates are found by those and tried in the rules'
+// own order -- the first that matches is the one the full scan would find. A
+// rule whose literals are both empty, or that keeps its regex, is always a
+// candidate. Built once per rules array, beside it rather than on it.
+const I18N_RULE_INDEX = new WeakMap();
+
+function i18nRuleIndex(rules) {
+  let index = I18N_RULE_INDEX.get(rules);
+  if (index) return index;
+  const byFirst = new Map(), byLast = new Map(), always = [];
+  const file = (map, key, order) => {
+    const orders = map.get(key);
+    if (orders) orders.push(order);
+    else map.set(key, [order]);
+  };
+  rules.forEach((rule, order) => {
+    const literals = rule.literals || [];
+    const first = literals[0] || "";
+    const last = literals[literals.length - 1] || "";
+    if (rule.regex || !literals.length) always.push(order);
+    else if (first) file(byFirst, first, order);
+    else if (last) file(byLast, last, order);
+    else always.push(order);
+  });
+  // The lengths worth probing, per the character a literal starts (or ends)
+  // with: a prose line beginning "She" probes only the first literals that
+  // begin with "S".
+  const lengthsBy = (keys, edge) => {
+    const lengths = new Map();
+    for (const key of keys) {
+      const char = edge(key);
+      if (!lengths.has(char)) lengths.set(char, new Set());
+      lengths.get(char).add(key.length);
+    }
+    return new Map([...lengths].map(([char, set]) => [char, [...set]]));
+  };
+  index = {
+    byFirst, byLast, always,
+    firstLengths: lengthsBy(byFirst.keys(), key => key[0]),
+    lastLengths: lengthsBy(byLast.keys(), key => key[key.length - 1]),
+  };
+  I18N_RULE_INDEX.set(rules, index);
+  return index;
+}
+
+// The rules `source` could match, in the order the full scan would try them.
+function i18nCandidates(rules, source) {
+  const index = i18nRuleIndex(rules);
+  const found = index.always.slice();
+  for (const length of index.firstLengths.get(source[0]) || []) {
+    if (length > source.length) continue;
+    const orders = index.byFirst.get(source.slice(0, length));
+    if (orders) found.push(...orders);
+  }
+  for (const length of index.lastLengths.get(source[source.length - 1]) || []) {
+    if (length > source.length) continue;
+    const orders = index.byLast.get(source.slice(source.length - length));
+    if (orders) found.push(...orders);
+  }
+  return found.sort((a, b) => a - b);
+}
+
+// A CATALOG VALUE IS ALREADY A TRANSLATION. el() translates a string and the
+// mutation observer then hands the RESULT back in, so every translated label
+// came through here a second time and was matched against the English
+// templates -- which garbled one ja value outright: "set_vistas には名前と方角
+// （n, ne, e, se, s, sw, w, nw）…" came back as "s, ne, e, nw）…" twice over
+// (frontend audit 2026-11-01). A value that is not also a key is returned as
+// it stands.
+const I18N_VALUES = new WeakMap();
+
+function i18nIsTranslation(catalog, source) {
+  let values = I18N_VALUES.get(catalog);
+  if (!values) {
+    values = new Set(Object.values(catalog));
+    I18N_VALUES.set(catalog, values);
+  }
+  return values.has(source);
+}
+
+// The catalog's answer for `source` -- its exact key, then the compiled
+// templates in anchor order -- as { text, same }, `same` saying the entry
+// maps the message to itself; or null when nothing answers. `written`, when
+// given, maps a template's captures back to the text the page wrote, or
+// refuses the match (null), and the next candidate is tried.
+function i18nLookup(catalog, rules, source, written = null) {
+  if (catalog[source] !== undefined) {
+    return { text: catalog[source], same: catalog[source] === source };
+  }
   const broken = I18N_LINE_BREAK.test(source);
-  for (const rule of rules || []) {
-    const match = i18nMatchTemplate(rule, source, broken);
+  const ordered = rules || [];
+  for (const order of i18nCandidates(ordered, source)) {
+    const rule = ordered[order];
+    let match = i18nMatchTemplate(rule, source, broken);
+    if (match && written) match = written(rule, match);
     if (!match) continue;
     // A translation NAMES its placeholders, and may name them in its own
     // order -- Japanese often must. They were filled by position, so 18 of
@@ -147,14 +243,83 @@ function i18nTranslate(messages, rules, source) {
     // catalog entry -- `${phase} (+2 running alongside)` captures an already
     // English step label, so the status bar came out half Japanese:
     // 「Writing the scene (他に2が並行して実行中)」.
-    return rule.value.replace(/\$\{([^}]+)\}/g, (_, name) => {
+    const text = rule.value.replace(/\$\{([^}]+)\}/g, (_, name) => {
       const captured = (named.has(name) ? named.get(name) : match[index]) || "";
       index++;
       const inner = catalog[captured.trim()];
       return inner === undefined ? captured : inner;
     });
+    return { text, same: rule.value === rule.key };
   }
-  return source;
+  return null;
+}
+
+// `source` with each run of whitespace made one space and its ends trimmed --
+// what `extract_ui_catalog._message` does to a key -- and, for each character
+// of the result, the index in `source` it stands for (a run's space stands
+// for the run's first character).
+function i18nCollapse(source) {
+  let text = "";
+  const at = [];
+  let i = 0;
+  while (i < source.length && /\s/.test(source[i])) i++;
+  while (i < source.length) {
+    if (/\s/.test(source[i])) {
+      const run = i;
+      while (i < source.length && /\s/.test(source[i])) i++;
+      if (i < source.length) { text += " "; at.push(run); }
+    } else {
+      text += source[i];
+      at.push(i);
+      i++;
+    }
+  }
+  return { text, at };
+}
+
+// Exact key first, then the compiled templates in anchor order -- and, on a
+// miss, the same again with the whitespace collapsed.
+//
+// THE CATALOG'S KEYS ARE WHITESPACE-COLLAPSED: `extract_ui_catalog._message`
+// joins every run of whitespace into one space and trims. A message the page
+// writes across lines was looked up as written, so it never matched although
+// the pack holds it -- the 🎧 button's two-line tooltip, the lore generator's
+// placeholder (frontend audit 2026-11-01, lorebooks/editors F11; asked for by
+// lane L15b). The retry answers only with a real translation, wrapped in the
+// original padding: an entry that maps the message to itself -- every entry
+// of the English pack -- leaves the string exactly as written, line breaks
+// included. And whitespace is collapsed only where it is the CATALOG'S text:
+// a template's captures are filled with what the page wrote, and a capture
+// that spans a line break refuses the rule, as it always has -- no
+// placeholder matches across a line (`I18N_LINE_BREAK`).
+function i18nTranslate(messages, rules, source) {
+  source = String(source ?? "");
+  const catalog = messages || {};
+  if (catalog[source] !== undefined) return catalog[source];
+  if (i18nIsTranslation(catalog, source)) return source;
+  const found = i18nLookup(catalog, rules, source);
+  if (found) return found.text;
+  const { text: collapsed, at } = i18nCollapse(source);
+  if (!collapsed || collapsed === source || i18nIsTranslation(catalog, collapsed)) {
+    return source;
+  }
+  const written = (rule, match) => {
+    const captures = [];
+    let pos = rule.literals[0].length;
+    for (let i = 0; i < match.length; i++) {
+      const end = pos + match[i].length;
+      const text = source.slice(at[pos], end < at.length ? at[end] : at[end - 1] + 1);
+      if (I18N_LINE_BREAK.test(text)) return null;
+      captures.push(text);
+      pos = end + (rule.literals[i + 1] || "").length;
+    }
+    return captures;
+  };
+  const again = i18nLookup(catalog, rules, collapsed, written);
+  if (!again || again.same) return source;
+  const lead = source.match(/^\s*/)[0];
+  const tail = source.slice(lead.length).match(/\s*$/)[0];
+  return lead + again.text + tail;
 }
 
 // Walk `root` and localize its text nodes and its chrome attributes with

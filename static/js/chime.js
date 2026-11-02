@@ -33,9 +33,24 @@
 // is: somebody who silenced this because they are on a call wants it silent in
 // the next story and after a reload, without a round trip.
 
+// STORAGE A BROWSER REFUSES COSTS THE PAGE ONLY THE SWITCH'S MEMORY. Private
+// windows and hardened profiles throw on `localStorage`, or hand back null.
+// Read bare inside `const CHIME`'s initialiser, that throw left CHIME and every
+// const after it in the temporal dead zone for the life of the page while the
+// hoisted `chimeWatches` still existed -- and `api()` asks it before every
+// request, so a blocked store failed them all, GET included, and boot() died
+// (frontend audit 2026-11-01, frontend_lorebooks_editors F1).
+function chimeStoredMuted() {
+  try {
+    return localStorage.getItem("chime.muted") === "1";
+  } catch (e) {
+    return false;
+  }
+}
+
 const CHIME = {
   ctx: null,
-  muted: localStorage.getItem("chime.muted") === "1",
+  muted: chimeStoredMuted(),
   // Peak of the gain envelope. Deliberately far below the ambience bed's
   // default: this plays over whatever else is sounding and must not duck it.
   level: 0.06,
@@ -150,7 +165,11 @@ function chimeWorkFinished(method, url, elapsedMs) {
 
 function chimeSetMuted(muted) {
   CHIME.muted = !!muted;
-  localStorage.setItem("chime.muted", CHIME.muted ? "1" : "0");
+  try {
+    localStorage.setItem("chime.muted", CHIME.muted ? "1" : "0");
+  } catch (e) {
+    // This page still honours the switch; only its memory is lost.
+  }
   updateChimeBtn();
 }
 
