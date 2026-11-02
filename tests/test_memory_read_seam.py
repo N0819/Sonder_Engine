@@ -255,6 +255,11 @@ MAINTENANCE_READERS = frozenset({
     # Re-weights one character's own inference rows in place; the scope is the
     # (chat_id, char_id) it is called with, spelled char_id=? in its own query.
     "reconcile_inference_confidence",
+    # Vector-store maintenance (`memory_snapshot`): rows are selected by a
+    # missing stamp or address and their vectors written back or hashed into
+    # a checkpoint's address map -- never read into a mind. Unlisted, and
+    # invisible, for as long as this guard scanned the facade (below).
+    "backfill_memory_vectors", "_dump_vector_addresses",
 })
 
 _TABLE_READ = re.compile(
@@ -267,16 +272,47 @@ _TABLE_READ = re.compile(
 _CHAR_SCOPED = re.compile(r"char_id\s*=\s*\?")
 
 
+def _memory_modules():
+    """The modules that DEFINE the memory code: every `mind/memory_*` sibling.
+
+    `mind.memory` is a facade since the 2026-08-19 split and defines no
+    function at all, so a guard that parsed it scanned nothing and passed on
+    every input (review 2026-11-01, mind_memory F19): `unlisted` was `[]`
+    whatever any sibling read. Found by listing the modules, not the facade's
+    imports, so a new sibling is scanned the day it appears."""
+    import importlib
+    import pathlib
+
+    import mind
+    root = pathlib.Path(mind.__file__).parent
+    return [importlib.import_module(f"mind.{path.stem}")
+            for path in sorted(root.glob("memory_*.py"))]
+
+
 def _top_level_functions():
-    """(name, source) for every function defined at module level in memory."""
-    src = inspect.getsource(memory)
-    tree = ast.parse(src)
-    starts = [0]
-    for line in src.splitlines(keepends=True):
-        starts.append(starts[-1] + len(line))
-    return [(node.name, src[starts[node.lineno - 1]:starts[node.end_lineno]])
-            for node in tree.body
-            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))]
+    """(module.name, name, source) for every function defined at module level
+    in the memory siblings."""
+    out = []
+    for module in _memory_modules():
+        src = inspect.getsource(module)
+        tree = ast.parse(src)
+        starts = [0]
+        for line in src.splitlines(keepends=True):
+            starts.append(starts[-1] + len(line))
+        out += [(module.__name__, node.name,
+                 src[starts[node.lineno - 1]:starts[node.end_lineno]])
+                for node in tree.body
+                if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))]
+    return out
+
+
+def test_the_guard_scans_the_code_it_guards():
+    """A guard nothing can make fail is not a guard: it must see the readers,
+    including the seam itself."""
+    names = {name for _module, name, _body in _top_level_functions()}
+    assert len(_memory_modules()) >= 16
+    assert {"visible_memory_rows", "dramatic_irony_feed",
+            "visible_summary_rows"} <= names
 
 
 def test_no_unlisted_cross_character_reader():
@@ -293,7 +329,7 @@ def test_no_unlisted_cross_character_reader():
     unconditional append -- so it decided nothing at all.
     """
     unlisted = [
-        name for name, body in _top_level_functions()
+        f"{module}.{name}" for module, name, body in _top_level_functions()
         if _TABLE_READ.search(body)
         and not _CHAR_SCOPED.search(body)
         and name not in HOST_SCOPE_READERS
@@ -308,9 +344,11 @@ def test_no_unlisted_cross_character_reader():
 
 def test_the_named_exemptions_still_exist():
     """An exemption for a function that has been renamed or deleted is a hole
-    that reads as a decision."""
+    that reads as a decision. Looked up where the code lives, the siblings --
+    a private maintenance reader is not re-exported by the facade."""
+    defined = {name for _module, name, _body in _top_level_functions()}
     for name in MAINTENANCE_READERS:
-        assert callable(getattr(memory, name, None)), name
+        assert name in defined, name
 
 
 def test_the_listed_host_readers_still_exist():

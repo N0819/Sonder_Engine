@@ -1735,6 +1735,34 @@ _CRITERION_RESTATES_SIM = 0.4
 _FORMER_PROJECTS_CAP = 6
 
 
+def _ended_authored(record):
+    """An ending of an AUTHORED project: marked so when it ended, else known
+    by the `pa<n>` id namespace `character_projects` reserves for the card
+    (runtime adoptions are `p<n>`, `_next_project_id`)."""
+    if not isinstance(record, dict):
+        return False
+    return bool(record.get("authored")) or str(record.get("id") or "").startswith("pa")
+
+
+def _former_kept(ended):
+    """The former ledger after an ending: EVERY authored project's ending,
+    whatever its age, and the newest `_FORMER_PROJECTS_CAP` of the rest, in
+    the order they ended.
+
+    THE CAP NEVER ROLLS A GIVING-UP OUT (review 2026-11-01,
+    mind_affect_psychology F3, reproduced). Commit seeds a card's project on
+    any beat its id is in neither ledger (`persist/commit_memory.py`), so
+    this list is the only memory that a mind gave one up -- and with every
+    ending capped alike, six later endings (probation lapses included) rolled
+    "the light was automated; I am done with it" out, and the next commit
+    seeded the lighthouse back, live, with no word from the mind. Bounded:
+    an authored ending is never re-seeded, and a card reads at most
+    `PROJECT_CAP` of them."""
+    rest = [r for r in ended if not _ended_authored(r)]
+    keep = {id(r) for r in rest[-_FORMER_PROJECTS_CAP:]}
+    return [r for r in ended if _ended_authored(r) or id(r) in keep]
+
+
 def _next_project_id(projects, former):
     """Deterministic p<n>, never reusing an id a former project carried --
     a displaced project's id coming back on an unrelated adoption would make
@@ -1866,6 +1894,7 @@ def apply_project_ops(projects, former, ops, turn_idx):
             "project": str(target.get("project") or ""),
             "why": why, "turn": turn_idx,
             "end": "satisfied" if kind == "satisfy" else "displaced",
+            **({"authored": True} if target.get("authored") else {}),
         })
 
     for op in ops:
@@ -1899,7 +1928,7 @@ def apply_project_ops(projects, former, ops, turn_idx):
             "served_beats": 0,
         })
 
-    return (live, ended[-_FORMER_PROJECTS_CAP:], warnings)
+    return (live, _former_kept(ended), warnings)
 
 
 # Establishment is EARNED BY SERVICE, never by survival. The obvious rule
@@ -1967,24 +1996,37 @@ def settle_probation(projects, former, turn_idx):
                 "fascination that passed, recorded without ceremony")
             continue
         live.append(p)
-    return (live, ended[-_FORMER_PROJECTS_CAP:], warnings)
+    return (live, _former_kept(ended), warnings)
 
 
 def _last_named_room(text, named_rooms):
-    """The last room a text names, resolved against {casefolded node name:
-    rid}. Last-named wins for the same reason as _destination_from_goals:
-    'from the gate to the shrine' is going TO the shrine. None when the text
-    names no known room -- both vocabularies closed, identifier recognition,
-    never prose reading."""
-    folded = str(text or "").casefold()
-    best = None
+    """The last room a text NAMES, resolved against {casefolded node name:
+    rid}, or None. Last-named wins: 'from the gate to the shrine' is going
+    TO the shrine. THE ONE READER of "which of my rooms does this text
+    name" -- `agents.character._destination_from_goals` routes through it
+    too, so the room a goal is stamped with at commit and the room the next
+    beat routes toward cannot disagree.
+
+    A NAME IS MATCHED WHOLE, by its own script (`language_runtime.
+    find_names`): no letter of a spaced script beside a Latin name, the
+    particle rules for a kana one, and at any position the LONGEST name.
+    This was a bare `rfind`, under a docstring calling it identifier
+    recognition. Measured (review 2026-11-01, mind_affect_psychology F6 and
+    agents_character_background F10): over {Study, Hall, Inn, Kitchen}
+    "Keep the beginning of the story straight" named the Inn, "who left the
+    hallway lamp burning" the Hall, and "Walk to the Great Hall" the Hall,
+    the shorter name starting later -- so a goal was stamped reached, and a
+    project credited as served, by the letters of an unrelated word."""
+    keys = {}
     for key, rid in (named_rooms or {}).items():
-        if not key:
-            continue
-        pos = folded.rfind(str(key))
-        if pos >= 0 and (best is None or pos > best[0]):
-            best = (pos, str(rid))
-    return best[1] if best else None
+        form = str(key or "").strip().casefold()
+        if form:
+            keys.setdefault(form, str(rid))
+    if not keys:
+        return None
+    from language_runtime import find_names
+    hits = find_names(str(text or "").casefold(), list(keys))
+    return keys.get(hits[-1][2]) if hits else None
 
 
 def projects_served_this_beat(projects, wants, goal_text, impact_serves=(),

@@ -609,19 +609,79 @@ def _repair_loop():
     Backs off between rounds so a long outage is not a busy-wait, and gives up
     after a bounded number of them: past that the provider is not rate
     limiting, it is gone, and the ordinary rebuild offer is the honest remedy.
+
+    ONLY A REFUSED ROUND COUNTS, and only a refused round backs off (review
+    2026-11-01, mind_memory F11). The delay used to double after every round
+    and the bound counted every round, so a HEALTHY provider fixing 32 rows a
+    round took 1,350 s over a 200-row backlog, and a 500-row backlog (the
+    chat-open adoption limit) spent all 12 rounds over 2,850 s and left 116
+    rows queued with no thread. A round that fixed rows, or found them fixed
+    already, is the provider serving: the next one comes after the plain
+    `_REPAIR_DELAY`. A round that fixed nothing -- the call fell back, or the
+    pass raised (`database is locked` is transient; the thread used to exit
+    on it, leaving the queue with nobody coming back) -- is a refusal: it
+    backs off and counts toward `_REPAIR_MAX_ROUNDS`, the bound's own meaning.
     """
     delay = _REPAIR_DELAY
-    for _ in range(_REPAIR_MAX_ROUNDS):
+    refused = 0
+    while refused < _REPAIR_MAX_ROUNDS:
         time.sleep(delay)
+        with _REPAIR_LOCK:
+            before = sum(len(v) for v in _REPAIR_PENDING.values())
         try:
-            repair_pending_embeddings()
+            fixed = repair_pending_embeddings() or {}
         except Exception as exc:  # noqa: BLE001 - never take a turn down
             logger.warning("memory: embedding repair pass failed: %s", exc)
-            return
+            fixed = None
         with _REPAIR_LOCK:
-            if not any(_REPAIR_PENDING.values()):
-                return
+            left = sum(len(v) for v in _REPAIR_PENDING.values())
+        if not left:
+            return
+        if fixed is not None and (any(fixed.values()) or left < before):
+            delay = _REPAIR_DELAY
+            continue
+        refused += 1
         delay = min(delay * 2, _REPAIR_MAX_DELAY)
+
+
+#: The columns each repaired table's embedded document is built from
+#: (`_memory_document`/`_memory_cues`, `_summary_retrieval_text`,
+#: `_lore_document`). Keep in step with those builders.
+_REPAIR_DOCUMENT_COLUMNS = {
+    "memories": ("category", "turn_idx", "location", "entities", "key_phrases",
+                 "gist", "content", "provenance", "emotional_context"),
+    "memory_summaries": ("summary", "key_phrases", "unresolved_threads"),
+    "lore_entries": ("keys", "content"),
+}
+
+
+def _write_repaired(c, table, row, sets, values):
+    """Write one repaired vector COMPARE-AND-SET; True when it landed.
+
+    The repair reads a row, spends a provider round trip embedding its text,
+    then writes. Anything may land inside that window -- a host edit
+    (`update_memory`) re-embedding the row with NEW text, a restore re-minting
+    the id onto another row -- and a write `WHERE id=?` alone overwrote it
+    with vectors of the OLD text, stamped live, which nothing ever revisits
+    (review 2026-11-01, mind_memory F4 addendum). So the vector lands only
+    where the row is still on the fallback AND still holds exactly the text
+    that was embedded: every column its document is built from, compared
+    NULL-safe. An overlay's document is the merged one, so it compares the
+    merged keys and content, its parent entry's included."""
+    if table == "lore_overlays":
+        merged = ("COALESCE(keys, (SELECT e.keys FROM lore_entries e "
+                  "WHERE e.id=lore_overlays.entry_id)) IS ? AND "
+                  "COALESCE(content, (SELECT e.content FROM lore_entries e "
+                  "WHERE e.id=lore_overlays.entry_id)) IS ?")
+        same, args = merged, (row["merged_keys"], row["merged_content"])
+    else:
+        columns = _REPAIR_DOCUMENT_COLUMNS[table]
+        same = " AND ".join(f"{col} IS ?" for col in columns)
+        args = tuple(row[col] for col in columns)
+    cur = c.execute(f"UPDATE {table} SET {sets} WHERE id=? "
+                    f"AND embedding_model='cheap:crc32:256' AND {same}",
+                    tuple(values) + (row["id"],) + args)
+    return cur.rowcount > 0
 
 
 def repair_pending_embeddings(batch=32):
@@ -629,6 +689,11 @@ def repair_pending_embeddings(batch=32):
 
     Split from the thread so a test can run it synchronously, and so the
     decision to run one is separable from the decision to wait 30 seconds.
+
+    A row that changed while it was being embedded is not written
+    (`_write_repaired`) and STAYS QUEUED: the next pass reads it again, and
+    finds it either finished by whoever changed it or still on the hash with
+    its new text, which is then the text embedded.
     """
     fixed = {table: 0 for table in _REPAIR_PENDING}
     with _REPAIR_LOCK:
@@ -663,6 +728,7 @@ def repair_pending_embeddings(batch=32):
         else:
             rows = q(f"SELECT * FROM {table} WHERE id IN ({holes}) "
                      "AND embedding_model='cheap:crc32:256'", tuple(ids))
+        missed = set()
         if rows:
             if table == "memories":
                 mems = [_row_memory(r) for r in rows]
@@ -674,18 +740,21 @@ def repair_pending_embeddings(batch=32):
                 if got.fallback:
                     return fixed  # still degraded; leave everything queued
                 from mind.memory_snapshot import file_memory_vector
-                with transaction():
-                    for index, mem in enumerate(mems):
+                with transaction() as c:
+                    for index, (row, mem) in enumerate(zip(rows, mems)):
                         full, cue = (_blob(got.vectors[index * 2]),
                                      _blob(got.vectors[index * 2 + 1]))
-                        qi("UPDATE memories SET embedding=?,cue_embedding=?,"
-                           "embedding_model=?,embedding_dim=? WHERE id=?",
-                           (full, cue, got.model_key, got.dimensions,
-                            mem["id"]))
+                        if not _write_repaired(
+                                c, "memories", row,
+                                "embedding=?,cue_embedding=?,"
+                                "embedding_model=?,embedding_dim=?",
+                                (full, cue, got.model_key, got.dimensions)):
+                            missed.add(row["id"])
+                            continue
                         file_memory_vector(full, cue, got.model_key,
                                            got.dimensions,
                                            memory_id=mem["id"])
-                fixed["memories"] += len(rows)
+                        fixed["memories"] += 1
             else:
                 if table == "memory_summaries":
                     texts = [_summary_retrieval_text(
@@ -701,15 +770,18 @@ def repair_pending_embeddings(batch=32):
                 got = embed_texts_meta(texts)
                 if got.fallback:
                     return fixed
-                with transaction():
+                with transaction() as c:
                     for index, row in enumerate(rows):
-                        qi(f"UPDATE {table} SET embedding=?,"
-                           "embedding_model=?,embedding_dim=? WHERE id=?",
-                           (_blob(got.vectors[index]), got.model_key,
-                            got.dimensions, row["id"]))
-                fixed[table] += len(rows)
+                        if _write_repaired(
+                                c, table, row,
+                                "embedding=?,embedding_model=?,embedding_dim=?",
+                                (_blob(got.vectors[index]), got.model_key,
+                                 got.dimensions)):
+                            fixed[table] += 1
+                        else:
+                            missed.add(row["id"])
         with _REPAIR_LOCK:
-            _REPAIR_PENDING[table].difference_update(ids)
+            _REPAIR_PENDING[table].difference_update(set(ids) - missed)
     if any(fixed.values()):
         logger.info("memory: finished %s embedding write(s) that had fallen "
                     "back to the hash",
@@ -748,11 +820,33 @@ def queue_fallback_rows_for_repair(chat_id=None, limit=_REPAIR_MAX_PENDING):
     return found
 
 
+#: What a mind makes of a memory AFTER it is minted, by the writers that are
+#: not the mint: `raise_importance` (what it turned out to matter for),
+#: `record_dispute` (how the mind reads it now), `record_memory_look` (what it
+#: felt looking back), the link pass (`supersedes`) and the people it was
+#: with (`about`). A re-mint of the same `event_key` restates the EVENT; none
+#: of these is a reason to forget, so the UPDATE arm keeps each one the new
+#: mint does not state (review 2026-11-01, mind_memory F7, reproduced:
+#: importance 0.76 -> None and a re-reading -> "" on a second
+#: `acquaintance:` mint). A restore is untouched: it deletes the bank and
+#: takes the INSERT arm, verbatim.
+_EARNED_ON_REMINT = ("importance", "disputed", "feelings", "about", "supersedes")
+
+
 def _upsert_memory(data: dict, full_vec, cue_vec, embedded):
     existing = None
     if data["event_key"]:
-        existing = q("SELECT id FROM memories WHERE chat_id=? AND char_id=? AND event_key=?",
+        existing = q("SELECT id, " + ", ".join(_EARNED_ON_REMINT) +
+                     " FROM memories WHERE chat_id=? AND char_id=? AND event_key=?",
                      (data["chat_id"], data["char_id"], data["event_key"]), one=True)
+    if existing:
+        # The new mint's own value where it states one (None/"" is "not
+        # stated" for all five, as `prepare_memory` defaults them), else the
+        # row's.
+        data = dict(data)
+        for column in _EARNED_ON_REMINT:
+            if data.get(column) in (None, ""):
+                data[column] = existing[column]
     values = (
         data["turn_id"], data["turn_idx"], data["kind"], data["category"],
         data["provenance"], data["salience"], data["content"], data["gist"],

@@ -808,6 +808,59 @@ def apply_association_updates(existing, psychology, updates, turn_idx,
         item.get("cue") or "").strip().casefold() in authored_cues)
 
 
+
+def live_psychology(psychology, interior):
+    """A mind's psychology AS IT STANDS NOW: the card's, with the three things
+    the story moves read from the mind's live ledger (`state["interior"]`).
+
+    * the drive is the EFFECTIVE one (`effective_drive`: a rupture-installed
+      `drive_override` over the card's);
+    * beliefs are the ledger's (`apply_belief_updates` -- credence moves
+      there, never on the card), beside any card belief not yet seeded into
+      it (nor revised away: a revision keeps the card's words as
+      `authored_belief`);
+    * associations are the ledger's IN FORCE -- strength above zero, so one
+      the story extinguished is no longer "learned" -- beside any card cue
+      not yet seeded into it.
+
+    Before a mind's first commit the ledger is empty and the card is the only
+    copy there is, so the card comes back whole. The one reader for every pass
+    that states a mind's psychology outside its own payload -- the affect
+    pass and the skip writer read the card itself (review 2026-11-01,
+    mind_affect_psychology F7), so after a drive broke the mood was appraised
+    against a drive the mind no longer held. Returns a new dict."""
+    import copy
+
+    from story.character_schema import effective_drive
+
+    psy = copy.deepcopy(psychology) if isinstance(psychology, dict) else {}
+    interior = interior if isinstance(interior, dict) else {}
+    psy["drive"] = effective_drive(psy, interior)
+    held = [dict(b) for b in interior.get("beliefs") or []
+            if isinstance(b, dict) and str(b.get("belief") or "").strip()]
+    if held:
+        known = {str(b.get(k) or "").strip().casefold()
+                 for b in held for k in ("belief", "authored_belief")} - {""}
+        model = dict(psy.get("self_model") or {})
+        model["beliefs"] = held + [
+            dict(b) for b in model.get("beliefs") or []
+            if isinstance(b, dict)
+            and str(b.get("belief") or "").strip().casefold() not in known]
+        psy["self_model"] = model
+    ledger = [dict(a) for a in interior.get("associations") or []
+              if isinstance(a, dict) and str(a.get("cue") or "").strip()]
+    if ledger:
+        seeded = {str(a["cue"]).strip().casefold() for a in ledger}
+        learning = dict(psy.get("learning") or {})
+        learning["associations"] = [
+            a for a in ledger if _clamp(a.get("strength"), default=0.5) > 0.0] + [
+            dict(a) for a in learning.get("associations") or []
+            if isinstance(a, dict) and str(a.get("cue") or "").strip()
+            and str(a["cue"]).strip().casefold() not in seeded]
+        psy["learning"] = learning
+    return psy
+
+
 # Convex, not concave. A body tolerates mild sensation with its mind more or
 # less intact and is taken over by severe sensation, so the cost has to start
 # cheap and climb: an earlier concave curve read pain 0.2 as nearly half the

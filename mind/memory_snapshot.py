@@ -275,8 +275,13 @@ def _dump_vector_addresses(chat_id, rows):
     return out
 
 
-def dump_chat_memories(chat_id, *, inline_vectors=True):
+def dump_chat_memories(chat_id, *, inline_vectors=True, ids=None):
     """The chat's memory bank, for a checkpoint or a portable archive.
+
+    `ids` narrows it to those rows of the chat, in the same shape: a writer
+    that carries the rows it just wrote into later checkpoints reads those
+    alone (`skip_memories.write_rows`), not the whole bank under the write
+    lock once per mind (review 2026-11-01, mind_affect_psychology E2).
 
     `inline_vectors` is the difference between the two callers, and it matters:
 
@@ -306,12 +311,19 @@ def dump_chat_memories(chat_id, *, inline_vectors=True):
     # 16.9ms to fetch and nothing to hash (review 2026-09-07 C2).
     order = ("ORDER BY CASE WHEN turn_idx IS NULL THEN 1 ELSE 0 END, "
              "turn_idx, id")
+    where, args = "chat_id=?", (chat_id,)
+    if ids is not None:
+        wanted = sorted({int(i) for i in ids})
+        if not wanted:
+            return []
+        where += f" AND id IN ({','.join('?' * len(wanted))})"
+        args += tuple(wanted)
     if inline_vectors:
-        rows = q(f"SELECT * FROM memories WHERE chat_id=? {order}", (chat_id,))
+        rows = q(f"SELECT * FROM memories WHERE {where} {order}", args)
         vkeys = {}
     else:
-        rows = q(f"SELECT {_DUMP_COLUMNS} FROM memories WHERE chat_id=? {order}",
-                 (chat_id,))
+        rows = q(f"SELECT {_DUMP_COLUMNS} FROM memories WHERE {where} {order}",
+                 args)
         vkeys = _dump_vector_addresses(chat_id, rows)
     return [
         {"char_id": r["char_id"], "turn_id": r["turn_id"], "turn_idx": r["turn_idx"],

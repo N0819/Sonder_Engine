@@ -144,7 +144,6 @@ def form_memory_links(chat_id, memory_batch, *, turn_idx, names, language=None,
     if not asks:
         return record
     from mind import character_jev as jev
-    from mind.affect_appraisal import _probabilities
 
     def _ask(char_id, questions):
         return jev.ask("YOU ARE %s." % (str(names.get(char_id) or "").strip() or "yourself"),
@@ -170,12 +169,13 @@ def form_memory_links(chat_id, memory_batch, *, turn_idx, names, language=None,
         for qid, (i, older_key) in asks[cid][1].items():
             # An answer off its shape is a "no", never an exception: reading
             # one raised out of the commit and lost the beat (review round 5).
-            answer = answers.get(qid)
+            # Unanswered (`jev.yes_share` None) forms no link, as a request
+            # that could not be asked forms none.
             try:
-                p_yes = _probabilities(answer).get("yes", 0.0) if isinstance(answer, dict) else 0.0
+                p_yes = jev.yes_share(answers, qid) if isinstance(answers.get(qid), dict) else None
             except Exception:
-                p_yes = 0.0
-            if p_yes < LINK_THRESHOLD:
+                p_yes = None
+            if p_yes is None or p_yes < LINK_THRESHOLD:
                 continue
             links = _supersedes_of(prepared[i].get("supersedes"))
             if older_key not in links:

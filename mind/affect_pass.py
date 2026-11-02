@@ -147,6 +147,9 @@ class Felt:
     #: Recalled memories read afresh this beat, by memory ref: `{"felt",
     #: "strength", "at", "why"}` -- commit keeps each on its row.
     looks: dict = field(default_factory=dict)
+    #: The memories whose recall has already LANDED for habituation this beat
+    #: (`_recall`), handed to a later round so it lands each once.
+    landed: set = field(default_factory=set)
 
     def parts(self):
         """The surface and the undercurrent of what was felt."""
@@ -190,11 +193,14 @@ def persisted(felt):
     and which recalled memories were read afresh (`looks`). Commit copies
     only the first three into the character's state."""
     out = {"mood_coords": {k: round(float(v), 4) for k, v in felt.mood.coords.items() if abs(float(v)) > 1e-4},
-           "mood_habits": felt.habits, "mood_clock": round(felt.clock, 4)}
+           # A habit rested back to nothing goes, losslessly (`rested_away`).
+           "mood_habits": mix.rested_away(felt.habits, felt.clock), "mood_clock": round(felt.clock, 4)}
     if felt.formed:
         out["formed"] = felt.formed
     if felt.looks:
         out["looks"] = felt.looks
+    if felt.landed:
+        out["landed"] = sorted(felt.landed)
     return out
 
 
@@ -368,9 +374,16 @@ def people_from(relationships):
     return rows[:MAX_PEOPLE]
 
 
-def psychology_text(sheet):
-    """The character's own card psychology, as the decision model reads it."""
-    psy = (sheet or {}).get("psychology") or {}
+def psychology_text(sheet, interior=None):
+    """The character's own psychology, as the decision model reads it: the
+    card's, AS IT STANDS NOW -- the effective drive and the associations in
+    force from the mind's live ledger, `interior` (`psychology_runtime.
+    live_psychology`). Without one, the card alone (before a first commit
+    that is the only copy). It read the card always (review 2026-11-01,
+    mind_affect_psychology F7): after a drive broke, every event was
+    appraised against the drive the mind no longer held."""
+    from mind.psychology_runtime import live_psychology
+    psy = live_psychology((sheet or {}).get("psychology") or {}, interior)
     drive = psy.get("drive") or {}
     lines = []
     if drive.get("essence"):
@@ -413,12 +426,12 @@ def _looking_back(memory, language=None):
 
 
 def state_text(name, sheet, events, people, memories, concerns, mood_words=(), ponder=None,
-               language=None):
+               language=None, interior=None):
     """The one state every question of this character's request reads. The
     memories a ponder brought up stand apart, under the question the mind
     asked itself, each with how long ago it was and what it felt like at the
     time -- what a looking back is asked across (`PONDER_LOOKS`)."""
-    parts = [f"YOU ARE {name}.", psychology_text(sheet)]
+    parts = [f"YOU ARE {name}.", psychology_text(sheet, interior)]
     if mood_words:
         parts.append("HOW YOU FELT COMING INTO THIS: " + ", ".join(mood_words))
     if people:
@@ -445,9 +458,11 @@ def state_text(name, sheet, events, people, memories, concerns, mood_words=(), p
 # --- the two passes -------------------------------------------------------------
 
 def before_call(name, sheet, active, baseline, units, observations=(), memory_context=None,
-                relationships=None, language=None, earlier=None):
+                relationships=None, language=None, earlier=None, interior=None):
     """The mood for this call. Never raises: a decision model that cannot be
-    asked leaves the carried mood, decayed, with `asked` False and a note."""
+    asked leaves the carried mood, decayed, with `asked` False and a note.
+    `interior` is the mind's live ledger (`state["interior"]`), read for its
+    psychology as it stands now (`psychology_text`)."""
     mood, home, habits, clock = carried(active, baseline, units, earlier)
     events = events_from(observations)
     memories = memories_from(memory_context)
@@ -458,9 +473,11 @@ def before_call(name, sheet, active, baseline, units, observations=(), memory_co
     prior = earlier if isinstance(earlier, dict) else {}
     felt = Felt(mood=mood, home=home, habits=habits, clock=clock, people=people, language=language,
                 formed={k: v for k, v in (prior.get("formed") or {}).items() if isinstance(v, dict)},
-                looks={k: v for k, v in (prior.get("looks") or {}).items() if isinstance(v, dict)})
+                looks={k: v for k, v in (prior.get("looks") or {}).items() if isinstance(v, dict)},
+                landed={str(r) for r in prior.get("landed") or ()})
     felt.state_text = state_text(name, sheet, events, people, memories, concerns, mood_words(felt, language),
-                                 ponder=ponder_from(memory_context), language=language)
+                                 ponder=ponder_from(memory_context), language=language,
+                                 interior=interior)
     if not (events or memories or concerns):
         felt.note = "nothing new to appraise"
         return felt
@@ -505,7 +522,19 @@ def _recall(felt, memories, reasons, out):
     for m in memories:
         multiplier = 1.0
         if m.get("keyed", True):
-            multiplier, felt.habits = mix.recall_lands(felt.habits, m["ref"], felt.clock)
+            if m["ref"] in felt.landed:
+                # ONE LANDING A BEAT (review 2026-11-01, mind_affect_psychology
+                # F11, reproduced): an interaction loop calls the mind once a
+                # ROUND and every round handed the next its habits with no
+                # time passed, so the second round added a second full step
+                # -- two rounds a beat dulled a memory to a fifth of its
+                # feeling by the third beat. A later round reads it at the
+                # level its first landing left.
+                multiplier = mix.habituation_multiplier(
+                    (felt.habits.get(str(m["ref"])) or {}).get("h", 0.0))
+            else:
+                multiplier, felt.habits = mix.recall_lands(felt.habits, m["ref"], felt.clock)
+                felt.landed.add(m["ref"])
         why = reasons.get(m["ref"])
         if why:
             a = out["memories"].get(m["ref"]) or {}
@@ -751,15 +780,24 @@ def feel_seeded(chat_id, char_id, language=None):
              "AND (feelings IS NULL OR feelings='')", (chat_id, char_id))
     if not rows:
         return 0
-    card = q("SELECT c.name, COALESCE(NULLIF(cc.sheet, ''), c.sheet) AS sheet FROM characters c "
-             "LEFT JOIN chat_chars cc ON cc.char_id = c.id AND cc.chat_id = ? WHERE c.id = ?",
-             (chat_id, char_id), one=True)
+    from core.db import active_frame_id
+    card = q("SELECT c.name, COALESCE(NULLIF(cc.sheet, ''), c.sheet) AS sheet, "
+             "COALESCE(ccf.state, cc.state) AS cstate FROM characters c "
+             "LEFT JOIN chat_chars cc ON cc.char_id = c.id AND cc.chat_id = ? "
+             "LEFT JOIN chat_char_frames ccf ON ccf.chat_id = cc.chat_id "
+             "AND ccf.char_id = cc.char_id AND ccf.frame_id IS ? WHERE c.id = ?",
+             (chat_id, active_frame_id.get(), char_id), one=True)
     try:
         sheet = json.loads((card or {})["sheet"] or "{}") if card else {}
     except (TypeError, ValueError):
         sheet = {}
+    try:
+        interior = (json.loads((card or {})["cstate"] or "{}") if card else {}).get("interior")
+    except (TypeError, ValueError, AttributeError):
+        interior = None
     name = str((card or {})["name"] or "") if card else ""
-    state = "\n\n".join(part for part in (f"YOU ARE {name}." if name else "", psychology_text(sheet)) if part)
+    state = "\n\n".join(part for part in (f"YOU ARE {name}." if name else "",
+                                           psychology_text(sheet, interior)) if part)
     memories = [{"ref": str(r["id"]), "text": _text(r["content"])} for r in rows]
     try:
         out = appraisal.appraise(state, memories=memories, language=language)

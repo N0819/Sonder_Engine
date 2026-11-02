@@ -91,6 +91,7 @@ from mind.memory_summaries import (  # noqa: F401
     consolidate_character_memory, derive_summary_support, get_memory_summary,
     maybe_consolidate_character_memory, memory_summary_coverage,
     save_memory_summary, search_memory_summaries, summary_support,
+    SUMMARY_FRAME_ID, visible_summary_rows,
 )
 from mind.memory_context import (  # noqa: F401
     RECENT_TURNS, _origin_on_drift, _summary_id, _with_reading,

@@ -227,6 +227,26 @@ class Holding:
     carriage: str = ""                                # the demeanor it last showed: its own words, its own state
 
 
+def aims_offered(aims, cap=MAX_AIMS):
+    """The aims a read-back offers, `cap` (`MAX_AIMS`) at most, in the order
+    given -- and EVERY held project among them: what gives way to the cap is
+    the last of the rest (the steering intentions), never a project.
+
+    A plain cut dropped the projects, which come last (review 2026-11-01,
+    mind_affect_psychology F8, reproduced: the drive and the `ordinary`
+    rung's four steering intentions filled the five, and p1 could not be
+    chosen for `want:serves` nor asked `impact:` -- a probationary project
+    could not earn its three serving beats and lapsed at 24). Projects are
+    the tier meant to outrank intentions and are at most
+    `affect.PROJECT_CAP`; the cap is kept, and filled around them."""
+    aims = [a for a in aims or () if isinstance(a, dict)]
+    projects = [a for a in aims if a.get("kind") == "project"]
+    room = max(0, int(cap) - len(projects))
+    rest = [a for a in aims if a.get("kind") != "project"][:room]
+    keep = {id(a) for a in rest + projects[:int(cap)]}
+    return [a for a in aims if id(a) in keep]
+
+
 def _text(value, n=ITEM_CHARS):
     text = " ".join(str(value or "").split())
     return text if len(text) <= n else text[:n] + "..."
@@ -616,7 +636,10 @@ def read_before(answers, h):
     """The memories the moment may cast in a new light, by the yes-share."""
     out = []
     for i, m in enumerate(h.memories):
-        if _probabilities(answers.get(f"dispute:{i}")).get("yes", 0.0) >= DISPUTE_FLOOR:
+        # Unanswered (`yes_share` None) is not re-read: the branch a request
+        # that could not be asked takes.
+        share = yes_share(answers, f"dispute:{i}")
+        if share is not None and share >= DISPUTE_FLOOR:
             out.append(m)
     return out
 
@@ -780,7 +803,14 @@ def after_questions(h, reply):
         held = shown.get(entry["id"])
         text = note_text(entry, lang)
         if held and entry["strike"]:
-            if held[0] == "what_you_are_about":
+            # HOW IT ENDED is asked only of a project shown with what would
+            # finish it (`until`, its `satisfied_when`). One with no end
+            # cannot be satisfied -- `apply_project_ops` refuses it, by
+            # design -- so "done" read back for it was refused with a warning
+            # nobody read and the mind found it held again next beat, its
+            # strike gone (review 2026-11-01, mind_affect_psychology F17).
+            # Unasked, the compile gives it up with the stated reason.
+            if held[0] == "what_you_are_about" and str(held[1].get("until") or "").strip():
                 qs[f"nb:{j}:strike"] = _choice("strike_kind", lang, _set("strike_kind", lang),
                                                project=_text(held[1].get("note")), why=entry["strike"])
             continue
@@ -960,6 +990,23 @@ def yes(answers, key):
     return pick(answers, key) == "yes"
 
 
+def yes_share(answers, key):
+    """How surely the model said yes to `key`, or None when it did not answer
+    it -- the key missing, or carrying no readable probabilities. An answer
+    that rates only "no" is a real 0.0.
+
+    UNANSWERED IS NOT A CONFIDENT NO (review 2026-11-01, the decisions
+    `missing key -> 0.0` class): read through `.get("yes", 0.0)`, a key the
+    model dropped became a certain no, which is harmless where it only means
+    one action fewer and wrong where the ORDER of the answers is the
+    question (`memory_routes._first_sure`). Each reader decides what
+    unanswered means for it; this only stops it being a number."""
+    probs = _probabilities((answers or {}).get(key))
+    if not probs:
+        return None
+    return probs.get("yes", 0.0)
+
+
 def graded(answers, key, scale):
     """The expected position on `scale`, or None when unanswered."""
     probs = _probabilities(answers.get(key))
@@ -1099,8 +1146,10 @@ def heard_question(heard, language=None):
     answers = ask(state, qs)
     best = None
     for i, x in enumerate(heard):
-        p = _probabilities(answers.get(f"heard:{i}")).get("yes", 0.0)
-        if p >= HEARD_QUESTION_FLOOR and (best is None or p >= best[0]):
+        # Unanswered is not taken for a question (`yes_share` None): the
+        # branch a request that could not be asked takes.
+        p = yes_share(answers, f"heard:{i}")
+        if p is not None and p >= HEARD_QUESTION_FLOOR and (best is None or p >= best[0]):
             best = (p, x)
     if best is None:
         return None

@@ -56,7 +56,6 @@ nobody can resolve, a search that finds nothing: today's ponder, untouched.
 from __future__ import annotations
 
 import re
-import time
 
 from core.db import get_setting
 
@@ -217,7 +216,8 @@ def read_route(answers, people):
     person = None
     if who and who.startswith("p") and who[1:].isdigit() and int(who[1:]) < len(people):
         person = people[int(who[1:])]
-    if "route:past" in answers and jev._probabilities(answers["route:past"]).get("yes", 0.0) < PAST_FLOOR:
+    past = jev.yes_share(answers, "route:past")
+    if past is not None and past < PAST_FLOOR:
         order = "content"
     return {"order": order if order in ORDERS else "content",
             "kind": kind if kind in KINDS else "act",
@@ -365,7 +365,13 @@ def _yes_shares(rows, question, state, current_turn_idx, known, language, record
           for i, m in enumerate(rows)}
     answers = jev.ask(state, qs)
     record["verified"] = record.get("verified", 0) + len(qs)
-    return [jev._probabilities(answers.get(f"moment:{i}")).get("yes", 0.0) for i in range(len(rows))]
+    # None where the model left a row unanswered (`jev.yes_share`): a dropped
+    # key read as a certain no let the walk step past it (below).
+    shares = [jev.yes_share(answers, f"moment:{i}") for i in range(len(rows))]
+    missing = sum(1 for share in shares if share is None)
+    if missing:
+        record["unanswered"] = record.get("unanswered", 0) + missing
+    return shares
 
 
 def _first_sure(rows, shares, floor=None):
@@ -375,7 +381,17 @@ def _first_sure(rows, shares, floor=None):
     lower than a later one that says it outright, and the order is the
     question."""
     floor = WALK_FLOOR if floor is None else floor
-    return next((row for row, p in zip(rows, shares) if p >= floor), None)
+    # A row the model left unanswered BEFORE the first sure one ends the walk
+    # with nothing: it may be the first time, and the walk cannot say a later
+    # row is (review 2026-11-01, the `missing key -> 0.0` class -- read as a
+    # no, a dropped key marked a later moment as the first). After the first
+    # sure row an unanswered one changes nothing.
+    for row, p in zip(rows, shares):
+        if p is None:
+            return None
+        if p >= floor:
+            return row
+    return None
 
 
 def _near(row, other):
@@ -404,7 +420,10 @@ def _surest(rows, shares):
     right one. A seeded or undated row ties nothing but itself; rows the model
     reads exactly alike at the top go to the earlier, as before (one or two
     decimals make that common)."""
-    if not rows or max(shares) < VERIFY_FLOOR:
+    # The surest of a pool the model answered only in part is not the
+    # surest: the row it left unanswered may be it. Nothing, then, and the
+    # graded ponder stands (the `missing key -> 0.0` class, as `_first_sure`).
+    if not rows or any(share is None for share in shares) or max(shares) < VERIFY_FLOOR:
         return None, 0.0
     top = max(shares)
     surest = min((i for i in range(len(rows)) if shares[i] == top), key=lambda i: _order_key(rows[i]))
@@ -500,8 +519,8 @@ def answer(route, query, *, memories, vectors, lanes, embedded, known, places,
         row = memories[candidate]
         confirmed = _yes_shares([row], "memory_heard" if how == "named" else "memory_moment", state,
                                 current_turn_idx, known, language, record)
-        record["confirmed"] = round(confirmed[0], 3)
-        if confirmed[0] >= VERIFY_FLOOR:
+        record["confirmed"] = None if confirmed[0] is None else round(confirmed[0], 3)
+        if confirmed[0] is not None and confirmed[0] >= VERIFY_FLOOR:
             anchor = row
             record["anchor_p"] = round(confirmed[0], 3)
             break
@@ -646,25 +665,3 @@ def in_time_text(order, how, subject, language=None):
     text = character_tools_text(key, language)
     return text.replace("{subject}", str(subject or ""))
 
-
-def routed_ponder(query, *, asker, people, places, memories, vectors, lanes, embedded, known,
-                  current_turn_idx, language=None, record=None):
-    """Route one question and answer it: `(rows, route)`. The router and the
-    search both fail open to `[]` -- the ponder's own picks still stand."""
-    record = record if record is not None else {}
-    t0 = time.time()
-    try:
-        route = route_question(query, asker=asker, people=people, language=language)
-    except Exception as exc:  # noqa: BLE001 -- the floor: today's ponder
-        record.update(unasked=f"{type(exc).__name__}: {str(exc)[:200]}", seconds=round(time.time() - t0, 3))
-        return [], None
-    record.update(route)
-    try:
-        rows = answer(route, query, memories=memories, vectors=vectors, lanes=lanes, embedded=embedded,
-                      known=known, places=places, current_turn_idx=current_turn_idx, language=language,
-                      asker=asker, record=record)
-    except Exception as exc:  # noqa: BLE001 -- a search that cannot finish adds nothing
-        record.update(failed=f"{type(exc).__name__}: {str(exc)[:200]}")
-        rows = []
-    record.update(seconds=round(time.time() - t0, 3))
-    return rows, route

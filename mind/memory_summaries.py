@@ -24,11 +24,70 @@ from mind.memory_write import (
 )
 from mind.memory_read import visible_memory_rows
 from mind.memory_retrieval import provenance_context_label
+from core import frames as _frames
 
 # ---- Memory Summaries ----
 
+#: The frame every summary window is consolidated in: the present.
+#: `maybe_consolidate_character_memory` refuses any other frame, and the host's
+#: consolidate and backfill buttons read the ambient frame outside any `_era`
+#: scope, which is the present. A window is therefore a PRESENT-era fact derived
+#: from the rows the present could see, closing on its `end_turn_idx` -- and is
+#: visible exactly where a present-era memory formed on that turn would be.
+SUMMARY_FRAME_ID = None
+
+
+def visible_summary_rows(chat_id, char_id, scope, *, before_turn_idx,
+                         viewer_frame_id, limit=None, earliest=False):
+    """The summary windows of `scope` this mind may read, latest first.
+
+    THE SAME TWO FILTERS `visible_memory_rows` APPLIES, because a summary is
+    those rows folded together: the turn cutoff (a window that closed at or
+    after the deciding turn describes how this beat turned out) and the frame
+    rule (`frames.is_memory_visible`, with the window as a present-era memory
+    of its last turn -- `SUMMARY_FRAME_ID`). Both arguments are required, as
+    at the row seam; `viewer_frame_id` may be `_UNSET` for the ambient frame.
+
+    The frame rule was missing (review 2026-11-01, mind_memory F1, reproduced):
+    a native of a frame "ten years earlier" was handed the present era's
+    autobiography, its unresolved thread, its earlier windows, its hearsay and
+    its origin window, while every raw row of that era was hidden from it. A
+    traveller keeps them, and a later era reads them, by the row rule
+    unchanged; an unmerged spatial split reads the windows that closed by the
+    split and none after, since a window spanning it blends what that side has
+    not lived and cannot be un-blended. An unframed chat pays nothing: both
+    sides are the present and the rule answers before any lookup.
+
+    `limit` keeps the first that many, `earliest` orders oldest first. From
+    the present every window is visible, so there the limit is the query's
+    own and a caller wanting one window reads one row, as it always did.
+    """
+    vf = _active_frame_id.get() if viewer_frame_id is _UNSET else viewer_frame_id
+    # A mind on a call reads as a native of its own member frame, never of
+    # the couple (`visible_memory_rows`, the same resolution).
+    from world.spatial_frames import couple_member_frame
+    vf = couple_member_frame(chat_id, vf, char_id=char_id)
+    sql = ("SELECT * FROM memory_summaries WHERE chat_id=? AND char_id=? "
+           "AND scope=?")
+    args = [chat_id, char_id, scope]
+    if before_turn_idx is not None:
+        sql += " AND end_turn_idx < ?"
+        args.append(int(before_turn_idx))
+    sql += (" ORDER BY end_turn_idx ASC, id ASC" if earliest
+            else " ORDER BY end_turn_idx DESC, id DESC")
+    if vf is SUMMARY_FRAME_ID and limit is not None:
+        sql += " LIMIT ?"
+        args.append(int(limit))
+    rows = q(sql, tuple(args)) or []
+    index = {}
+    rows = [r for r in rows
+            if _frames.is_memory_visible(char_id, SUMMARY_FRAME_ID, vf,
+                                         r["end_turn_idx"], index=index)]
+    return rows if limit is None else rows[:int(limit)]
+
+
 def get_memory_summary(chat_id, char_id, scope="autobiographical", *,
-                       before_turn_idx=None):
+                       before_turn_idx=None, viewer_frame_id=_UNSET):
     """The character's CURRENT summary for this scope: the latest window.
 
     Since v23 a scope holds one row per window rather than one row overall, so
@@ -49,16 +108,15 @@ def get_memory_summary(chat_id, char_id, scope="autobiographical", *,
     close on the same turn (different scopes are separate rows, but a rerun
     that lands on the same boundary updates in place, and a restore renumbers
     ids), so the later row wins.
+
+    Read through `visible_summary_rows`, so the latest window is the latest
+    one this mind may see from `viewer_frame_id` (the ambient frame unless
+    stated).
     """
-    cutoff_sql = ""
-    args = [chat_id, char_id, scope]
-    if before_turn_idx is not None:
-        cutoff_sql = " AND end_turn_idx < ?"
-        args.append(int(before_turn_idx))
-    row = q("SELECT * FROM memory_summaries WHERE chat_id=? AND char_id=? "
-            "AND scope=?" + cutoff_sql +
-            " ORDER BY end_turn_idx DESC, id DESC LIMIT 1",
-            tuple(args), one=True)
+    rows = visible_summary_rows(chat_id, char_id, scope,
+                                before_turn_idx=before_turn_idx,
+                                viewer_frame_id=viewer_frame_id, limit=1)
+    row = rows[0] if rows else None
     if not row:
         return {"scope": scope, "start_turn_idx": 0, "end_turn_idx": 0, "summary": "",
                 "key_phrases": [], "unresolved_threads": [], "updated": None}
@@ -68,7 +126,8 @@ def get_memory_summary(chat_id, char_id, scope="autobiographical", *,
 
 def search_memory_summaries(chat_id, char_id, query, k=3, *,
                             scope="autobiographical", before_turn_idx=None,
-                            exclude_latest=True, embedded=None):
+                            exclude_latest=True, embedded=None,
+                            viewer_frame_id=_UNSET):
     """Rank a character's summary WINDOWS by semantic similarity to `query`.
 
     The layer above raw recall: which ERA of my life is this beat about. Every
@@ -96,19 +155,21 @@ def search_memory_summaries(chat_id, char_id, query, k=3, *,
     follow, for the same reason: a cross-model cosine is noise wearing the
     shape of a score.
 
+    - **viewer_frame_id** is the frame rule (`visible_summary_rows`): a
+      window is a present-era fact, and a native of another era reads only
+      what that era may see.
+
     Returns [{...window..., "score": float}], best first, `k` at most.
     """
-    rows = q("SELECT * FROM memory_summaries WHERE chat_id=? AND char_id=? "
-             "AND scope=? ORDER BY end_turn_idx DESC, id DESC",
-             (chat_id, char_id, scope))
+    rows = visible_summary_rows(chat_id, char_id, scope,
+                                before_turn_idx=before_turn_idx,
+                                viewer_frame_id=viewer_frame_id)
     if not rows:
         return []
-    if before_turn_idx is not None:
-        cutoff = int(before_turn_idx)
-        rows = [r for r in rows if (r["end_turn_idx"] or 0) < cutoff]
     # "Latest" means latest VISIBLE window. Applying this before the temporal
-    # cutoff drops the wrong row on a rerun: the future global latest vanishes
-    # at the cutoff and the visible latest is then returned twice.
+    # cutoff (or the frame rule) drops the wrong row on a rerun: the future
+    # global latest vanishes at the cutoff and the visible latest is then
+    # returned twice.
     if exclude_latest:
         rows = rows[1:]
     rows = [r for r in rows if (r["summary"] or "").strip()]

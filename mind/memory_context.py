@@ -23,7 +23,7 @@ from mind.memory_retrieval import (
 )
 from mind.memory_summaries import (
     backfill_missing_memory_event_keys, get_memory_summary,
-    search_memory_summaries,
+    search_memory_summaries, visible_summary_rows,
 )
 from mind.memory_time import MemoryClock
 
@@ -246,12 +246,13 @@ def _origin_on_drift(chat_id, char_id, current_turn_idx, active_state, *,
             drift = True
     if not drift:
         return {}
-    # Fetch the earliest first-hand summary window.
-    rows = q("SELECT * FROM memory_summaries WHERE chat_id=? AND char_id=? "
-             "AND scope=? AND end_turn_idx < ? "
-             "ORDER BY end_turn_idx ASC, id ASC LIMIT 1",
-             (chat_id, char_id, SUMMARY_SCOPE_FIRSTHAND,
-              int(current_turn_idx)))
+    # Fetch the earliest first-hand summary window THIS MIND MAY SEE: through
+    # the summary seam, so the origin of a present-era life never reaches a
+    # native of an earlier frame (review 2026-11-01, mind_memory F1).
+    rows = visible_summary_rows(
+        chat_id, char_id, SUMMARY_SCOPE_FIRSTHAND,
+        before_turn_idx=int(current_turn_idx),
+        viewer_frame_id=clock.viewer_frame_id, limit=1, earliest=True)
     if not rows:
         return {}
     r = rows[0]
@@ -268,6 +269,20 @@ def _origin_on_drift(chat_id, char_id, current_turn_idx, active_state, *,
         "epistemic_origin": summary_context_label(r["scope"]),
         "when": clock.of_window(r["start_turn_idx"], r["end_turn_idx"]),
     }}
+
+
+def _slice(batch, lo, hi):
+    """Vectors `lo:hi` of one embedding batch, as a batch of their own with
+    its model, width and fallback flag -- each lane's own query vector."""
+    import dataclasses
+    try:
+        return dataclasses.replace(batch, vectors=list(batch.vectors[lo:hi]))
+    except TypeError:
+        from llm.providers import EmbeddingBatch
+        return EmbeddingBatch(vectors=list(batch.vectors[lo:hi]), model_key=batch.model_key,
+                              dimensions=batch.dimensions,
+                              fallback=bool(getattr(batch, "fallback", False)),
+                              error=str(getattr(batch, "error", "") or ""))
 
 
 #: How many turns back the recent memories reach: all of them, chosen by code
@@ -350,7 +365,8 @@ def build_character_memory_context(chat_id, char_id, current_turn_idx, current_v
     # older, and a row delivered as recent must not come back as "recalled".
     recent_ids = {m["id"] for m in recent}
     summary = get_memory_summary(
-        chat_id, char_id, before_turn_idx=current_turn_idx)
+        chat_id, char_id, before_turn_idx=current_turn_idx,
+        viewer_frame_id=clock.viewer_frame_id)
     # WHAT IS STILL UNSETTLED, COMPUTED ONCE. Two things leave a question
     # open for a mind -- a concern it declared at the close of an earlier beat
     # and a thread its own summary left dangling -- and they are one list, not
@@ -398,7 +414,8 @@ def build_character_memory_context(chat_id, char_id, current_turn_idx, current_v
         if scope == SUMMARY_SCOPE_FIRSTHAND:
             continue
         scoped_summary = get_memory_summary(
-            chat_id, char_id, scope, before_turn_idx=current_turn_idx)
+            chat_id, char_id, scope, before_turn_idx=current_turn_idx,
+            viewer_frame_id=clock.viewer_frame_id)
         text = str(scoped_summary.get("summary") or "").strip()
         if text:
             provenance_summaries[label] = text
@@ -437,8 +454,24 @@ def build_character_memory_context(chat_id, char_id, current_turn_idx, current_v
     # window layer free rather than a second round trip per character per beat.
     _aspects = [(str(lbl), str(txt).strip()) for lbl, txt in aspects
                 if str(txt or "").strip()]
-    embedded = embed_texts_meta([query_text or "memory"]
-                                + [txt for _lbl, txt in _aspects])
+    # AND THE LANES' OWN QUESTIONS IN THE SAME REQUEST. A ponder, a question
+    # this mind was asked and an unbidden subject are known before anything
+    # is embedded, and each made a request of its own after this one (review
+    # 2026-11-01, mind_memory E2: up to seven serial round trips a character
+    # a beat, against a provider bucket of about three whose 429s strand
+    # rows on the hash). Same texts, same vectors; one round trip. Each lane
+    # is handed its own one-vector slice (`_slice`).
+    ponder_query = " ".join(str(ponder_query or "").split())[:240]
+    asked_query = " ".join(str(asked_query or "").split())[:240]
+    resurfaced_subject = " ".join(str(resurfaced_subject or "").split())[:240]
+    _lane_texts = list(dict.fromkeys(
+        t for t in (ponder_query, asked_query, resurfaced_subject) if t))
+    _batch = embed_texts_meta([query_text or "memory"]
+                              + [txt for _lbl, txt in _aspects] + _lane_texts)
+    _main = 1 + len(_aspects)
+    embedded = _slice(_batch, 0, _main)
+    lane_embedded = {text: _slice(_batch, _main + i, _main + i + 1)
+                     for i, text in enumerate(_lane_texts)}
     # `record_access=False` ON EVERY LANE BELOW (review 2026-09-07 A78). This
     # payload is assembled by the CHARACTER STAGE, which is read-only: it may
     # be rerolled, resumed or replayed, and a durable counter that moves each
@@ -515,7 +548,6 @@ def build_character_memory_context(chat_id, char_id, current_turn_idx, current_v
     # turn. This is an additive, explicitly-labelled retrieval lane: normal
     # cue/mood/goal recall above remains untouched. It costs an embedding call
     # only when a ponder is actually pending, which should be exceptional.
-    ponder_query = " ".join(str(ponder_query or "").split())[:240]
     ponder_why = " ".join(str(ponder_why or "").split())[:240]
     pondered = []
     ponder_record = {}
@@ -543,7 +575,7 @@ def build_character_memory_context(chat_id, char_id, current_turn_idx, current_v
         pondered = jev_ponder_packet(
             chat_id, char_id, ponder_query, why=ponder_why,
             current_turn_idx=current_turn_idx,
-            embedded=embed_texts_meta([ponder_query]), here=here, limit=ponder_k,
+            embedded=lane_embedded[ponder_query], here=here, limit=ponder_k,
             person=person, view=current_view, active_state=active_state,
             unsettled=unresolved_items, language=language, bank=bank,
             record=ponder_record, about=named_in(ponder_query, known_names), known=known)
@@ -567,14 +599,13 @@ def build_character_memory_context(chat_id, char_id, current_turn_idx, current_v
     # it is not one it chose. Measured on the concept lab's second story: the
     # mind's own ponder (whether naming a man had been right) held the lane,
     # and the clerk's date question went unanswered from recall -- wrong.
-    asked_query = " ".join(str(asked_query or "").split())[:240]
     asked_why = " ".join(str(asked_why or "").split())[:240]
     asked_rows, asked_record = [], {}
     if asked_query and asked_query != ponder_query:
         asked_rows = jev_ponder_packet(
             chat_id, char_id, asked_query, why=asked_why,
             current_turn_idx=current_turn_idx,
-            embedded=embed_texts_meta([asked_query]), here=here,
+            embedded=lane_embedded[asked_query], here=here,
             limit=min(PONDER_LIMIT, max(4, int(recall_limit))),
             person=person, view=current_view, active_state=active_state,
             unsettled=unresolved_items, language=language, bank=bank,
@@ -606,7 +637,8 @@ def build_character_memory_context(chat_id, char_id, current_turn_idx, current_v
     earlier = (search_memory_summaries(
         chat_id, char_id, query_text, k=summary_limit,
         scope=SUMMARY_SCOPE_FIRSTHAND, before_turn_idx=current_turn_idx,
-        exclude_latest=True, embedded=embedded) if summary_limit else [])
+        exclude_latest=True, embedded=embedded,
+        viewer_frame_id=clock.viewer_frame_id) if summary_limit else [])
     # Chronological, oldest first: these are stretches of a life, and rank order
     # would present it out of sequence. Ranking has already done its work by
     # choosing WHICH ones. Absent rather than empty when there are none, like
@@ -773,7 +805,6 @@ def build_character_memory_context(chat_id, char_id, current_turn_idx, current_v
     # refuses to speak for a silent player: this mind did not ask for it, and
     # `query_i_chose_last_turn` would be the engine telling a character it
     # decided something it did not.
-    resurfaced_subject = " ".join(str(resurfaced_subject or "").split())[:240]
     resurfaced_payload = {}
     resurfaced_rows = []
     if resurfaced_subject:
@@ -782,7 +813,8 @@ def build_character_memory_context(chat_id, char_id, current_turn_idx, current_v
             chat_id, char_id, resurfaced_subject, k=max(4, int(recall_limit)),
             include_archived=True, current_turn_idx=current_turn_idx,
             chronological=True, here=here, in_sight=in_sight,
-            record_access=False, bank=bank)
+            record_access=False, bank=bank,
+            embedded=lane_embedded[resurfaced_subject])
         # Before the already-in-mind filter, for the same reason as the
         # ponder lane: the search reached these rows.
         access_ids.extend(m.get("id") for m in _resurfaced

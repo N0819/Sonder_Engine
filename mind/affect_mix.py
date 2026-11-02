@@ -751,6 +751,40 @@ def recall_lands(state, memory_id, now, *, step=HABITUATION_STEP, half_life=HABI
     return habituation_multiplier(h, grace=grace, ceiling=ceiling), state
 
 
+#: Below this a memory's rested habituation is nothing at the precision the
+#: state is kept in: `recall_lands` stores `h` to four places, so this is half
+#: the last stored digit.
+HABITUATION_RESTED_AWAY = 0.5e-4
+
+
+def rested_away(state, now, *, half_life=HABITUATION_HALF_LIFE):
+    """`state` without the memories whose habituation has rested back to
+    nothing by psych time `now` -- LOSSLESSLY: such an entry's next landing
+    (`recall_lands`) gives the multiplier and the stored level an absent one
+    gives, because its rested `h` vanishes in the four-place rounding and
+    a step (`HABITUATION_STEP`, below `HABITUATION_GRACE`) is read at full
+    strength either way.
+
+    Nothing removed an entry before (review 2026-11-01,
+    mind_affect_psychology E3): `mood_habits` grew by one per memory ever
+    recalled -- 80 entries / 4.5 KB after 36 turns on chat 178 -- rewritten
+    every commit and copied into every checkpoint and archive. An entry left
+    unrecalled for ~72 story minutes (14.3 half-lives) now goes."""
+    out = {}
+    for ref, prior in (state or {}).items():
+        if not isinstance(prior, dict):
+            continue
+        try:
+            rested = habituation_after(prior.get("h", 0.0), float(now) - float(prior.get("at", now)),
+                                       half_life=half_life)
+        except (TypeError, ValueError):
+            out[ref] = prior          # unreadable: kept as it was, never guessed away
+            continue
+        if rested >= HABITUATION_RESTED_AWAY:
+            out[ref] = prior
+    return out
+
+
 def rehabituate(state, memory_id):
     """New information about a memory -- a reinterpretation, a new event of
     the same kind -- resets its habituation at once."""

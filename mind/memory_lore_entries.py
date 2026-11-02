@@ -11,7 +11,7 @@ from llm.providers import embed_texts, embed_texts_meta
 from core.logging_utils import logger
 
 from mind.memory_common import (
-    LORE_CATEGORIES, _blob, _cos, _ids, _kw_scores, _lore_document,
+    LORE_CATEGORIES, _UNSET, _blob, _cos, _ids, _kw_scores, _lore_document,
     _storage_json, _vec,
 )
 from mind.memory_lorebooks import (
@@ -155,24 +155,48 @@ def add_lore(lorebook_id, keys, content, turn_added=None, locked=0, category="ot
         note_failed_embedding_write("lore_entries", [entry_id])
     return entry_id
 
-def update_lore(entry_id, keys, content, category=None, title=None,
-                knowledge_tag=None, knowledge_range=None, knowledge_locations=None,
+def update_lore(entry_id, keys, content, category=None, title=_UNSET,
+                knowledge_tag=_UNSET, knowledge_range=_UNSET,
+                knowledge_locations=_UNSET,
                 importance=None, aliases=None, scope=None, relations=None,
                 source_notes=None, embedding=None, embedding_model=None,
-                embedding_dim=None, circles=None):
+                embedding_dim=None, circles=_UNSET):
+    """Rewrite one entry's text and the fields the caller STATES.
+
+    ONE CONVENTION: a field the caller does not pass is left as it stands.
+    Of the fields it passes, the five nullable gate fields take None as a
+    real value -- `title` (none), `knowledge_tag` (Director-only: reaches no
+    mind), `knowledge_range` (global), `knowledge_locations` (no places) and
+    `circles` (inherit the book) -- which is how the host's editor clears a
+    tag and how a restore writes a snapshot back verbatim. The rest have no
+    NULL meaning, so None reads as not passed.
+
+    It was two conventions (review 2026-11-01, mind_memory F5/F6, reproduced):
+    the four gate fields were always written, so `update_lore(eid, keys,
+    content)` set the tag NULL and every mind that knew the fact lost it;
+    and `circles` was written only when not None, so a lorebook restore could
+    never write NULL back and a compartment change survived its own rollback.
+    A list for `knowledge_locations` (a plan's shape) raised a binding error;
+    it is stored as JSON, as `add_lore` stores it.
+    """
     vec = embedding
     model_key, dims, fell_back = None, None, False
     if vec is None:
         vec, model_key, dims, fell_back = _embed_lore_document(keys, content)
     else:
         model_key, dims = _carried_stamp(vec, embedding_model, embedding_dim)
-    fields = ["keys=?", "content=?", "embedding=?", "title=?",
-              "knowledge_tag=?", "knowledge_range=?", "knowledge_locations=?",
+    fields = ["keys=?", "content=?", "embedding=?",
               "embedding_model=?", "embedding_dim=?"]
-    values = [keys or "", content or "", _blob(vec), title,
-              knowledge_tag, knowledge_range, knowledge_locations,
-              model_key, dims]
-    
+    values = [keys or "", content or "", _blob(vec), model_key, dims]
+    for column, value in (("title", title), ("knowledge_tag", knowledge_tag),
+                          ("knowledge_range", knowledge_range)):
+        if value is not _UNSET:
+            fields.append(f"{column}=?")
+            values.append(value)
+    if knowledge_locations is not _UNSET:
+        fields.append("knowledge_locations=?")
+        values.append(_storage_json(knowledge_locations))
+
     if category and category in LORE_CATEGORIES:
         fields.append("category=?")
         values.append(category)
@@ -189,10 +213,11 @@ def update_lore(entry_id, keys, content, category=None, title=None,
         fields.append("relations=?")
         values.append(_storage_json(relations))
     # Only when the caller actually supplied one -- see add_lore: leaving it
-    # alone preserves "inherit the book", which is what NULL means.
-    if circles is not None:
+    # alone preserves "inherit the book", which is what NULL means; and a
+    # caller that STATES None writes that NULL (a restore putting it back).
+    if circles is not _UNSET:
         fields.append("circles=?")
-        values.append(_storage_json(circles))
+        values.append(None if circles is None else _storage_json(circles))
     if source_notes is not None:
         fields.append("source_notes=?")
         values.append(source_notes)
@@ -512,14 +537,28 @@ def search_lore(lorebook_ids, query, k=6, exclude_categories=None, *,
     #
     # Counted, not repaired: re-embedding is a migration and this is a ranking
     # loop. What this owes its caller is the number.
+    #
+    # A HASH QUERY RANKS NOTHING (review 2026-11-01, mind_memory F10). A query
+    # that fell back is a crc32 sketch, and every memory ranking refuses one
+    # (`search_memories`' `rank_by_vector`, on CRC32_CONTROL §8: ranking on the
+    # hash scored 289/470 against 338 with no vector at all). Here a row stamped
+    # with the same hash key passed as "compatible", so on a provider-less
+    # install -- and for every lore row written during a rate-limit window, the
+    # same window that makes the query fall back -- the 0.65 term was hash
+    # cosine. The keyword term ranks alone then; and no row is counted blind,
+    # because the query is what fell back, not the rows.
+    rank_by_vector = not getattr(_batch, "fallback", False)
+    if not rank_by_vector:
+        logger.debug("lore search ranked by keyword only: the query embedding "
+                     "fell back (%s)", getattr(_batch, "error", "") or "no provider")
     blind = 0
     for r in rows:
         vec = _vec(r["embedding"])
-        compatible = (qv is not None and vec is not None
+        compatible = (rank_by_vector and qv is not None and vec is not None
                       and len(qv) == len(vec)
                       and (r["embedding_model"] == _batch.model_key
                            or r["embedding_model"] is None))
-        if qv is not None and vec is not None and not compatible:
+        if rank_by_vector and qv is not None and vec is not None and not compatible:
             blind += 1
         s = (0.65 * (_cos(qv, vec) if compatible else 0.0)
              + 0.35 * kw.get(r["id"], 0.0)

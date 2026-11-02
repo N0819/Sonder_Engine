@@ -519,8 +519,13 @@ def record_text(record):
 # The card and the memory, the mind's own.
 # ---------------------------------------------------------------------------
 
-def card_of(sheet):
-    """`who`: the mind's card as the writer reads it (`CARD_FIELDS`)."""
+def card_of(sheet, interior=None):
+    """`who`: the mind's card as the writer reads it (`CARD_FIELDS`), its
+    psychology as it stands NOW -- the effective drive and the live belief and
+    association ledgers from `interior` (`psychology_runtime.live_psychology`;
+    the card alone read the drive a rupture had replaced, review 2026-11-01,
+    mind_affect_psychology F7)."""
+    from mind.psychology_runtime import live_psychology
     from story.character_schema import (character_name,
                                         character_private_history,
                                         character_psychology,
@@ -529,7 +534,7 @@ def card_of(sheet):
     sheet = sheet if isinstance(sheet, dict) else {}
     who = {
         "name": character_name(sheet),
-        "psychology": character_psychology(sheet),
+        "psychology": live_psychology(character_psychology(sheet), interior),
         "voice": character_voice(sheet),
         "public_history": character_public_history(sheet),
         "private_history": [
@@ -539,11 +544,14 @@ def card_of(sheet):
     return {key: who[key] for key in CARD_FIELDS if who[key] not in ("", [], {}, None)}
 
 
-def _person(sheet):
+def _person(sheet, interior=None):
     """`{name, drive, values}`: the mind the decision model picks recalled
-    memories FOR, read from the card the way the character call reads it."""
+    memories FOR, read the way the character call reads it -- its drive the
+    effective one (`live_psychology`)."""
+    from mind.psychology_runtime import live_psychology
     from story.character_schema import character_name, character_psychology
-    psychology = character_psychology(sheet if isinstance(sheet, dict) else {})
+    psychology = live_psychology(
+        character_psychology(sheet if isinstance(sheet, dict) else {}), interior)
     drive = psychology.get("drive")
     drive = _text(drive.get("essence")) if isinstance(drive, dict) else _text(drive)
     values = psychology.get("values")
@@ -563,7 +571,7 @@ def _without_handles(value):
 
 
 def memory_packet(chat_id, char_id, turn_idx, sheet, active_state, record, *,
-                  language=None):
+                  language=None, interior=None):
     """`(memory, which)`: what the mind remembers from BEFORE the skip beat.
 
     "full": the packet its own character call would be handed at that beat
@@ -578,7 +586,7 @@ def memory_packet(chat_id, char_id, turn_idx, sheet, active_state, record, *,
     try:
         packet = build_character_memory_context(
             chat_id, char_id, turn_idx, record_text(record), active_state or {},
-            bank=memory_bank_cache(), person=_person(sheet), language=language)
+            bank=memory_bank_cache(), person=_person(sheet, interior), language=language)
         return _without_handles(packet), "full"
     except Exception as exc:  # noqa: BLE001 -- the recent window stands in
         logger.info("skip memory: full packet not built for char %s (%s); "
@@ -1316,11 +1324,15 @@ def write_rows(chat_id, char_id, turn, variant_id, rows, *, job=None):
             return (entry.get("char_id") == char_id and entry.get("turn_id") == turn["id"]
                     and str(entry.get("event_key") or "").startswith(SKIP_ORIGIN_PREFIX))
 
-        # Only when the next beat has begun: the dump reads the whole bank,
-        # and this transaction holds the write lock.
+        # Only when the next beat has begun, and only the rows just written:
+        # this transaction holds the write lock the next commit waits on. The
+        # dump read the WHOLE bank, every character's, once per mind (review
+        # 2026-11-01, mind_affect_psychology E2); `mine` still judges what it
+        # returns.
         if q("SELECT 1 FROM checkpoints WHERE chat_id=? AND turn_idx>? LIMIT 1",
              (chat_id, turn["idx"]), one=True):
-            entries = [m for m in dump_chat_memories(chat_id, inline_vectors=False)
+            entries = [m for m in dump_chat_memories(chat_id, inline_vectors=False,
+                                                     ids=written)
                        if mine(m)]
             carry_memories_forward(chat_id, turn["idx"], mine, entries)
     return len(written)
@@ -1349,19 +1361,22 @@ def remember_one(chat_id, turn, variant_id, name, entry, span, *, char_id,
     """One mind's whole pass: its record, card and memory; the writer; the
     check, the rewrite and the drop; the rows. Returns what it did."""
     from core import jobs
-    from story.scene import sheet_state
+    from story.scene import cast_state, sheet_state
 
     row = _cast_row(chat_id, char_id, turn["frame_id"])
     if row is None:
         return {"status": "not in the cast"}
     sheet, active, _stance = sheet_state(row)
+    # The mind's live ledger, from the same frame-scoped row (`_cast_row`):
+    # what its psychology is NOW, for the writer and the recall picker.
+    interior = cast_state(row).get("interior")
     log = [r for r in entry.get("log") or []] if isinstance(entry.get("log"), list) else []
     record = record_rows(log, span_from=_seconds(span.get("from_s"), 0.0),
                          anchor=anchor, length=length, name=name,
                          room_names=room_names, language=language)
     memory, which = memory_packet(chat_id, char_id, turn["idx"], sheet, active,
-                                  record, language=language)
-    payload = writer_payload(card_of(sheet), memory, record,
+                                  record, language=language, interior=interior)
+    payload = writer_payload(card_of(sheet, interior), memory, record,
                              span_view(span, anchor, length))
     if jobs.is_cancelled(job):
         return {"status": "cancelled", "packet": which}

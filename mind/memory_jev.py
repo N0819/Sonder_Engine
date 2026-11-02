@@ -157,18 +157,57 @@ def _stands_in(token, folded, words):
     return token in folded
 
 
+def _name_words(name):
+    """The forms of `name` a text can say it by, longest first: the whole
+    name, then each word `named_in` would match -- three letters or more
+    other than "the", a word of two or more in a script without spaces, and
+    an unspaced name's parts written together ("\u30aa\u30ec\u30f3\u30c0\u30b9\u30af")."""
+    parts = re.findall(r"\w+", name)
+    words = [name] + [t for t in parts if len(t) >= 3 and t.casefold() != "the"]
+    words += [t for t in parts if len(t) >= 2 and _UNSPACED.search(t) and t not in words]
+    whole = "".join(parts)
+    if len(parts) > 1 and _UNSPACED.search(whole):
+        words.append(whole)
+    return sorted(dict.fromkeys(words), key=len, reverse=True)
+
+
 def without_names(text, names):
-    """The text with every one of `names` said as "them" ("their" where it
-    owns something): the whole name, then any word of it `named_in` would
-    have matched, each only where it stands as a word -- "What did Picard
-    say?" -> "What did them say?", "Hinami's mother" -> "their mother"."""
+    """The text with every one of `names` taken out: the whole name, then any
+    word of it `named_in` would have matched, each only where it stands as a
+    whole name (`language_runtime.name_boundary_pattern`, decided by the
+    script at each edge). In a question written in spaced words a name is
+    said as "them" ("their" where it owns something) -- "What did Picard
+    say?" -> "What did them say?", "Hinami's mother" -> "their mother". In a
+    question written in a script without spaces it is taken out where it
+    stands -- "\u30aa\u30ec\u30f3\u306b\u521d\u3081\u3066\u4f1a\u3063\u305f\u306e\u306f\u3044\u3064\uff1f" -> "\u306b\u521d\u3081\u3066\u4f1a\u3063\u305f\u306e\u306f\u3044\u3064\uff1f".
+
+    BOTH HALVES WERE ENGLISH-ONLY (review 2026-11-01, mind_memory F16,
+    reproduced): a `\\w` boundary never falls beside a name a particle is
+    written onto, so a Japanese question kept its name and the measured
+    48th -> 15th gain never applied; and where one did fall, inside the name,
+    the question came back "\u521d\u3081\u3066\u4f1a\u3063\u305f\u306e\u306f\u30aa\u30ec\u30f3\u30fbthem". No word of the
+    story's pronoun set is known here (the pack carries none for this), and
+    taking the name out is what the embedding needs, so an unspaced question
+    loses the name without gaining a word in another language."""
+    from language_runtime import UNSPACED_SCRIPT, name_boundary_pattern
     out = str(text or "")
-    for name in sorted({str(n) for n in names or () if str(n).strip()}, key=len, reverse=True):
-        words = [name] + [t for t in re.findall(r"\w+", name) if len(t) >= 3 and t.casefold() != "the"]
-        for word in words:
-            said = rf"(?<!\w){re.escape(word)}(?!\w)"
-            out = re.sub(said + r"['\u2019]s\b", "their", out, flags=re.IGNORECASE)
-            out = re.sub(said, "them", out, flags=re.IGNORECASE)
+    forms = [name_boundary_pattern(word)
+             for name in sorted({str(n) for n in names or () if str(n).strip()},
+                                key=len, reverse=True)
+             for word in _name_words(name)]
+    # WHICH SCRIPT THE QUESTION IS WRITTEN IN is read off its own words, the
+    # names taken out: "When did I meet \u30d2\u30ca\u30df?" is an English question.
+    rest = out
+    for said in forms:
+        rest = re.sub(said, "", rest, flags=re.IGNORECASE)
+    spaced = not UNSPACED_SCRIPT.search(rest)
+    them, their = ("them", "their") if spaced else ("", "")
+    for said in forms:
+        if spaced:
+            out = re.sub(said + r"['\u2019]s\b", their, out, flags=re.IGNORECASE)
+        out = re.sub(said, them, out, flags=re.IGNORECASE)
+    if not spaced:
+        return out
     out = re.sub(r"\bthem(?:[\s-]+them)+\b", "them", out)
     return re.sub(r"\bthem(?:[\s-]+their)\b", "their", out)
 
