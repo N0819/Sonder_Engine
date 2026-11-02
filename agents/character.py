@@ -12,7 +12,7 @@ from mind import affect, affect_pass, character_jev
 from mind.affect import (CRISIS_STRAIN_MIN, INTENT_DORMANT_AFTER,
                     RUPTURE_FORCE_AFTER, ground_tells)
 from core.db import q, wget
-from language_runtime import compositor_text, linguistic
+from language_runtime import compositor_text, fold_text, linguistic
 from story.character_schema import (
     cast_entity_id,
     character_identity_from_text,
@@ -122,8 +122,17 @@ from .common import (
 # shared pool lets those reads proceed during that wait.  Every submitted job
 # receives a context copied in the parent: provider call-ledger attribution and
 # cancellation live in contextvars and a worker otherwise inherits neither.
+#
+# HOW MANY MINDS' RECALL MAY WAIT ON THE EMBEDDING PROVIDER AT ONCE -- a cap,
+# and the owner's to rule on (review 2026-11-01, agents_character_background
+# E2): the skip stage asks up to `skip_stage.SKIP_ASK_WORKERS` (8) minds at
+# once and parallel `character:<id>` steps share this pool too, so minds five
+# to eight queue for an embedding round trip plus the recall picker while
+# their step threads block on `future.result()`. Kept at the value it has
+# always had; named so the number is visible.
+MEMORY_CONTEXT_WORKERS = 4
 _MEMORY_CONTEXT_POOL = ThreadPoolExecutor(
-    max_workers=4, thread_name_prefix="character-memory")
+    max_workers=MEMORY_CONTEXT_WORKERS, thread_name_prefix="character-memory")
 
 #: The name the CHARACTER reads a payload key under, where the engine's own
 #: name for the thing would tell them about the machinery instead of about
@@ -226,6 +235,30 @@ def _variant_window(cache, key, fetch):
     if key not in window:
         window[key] = fetch()
     return window[key]
+
+
+def _is_question(text):
+    """Whether a line ASKS, by its punctuation: a question mark of any
+    script -- NFKC folds the full-width `？` and the small form onto `?`
+    (`language_runtime.fold_text`) -- or one the story's pack declares
+    (`agents.common._QUESTION_MARKS`).
+
+    Four readers here tested `"?" in line`, and `'?' in 'どこへ行くの？'` is
+    False: in a Japanese story the player's questions never became
+    `awaiting_your_answer`, `recent_self_moves.asked` stayed empty and the
+    repeated-ask screen never fired (review 2026-11-01,
+    agents_character_background F12; `director_floors`,
+    `impossible_knowledge` and the pack's table already read `？`)."""
+    line = str(text or "")
+    if not line:
+        return False
+    if "?" in fold_text(line):
+        return True
+    try:
+        marks = linguistic("agents.common", "_QUESTION_MARKS")
+    except Exception:  # noqa: BLE001 -- a pack without the table adds nothing
+        return False
+    return any(mark and mark in line for mark in marks or ())
 
 
 def _recent_self_lines(chat_id, char_name, current_turn_idx, n_turns=6, cap=6,
@@ -356,7 +389,7 @@ def _recent_self_moves(chat_id, char_id, current_turn_idx, n_turns=12, cap=12,
         # and "lightly reassure Hinami and acknowledge the home compliment";
         # the exact-line guard found nothing, because the three are lexical
         # paraphrases sharing almost no wording.
-        asked = [line[:200] for line in said if "?" in line]
+        asked = [line[:200] for line in said if _is_question(line)]
         entry = {
             "turn": row["idx"],
             **({"move": move[:320]} if move else {}),
@@ -410,7 +443,7 @@ def _this_beat_self_record(prior_result, turn_idx):
     move = _selected_move_text(prior_result)
     if not (said or move):
         return lines, None
-    asked = [line[:200] for line in said if "?" in line]
+    asked = [line[:200] for line in said if _is_question(line)]
     interaction = prior_result.get("interaction")
     entry = {
         "turn": turn_idx,
@@ -748,7 +781,7 @@ def _unanswered_question_note(chat_id, char_name, char_id, current_turn_idx,
             # question mark IS the available test -- there is no
             # `expects_response` on a player declaration, and inventing one
             # would mean guessing at intent the Director never recorded.
-            reached = [line for line in reached if "?" in line]
+            reached = [line for line in reached if _is_question(line)]
             # Typed described questions carry their direction structurally;
             # no punctuation or invented exact quote is needed.
             for event in communicated:
@@ -776,13 +809,10 @@ def _unanswered_question_note(chat_id, char_name, char_id, current_turn_idx,
             continue
         if str(row["step_key"]).startswith("character:"):
             # A bare character step stores the one result whole.
-            results = {row["step_key"]: content}
+            results = [content]
         else:
-            results = (content.get("character_results")
-                       or content.get("reaction_results") or {})
-        if not isinstance(results, dict):
-            continue
-        for result in results.values():
+            results = _declarations_in_order(content)
+        for result in results:
             if not isinstance(result, dict):
                 continue
             speaker = str(result.get("name") or "").strip()
@@ -840,6 +870,42 @@ def _unanswered_question_note(chat_id, char_name, char_id, current_turn_idx,
     if isinstance(cache, dict):
         cache[cache_key] = dict(result)
     return _labelled_debt(result, label)
+
+
+def _declarations_in_order(content):
+    """One loop row's declarations in the order they were MADE: each of its
+    `rounds`' own result (`agents/loops.py` records the speaker or reactor
+    and what that round declared), or -- a row with no rounds, legacy or
+    hand-edited -- its merged per-mind results.
+
+    THE MERGED MAP IS NOT AN ORDER. `_merge_character_results` appends a
+    mind's lines and keeps its LATEST `interaction`, so a debt read off it
+    depended on which mind the dict listed first and on whether the asker's
+    last round expected an answer. Measured (review 2026-11-01,
+    agents_character_background F9): Tamamo asks, the Doctor answers,
+    Tamamo asks again -- read Tamamo-first the Doctor owed nothing, read
+    Doctor-first he owed the second question; and a question followed by a
+    round addressed to somebody else was owed by nobody."""
+    if not isinstance(content, dict):
+        return []
+    rounds = content.get("rounds")
+    if isinstance(rounds, list):
+        ordered = []
+        for rnd in rounds:
+            if not isinstance(rnd, dict) or not isinstance(rnd.get("result"), dict):
+                continue
+            result = rnd["result"]
+            if not str(result.get("name") or "").strip():
+                result = dict(result, name=str(
+                    rnd.get("speaker") or rnd.get("reactor") or ""))
+            ordered.append(result)
+        if ordered:
+            return ordered
+    merged = (content.get("character_results")
+              or content.get("reaction_results") or {})
+    if not isinstance(merged, dict):
+        return []
+    return [result for result in merged.values() if isinstance(result, dict)]
 
 
 def _labelled_debt(result, label):
@@ -954,13 +1020,20 @@ def _not_answered_yet_note(left_open, chat, sh, label=None):
 
 
 def _player_quiet_beats(chat_id, current_turn_idx, frame_id, cap=8,
-                        cache=None):
+                        cache=None, char_id=None, player=None):
     """How many consecutive beats up to and including this one the player has
     not spoken on. 1 means only this beat.
 
     Read from stored `director_interpret` rather than tracked in state: it is a
     pure function of what is already recorded, so it is correct on a rerun and
     on an imported archive without a migration.
+
+    WITH A MIND (`char_id`, and `player`'s name), ONLY BEATS IT WITNESSED: the
+    run stops at the first earlier beat on which that mind's own act-stage
+    view did not place the player (`perception_act.company`, the bodies its
+    view was composed about). Counted over every beat of the story, a mind
+    that walked in this beat was told the player had been silent for six
+    beats it never saw (review 2026-11-01, agents_character_background F7).
     """
     if current_turn_idx is None:
         return 1
@@ -968,6 +1041,19 @@ def _player_quiet_beats(chat_id, current_turn_idx, frame_id, cap=8,
         lower = max(0, int(current_turn_idx) - cap)
     except (TypeError, ValueError):
         return 1
+    placed = None
+    if char_id is not None and str(player or "").strip():
+        placed = _beats_placing(
+            _variant_window(
+                cache, ("player_placed", chat_id, lower, current_turn_idx, frame_id),
+                lambda: q(
+                    "SELECT t.idx AS idx,v.content AS content "
+                    "FROM turns t JOIN steps s ON s.turn_id=t.id "
+                    "AND s.key='perception_act' "
+                    "JOIN variants v ON v.step_id=s.id AND v.active=1 "
+                    "WHERE t.chat_id=? AND t.idx>=? AND t.idx<? AND t.frame_id IS ?",
+                    (chat_id, lower, current_turn_idx, frame_id))),
+            char_id, player)
     # Whether the PLAYER spoke is one answer for the beat, so every mind's
     # step read the same window (C20): shared here, judged the same.
     rows = _variant_window(
@@ -993,8 +1079,41 @@ def _player_quiet_beats(chat_id, current_turn_idx, frame_id, cap=8,
         # as another beat of silence.
         if player_communicated(interpreted):
             break
+        if placed is not None and _row_idx(row) not in placed:
+            break
         beats += 1
     return beats
+
+
+def _row_idx(row):
+    try:
+        return int(row["idx"])
+    except (KeyError, IndexError, TypeError, ValueError):
+        return None
+
+
+def _beats_placing(rows, char_id, player):
+    """The beat indices on which this mind's act-stage view was composed
+    about the player (`perception_act.company[<cid>]`, by canonical name):
+    the beats it could have WITNESSED the player keep quiet. The rows are
+    the turn's shared window; the reading is this mind's."""
+    key = str(char_id)
+    want = str(player or "").strip().casefold()
+    out = set()
+    for row in rows or ():
+        try:
+            content = json.loads(row["content"]) or {}
+        except (TypeError, ValueError):
+            continue
+        company = (content.get("company") or {}) if isinstance(content, dict) else {}
+        seen = company.get(key) if isinstance(company, dict) else None
+        if any(isinstance(body, dict)
+               and str(body.get("name") or "").strip().casefold() == want
+               for body in seen or ()):
+            idx = _row_idx(row)
+            if idx is not None:
+                out.add(idx)
+    return out
 
 
 def _positions_key(sc, forms):
@@ -1503,7 +1622,7 @@ def _first_repeated_move(result, recent_moves, threshold=0.4):
     # questions restating one request often share almost none -- "Tell us,
     # Doctor. What does it seem to you?" against "What stands out most to you,
     # Doctor?" -- so the same bar would never fire on the case this exists for.
-    current_asks = [line for line in _speech_texts(result) if "?" in line]
+    current_asks = [line for line in _speech_texts(result) if _is_question(line)]
     for ask in current_asks:
         if len(_self_line_tokens(ask)) < 4:
             continue
@@ -2363,12 +2482,14 @@ def _destination_from_goals(stored_state, place_graph, here_rid=None,
     intention named a chamber at all except a stale one at progress 1.0
     naming "Chamber 0401" (actively wrong), while his self-authored goal
     named "Chamber 0603" from the first pacing beat (right, and current).
-    Resolution is exact node-NAME matching against his own nodes -- both
-    vocabularies closed, so this is identifier recognition, not reading
-    prose. Within a text the last-named room wins: "from the gate to the
-    shrine" is going TO the shrine. Returns {"rid", "name"} or None, and
-    None means silence -- no route is ever computed to a room he has not
-    both wanted and walked.
+    Resolution is WHOLE node-name matching against his own nodes, through
+    the one reader commit stamps goals with (`affect._last_named_room`: by
+    each name's script, the longest name at any position) -- a bare
+    substring routed "Keep the beginning of the story straight" to the Inn
+    (review 2026-11-01, F10). Within a text the last-named room wins: "from
+    the gate to the shrine" is going TO the shrine. Returns {"rid", "name"}
+    or None, and None means silence -- no route is ever computed to a room
+    he has not both wanted and walked.
 
     A goal whose claim commit has stamped SPENT (goal_room_reached: he has
     stood in the room it names since first stating it in these words) is
@@ -2431,15 +2552,12 @@ def _destination_from_goals(stored_state, place_graph, here_rid=None,
         str(p.get("project") or "")
         for p in ((st.get("interior") or {}).get("projects") or [])
         if isinstance(p, dict))
+    by_key = {key: rid for key, (rid, _name) in named.items()}
+    name_of = {rid: name for rid, name in named.values()}
     for text in texts:
-        folded = text.casefold()
-        best = None
-        for key, resolved in named.items():
-            pos = folded.rfind(key)
-            if pos >= 0 and (best is None or pos > best[0]):
-                best = (pos, resolved)
-        if best:
-            rid, name = best[1]
+        rid = affect._last_named_room(text, by_key)
+        if rid:
+            name = name_of.get(rid, rid)
             # A route to the room you are standing in is not information, and
             # claiming the slot with it silences the destination that would
             # have been. Characters phrase goals as the next step far more
@@ -2777,6 +2895,56 @@ def _en_route(stored_state, here_rid, destination):
     return out
 
 
+def _exit_resolver(scene, here_rid):
+    """`edge -> rid`: the room behind one digest exit -- among the doorways
+    of the room this mind stands in (`effective_adjacent`, the edges the
+    digest itself was built from), told apart by bearing where two lead to
+    rooms of one name; or None where it cannot be told.
+
+    THE DIGEST NAMES AN EXIT'S ROOM, AND NAMES ARE NOT UNIQUE. One
+    scene-wide `{display name: rid}` map, filled with `setdefault`, sent
+    every exit to whichever namesake the scene listed first. Measured
+    (review 2026-11-01, agents_character_background F11, the owner's
+    engine.db read-only): 8 of 156 scenes hold duplicate room names, all
+    recent stair rooms (chats 172, 173, 174, 179) -- so the upper storey's
+    stair exit carried the lower stair's `been_there` and verdict, and the
+    completeness test counted an untried doorway as walked. Without a room
+    to stand in (`here_rid` unknown) a name answers only where one room in
+    the scene wears it."""
+    rooms = (scene or {}).get("rooms") or {}
+    own = {}
+    if here_rid:
+        try:
+            from world.spatial import effective_adjacent, normalize_bearing
+            edges = effective_adjacent(scene, here_rid) or ()
+        except Exception:
+            edges, normalize_bearing = (), None
+        for edge in edges:
+            if not isinstance(edge, dict) or not edge.get("to"):
+                continue
+            to = edge["to"]
+            display = str((rooms.get(to) or {}).get("name") or to)
+            own.setdefault(display, []).append(
+                (to, normalize_bearing(edge.get("dir")) if normalize_bearing else None))
+    everywhere = {}
+    for rid, room in rooms.items():
+        everywhere.setdefault(str((room or {}).get("name") or rid), []).append(rid)
+
+    def resolve(edge):
+        display = str((edge or {}).get("room") or "")
+        doors = own.get(display)
+        if doors:
+            rids = {rid for rid, _bearing in doors}
+            if len(rids) > 1 and (edge or {}).get("bearing"):
+                rids = {rid for rid, bearing in doors
+                        if bearing == edge.get("bearing")}
+            return next(iter(rids)) if len(rids) == 1 else None
+        named = everywhere.get(display) or []
+        return named[0] if len(named) == 1 else None
+
+    return resolve
+
+
 def _annotate_known_exits(digest, scene, visited_rooms, known_exits=None,
                           here_rid=None, routes_that_worked=None,
                           known_dead_ends=None, place_graph=None,
@@ -2802,10 +2970,7 @@ def _annotate_known_exits(digest, scene, visited_rooms, known_exits=None,
     if not isinstance(digest, dict):
         return digest
     rooms = (scene or {}).get("rooms") or {}
-    name_to_id = {}
-    for rid, room in rooms.items():
-        display = str((room or {}).get("name") or rid)
-        name_to_id.setdefault(display, rid)
+    exit_rid = _exit_resolver(scene, here_rid)
     # What can be SEEN through each doorway right now, as against what has been
     # walked. A chamber with no other way out is visible as such from the
     # threshold; making a character enter it to find out is not caution, it is
@@ -3041,7 +3206,7 @@ def _annotate_known_exits(digest, scene, visited_rooms, known_exits=None,
         for e in edges:
             if not isinstance(e, dict):
                 continue
-            _rid = name_to_id.get(str(e.get("room") or ""))
+            _rid = exit_rid(e)
             if not (_rid and (_rid in counts or _rid in walked)):
                 untried_here = True
     # A POSITIVE claim, never an absence: it needs recorded adjacency to
@@ -3063,7 +3228,7 @@ def _annotate_known_exits(digest, scene, visited_rooms, known_exits=None,
             if not isinstance(edge, dict):
                 marked.append((edge, None, None))
                 continue
-            rid = name_to_id.get(str(edge.get("room") or ""))
+            rid = exit_rid(edge)
             entry = dict(edge)
             hops, toward = None, None
             if rid and here_rid and dest_rid:
@@ -3463,7 +3628,17 @@ def tellers_as_known(chat, observer, cast, scene, reports):
     same floor every other named field passes: a teller this mind has met
     keeps the name; anyone else is the label the scene gives them -- or, for
     a teller the scene no longer places, the stranger no appearance
-    describes. Copies; the stored reports keep the engine's record."""
+    describes. Copies; the stored reports keep the engine's record.
+
+    ONLY A PERSON IS RELABELLED. A notice, a rider and a crowd are written
+    "NEVER a name" by construction (`artifacts.artifact_voice`,
+    `couriers.courier_voice`, `crowds.crowd_voice`), and the floor -- which
+    recognises no such source, none being a body -- renamed every one of
+    them "the unfamiliar person": a wanted bill read off a post reached the
+    mind as a stranger who spoke (review 2026-11-01, story_room_carriers
+    F10, by snippet). The kind is the writer's to say (`told_by_kind`) or,
+    for a copy READ off a thing, its provenance says it; never a guess from
+    the string. `told_by_kind` is the engine's word and stays off the wire."""
     if not reports:
         return reports
     known = set((wget(chat["id"], "known", {}) or {}).get(observer) or [])
@@ -3471,13 +3646,109 @@ def tellers_as_known(chat, observer, cast, scene, reports):
     out = []
     for report in reports:
         report = dict(report)
+        kind = str(report.pop("told_by_kind", "") or "").strip().casefold()
         teller = str(report.get("told_by") or "").strip()
-        if teller and not _recognizes(teller, known):
+        a_person = (kind == "person") if kind else (
+            str(report.get("provenance") or "").strip().casefold() != "read")
+        if teller and a_person and not _recognizes(teller, known):
             shown = str(label(teller) or "").strip()
             report["told_by"] = (shown if shown and shown != teller
                                  else _unknown_actor_label(teller))
         out.append(report)
     return out
+
+
+def _owed_as_known(chat, observer, cast, scene, owed, ledger):
+    """`(rows, figures)`: what this mind is still waiting for
+    (`commit_background.owed_to`), each `from` said as THIS mind knows the
+    figure that owes it, and `{(shown, what): figure's ledger name}` for
+    reading a given-up promise back (`_waiting_ops_named`).
+
+    THE SAME FLOOR AS `told_by` (`tellers_as_known`). `owed_to` names the
+    figure by its canonical ledger name, and nothing relabelled it: a woman
+    who asked a never-introduced hostler for an ale would carry
+    "Hostler Gidoton Barrelfielder" into every later call -- the story the
+    teller floor was written for, with this field left open (review
+    2026-11-01, agents_character_background F2). A figure the scene no
+    longer places is called by its ledger look, the label `present_others`
+    gives it (`background._record_label`), never by name.
+
+    `to` and `to_ref` stay off the wire: `to` is the FIGURE's own word for
+    the asker -- another mind's view of this one -- and `to_ref` is this
+    mind's own name, which says nothing. Copies; the ledger keeps its rows."""
+    from .background import _record_label
+    known = set((wget(chat["id"], "known", {}) or {}).get(observer) or [])
+    label = observer_label_fn(chat, observer, cast, scene=scene)
+    records = {}
+    for record in ((ledger or {}).values() if isinstance(ledger, dict) else ()):
+        if isinstance(record, dict) and str(record.get("name") or "").strip():
+            records.setdefault(str(record["name"]).strip(), record)
+    rows, figures = [], {}
+    for row in owed or ():
+        if not isinstance(row, dict):
+            continue
+        row = {k: v for k, v in row.items() if k not in ("to", "to_ref")}
+        figure = str(row.get("from") or "").strip()
+        shown = figure
+        if figure and not _recognizes(figure, known):
+            shown = str(label(figure) or "").strip()
+            if not shown or shown == figure:
+                shown = (_record_label(figure, records.get(figure) or {})
+                         or str(_unknown_actor_label(figure)))
+        row["from"] = shown
+        figures.setdefault(
+            (shown.casefold(), " ".join(str(row.get("what") or "").split()).casefold()),
+            figure)
+        rows.append(row)
+    return rows, figures
+
+
+def _waiting_ops_named(out, figures):
+    """Each `waiting_ops` row the read-back filed, its `from` put back to
+    the ledger name of the figure this mind was shown under that label
+    (`_owed_as_known`) -- by label and promise together, by label alone
+    where only one figure wears it. A label two figures share for one
+    promise is left as shown: the commit then closes nothing, rather than
+    the wrong figure's promise."""
+    if not figures:
+        return out
+    for op in (out or {}).get("waiting_ops") or ():
+        if not isinstance(op, dict):
+            continue
+        shown = " ".join(str(op.get("from") or "").split()).casefold()
+        what = " ".join(str(op.get("what") or "").split()).casefold()
+        figure = figures.get((shown, what))
+        if figure is None:
+            wearing = {name for (label, _w), name in figures.items() if label == shown}
+            figure = next(iter(wearing)) if len(wearing) == 1 else None
+        if figure:
+            op["from"] = figure
+    return out
+
+
+def _follow_target(label, view_named, bodies_named, positions):
+    """The body a follow's `target` names, as THIS mind names it: a body the
+    scene places under that very spelling, else the one body its own view's
+    company calls by that label (`perception_act.company`), else the one body
+    the shared identity floor resolves it to (`bodies_named`, `director.
+    _bodies_addressed_as`). None where the label names nobody or two bodies:
+    a follow is of one person or of no one."""
+    text = " ".join(str(label or "").split())
+    if not text:
+        return None
+    folded = text.casefold()
+    placed = [key for key in (positions or {}) if str(key).casefold() == folded]
+    if len(placed) == 1:
+        return str(placed[0])
+    seen = [name for name, shown in (view_named or {}).items()
+            if " ".join(str(shown or "").split()).casefold() == folded]
+    if seen:
+        return seen[0] if len(seen) == 1 else None
+    try:
+        bodies = list(bodies_named(text) or [])
+    except Exception:
+        return None
+    return bodies[0] if len(bodies) == 1 else None
 
 
 def _character_perception(ctx, cid, nonce):
@@ -3909,7 +4180,6 @@ def character_step(ctx, cid, nonce, *, skip=None):
 
     _interp = _dict(ctx.director_interpret)
     _flow = _dict(_interp.get("flow"))
-    _tom = _list(_flow.get("tom_triggers"))
 
     # WHOLE, and deliberately -- the only gate on this graph is the frame
     # recognition mask below, which asks whether this mind may know the person
@@ -4128,6 +4398,11 @@ def character_step(ctx, cid, nonce, *, skip=None):
     # reroll resets -- never in a context-wide map a discarded run could leave.
     _declared_before = ctx.get("beat_declared", {}) or {}
     _earlier_felt = (_declared_before.get(cid) or _declared_before.get(str(cid)) or {}).get("_affect_pass")
+    # The psychology this mind holds NOW, never the card where the two
+    # differ: the pass reads it through `psychology_runtime.live_psychology`
+    # off this mind's own ledger (`interior=`), as the read-back does
+    # (`holding_from`) -- one owner of the rule (review 2026-11-01,
+    # mind_affect_psychology F7).
     _felt = affect_pass.before_call(
         character_name(sh), sh, active,
         (active or {}).get("affect", {}).get("baseline")
@@ -4135,7 +4410,7 @@ def character_step(ctx, cid, nonce, *, skip=None):
         elapsed_psych_units((active or {}).get("affect_seconds"), (_sim_clock or {}).get("elapsed_seconds"),
                             max(1, ctx.turn.idx - int((active or {}).get("affect_turn") or (ctx.turn.idx - 1)))),
         observations=observations, memory_context=memory_context, relationships=relationships,
-        language=ctx.language, earlier=_earlier_felt)
+        language=ctx.language, earlier=_earlier_felt, interior=_interior)
     if _felt.note and not _felt.asked and _felt.note != "nothing new to appraise":
         ctx.add_warning(f"character {character_name(sh)}: mood carried, not moved -- {_felt.note}")
     # Each delivered memory is handed the NAME of what it keeps, never its
@@ -4145,22 +4420,22 @@ def character_step(ctx, cid, nonce, *, skip=None):
     # _node_names, _governed_ids, _self_lines and the annotated goal currency
     # were all resolved above, before the memory context -- the unbidden
     # trigger and this payload must judge the SAME annotated goal.
+    # THE CARD FIRST, THE MOMENT AFTER (review 2026-11-01,
+    # agents_character_background E3). What the card authors -- history,
+    # psychology, voice, senses, body -- is the same beat after beat; the
+    # stance (a running log) and the annotated active state are rewritten by
+    # every commit. Ahead of the card, those two ended every per-character
+    # prefix a provider could cache at the seventh key. Order only: the same
+    # keys, the same values.
     _self = {
         "entity_id": f"character:{cid}",
         "name": character_name(sh),
         "public_history": character_public_history(sh),
         "psychology": _psych,
-        "stance": stance,
         # How readily this mind leaves a known-good way for an untried one.
         # Explicit because the balance was previously implicit -- an artefact of
         # which navigational markers existed, not an authored trait.
         "curiosity": character_curiosity(sh),
-        # The goal slot carries its currency: `goal_reached` when he has
-        # stood in the room these words name since first saying them (the
-        # claim is spent and no longer routes), `goal_held` when the same
-        # room-less words have held the slot past the tenure threshold
-        # while serving nothing governed. See _annotate_goal_currency.
-        "active_state": _active_annotated,
         "voice": character_voice(sh),
         "senses": senses_as_text(character_senses(sh)),
         "sense_profile": character_senses(sh),
@@ -4170,6 +4445,19 @@ def character_step(ctx, cid, nonce, *, skip=None):
         # This is the actor-side authority for conditional physiological,
         # mechanical, magical, or otherwise embodied material outputs.
         "embodiment_capabilities": character_embodiment_capabilities(sh),
+        # Its own authored extra body parts (tail, wings...). A mind knows its
+        # own body whether or not anyone can see it -- same self-knowledge
+        # floor as the interoception and attire lines beside this. Key absent
+        # for the ordinary body, so defaults stay inert.
+        **({"body_parts": extra_parts_lines(character_extra_parts(sh))}
+           if character_extra_parts(sh) else {}),
+        "stance": stance,
+        # The goal slot carries its currency: `goal_reached` when he has
+        # stood in the room these words name since first saying them (the
+        # claim is spent and no longer routes), `goal_held` when the same
+        # room-less words have held the slot past the tenure threshold
+        # while serving nothing governed. See _annotate_goal_currency.
+        "active_state": _active_annotated,
         # Its own clothing, by region. A character knows what it is wearing
         # and what of itself is uncovered -- that is interoception, not
         # observation -- so this is the one place the region view is of the
@@ -4183,12 +4471,6 @@ def character_step(ctx, cid, nonce, *, skip=None):
         # failure rather than a missing observation (review 2026-09-07 B5).
         "attire": compact_attire(
             attire_model.entry_for(sc.get("attire"), character_name(sh))),
-        # Its own authored extra body parts (tail, wings...). A mind knows its
-        # own body whether or not anyone can see it -- same self-knowledge
-        # floor as the interoception and attire lines beside this. Key absent
-        # for the ordinary body, so defaults stay inert.
-        **({"body_parts": extra_parts_lines(character_extra_parts(sh))}
-           if character_extra_parts(sh) else {}),
         "recent_self_lines": _self_lines,
         # One row per turn rather than one row per utterance. This is the
         # semantic continuity ledger: a chatty speaker cannot push the last
@@ -4335,7 +4617,10 @@ def character_step(ctx, cid, nonce, *, skip=None):
     )
     if _my_follow:
         _self["following"] = {
-            "target": _my_follow.get("target"),
+            # As THIS mind's view names the body it follows -- the ledger
+            # keeps the body (`scene.following`), and a stranger's name is not
+            # this mind's to be handed (review 2026-11-01, F14).
+            "target": _contact_label(_my_follow.get("target")),
             "since_turn": _my_follow.get("since_turn"),
             "reason": _my_follow.get("reason") or "",
             "same_room": (
@@ -4388,16 +4673,19 @@ def character_step(ctx, cid, nonce, *, skip=None):
     # consecutive self-memories of shifting her weight and moving her gaze.
     # Her one intention went dormant at beat 31. Nothing had told her that a
     # half-hour of story time had passed with an ale unpoured.
+    _owed_figures = {}
     try:
         from persist.commit import owed_to
+        _owed_ledger = wget(chat.id, "background_presences", {}) or {}
         _owed = owed_to(
-            character_name(sh),
-            wget(chat.id, "background_presences", {}) or {},
+            character_name(sh), _owed_ledger,
             turn_idx=ctx.turn.idx,
             now_seconds=(_sim_clock or {}).get("elapsed_seconds"))
     except Exception:
-        _owed = []
+        _owed_ledger, _owed = {}, []
     if _owed:
+        _owed, _owed_figures = _owed_as_known(
+            chat, character_name(sh), ctx.cast, sc, _owed, _owed_ledger)
         _self["still_waiting_for"] = _owed
     # A boundary passed at last commit (arrival where a project points, a
     # task closing, the scene or frame changing -- affect.project_boundary).
@@ -4587,7 +4875,13 @@ def character_step(ctx, cid, nonce, *, skip=None):
                                                    ctx.turn.idx),
         "world_knowledge": knowledge,
         "decision": {
-            "deep_tom_requested": cid in _tom,
+            # No `deep_tom_requested`: `cid in flow.tom_triggers` is the
+            # Director's reading of the WHOLE beat -- acts this mind never
+            # perceived included -- and no section of either pack's card
+            # explains it (review 2026-11-01, agents_character_background
+            # F15). The loop orders speakers by it (`agents/loops.py`); the
+            # mind is not handed it. `dialogue_mode` stays for the owner to
+            # rule on (the same unexplained shape, no leak).
             "dialogue_mode": bool(_flow.get("dialogue_mode", False)),
             "speech_budget": dialogue_budget(
                 chat, ctx.turn, cid, nonce,
@@ -4611,7 +4905,8 @@ def character_step(ctx, cid, nonce, *, skip=None):
             **_player_silence_note(
                 sc, chat, sh, _p_spoke,
                 quiet_beats=(0 if _p_spoke else _player_quiet_beats(
-                    chat.id, ctx.turn.idx, ctx.turn.frame_id, cache=shared)),
+                    chat.id, ctx.turn.idx, ctx.turn.frame_id, cache=shared,
+                    char_id=cid, player=persona_name(persona_of(chat)))),
                 # What the player is called in a note about THIS beat is the
                 # view's word for them now (`perception.present_label_fn`).
                 label=_contact_label),
@@ -4742,7 +5037,7 @@ def character_step(ctx, cid, nonce, *, skip=None):
     _holding = character_bare.holding_from(
         character_name(sh), sh, payload, observations, memory_context, active,
         language=ctx.language, rupture_open=_window_open, notebook_view=_nb_view,
-        carriage=stored_state.get(affect.CARRIAGE_KEY) or "")
+        carriage=stored_state.get(affect.CARRIAGE_KEY) or "", interior=_interior)
     # What the notebook lookup reads besides the store -- the concerns and
     # projects the page was chosen from -- taken before `with_notebook`
     # replaces them in the payload with the page itself.
@@ -4816,6 +5111,18 @@ def character_step(ctx, cid, nonce, *, skip=None):
     _wire_payload = character_bare.without_engine_numbers(_wire_payload)
 
     _lookups, _loop, _loop_record = None, None, {}
+    # THE THINKING READ BELOW IS THIS MIND'S OWN CALL'S, OR NONE.
+    # `last_reasoning` is a context-wide "last call" record that three
+    # provider paths never write (the Anthropic stream and blocking branch,
+    # a claude_cli call with no thinking), and the interaction loop runs its
+    # minds one after another in one context -- so a mind on such a path read
+    # the PREVIOUS speaker's private trace as its own, into its read-back
+    # state and, with `character_thoughts_kept` on, into its kept thoughts
+    # (review 2026-11-01, mind_affect_psychology F1 / llm_providers_quality
+    # F1, reproduced on a fake Anthropic stream). Cleared before the lookups'
+    # rounds and again before the answering call.
+    from llm.providers import last_reasoning
+    last_reasoning.set(None)
     if _tools_on:
         from .character_tools import Lookups, look_then_answer
         _lookups = Lookups(
@@ -4871,6 +5178,7 @@ def character_step(ctx, cid, nonce, *, skip=None):
             _closing = {}
         _send_system = _cprompt if _closing else _cprompt_plain
         _send_payload = _wire_payload if _closing else (_folded or _wire_payload)
+    last_reasoning.set(None)
     out = _agent_json(
         role,
         "character_bare",
@@ -4880,7 +5188,6 @@ def character_step(ctx, cid, nonce, *, skip=None):
         sampler=character_sampler(sh) or None,
         **_closing,
     )
-    from llm.providers import last_reasoning
     # The model's own thinking, when its provider returned it, is read by this
     # mind's decision-model request and by nothing else: it never reaches
     # another mind or the page, and only typed answers -- choices among rows
@@ -4942,6 +5249,30 @@ def character_step(ctx, cid, nonce, *, skip=None):
 
     character_bare.name_concealed_bodies(
         out, _bodies_named, lambda body: _cast_handles.get(body, body))
+    # A FOLLOW IS OF A BODY, AND THE MIND NAMES IT AS ITS VIEW DOES. The
+    # read-back offers "follow <person>" over this mind's own labels, and the
+    # movement floor resolves a target only against `scene.positions`, so a
+    # stranger known by sight could never be followed ("Ignored invalid
+    # follow start", review 2026-11-01, agents_character_background F14).
+    # Read back through the speaker's own label map: the view's company
+    # first, then the floor every payload shares; two bodies under one label
+    # start no follow.
+    _follow = out.get("follow_op") if isinstance(out.get("follow_op"), dict) else None
+    if _follow and str(_follow.get("op") or "").strip().casefold() == "start":
+        _followed = _follow_target(
+            _follow.get("target"), _view_named, _bodies_named,
+            (sc.get("positions") or {}) if isinstance(sc, dict) else {})
+        if _followed:
+            _follow["target"] = _followed
+        else:
+            out.pop("follow_op", None)
+            ctx.add_warning(
+                f"character {character_name(sh)}: no follow started -- "
+                f"{_follow.get('target')!r} names no one body this mind can see")
+    # A PROMISE GIVEN UP IS CLOSED ON THE FIGURE THAT OWES IT: the read-back
+    # names it as this mind was shown it (`_owed_as_known`), and the commit
+    # closes the row by the figure's ledger name (`abandoned_debts`).
+    _waiting_ops_named(out, _owed_figures)
 
     # Deterministic decision-continuity screen. Semantic similarity is a review
     # trigger, not proof of bad repetition -- an invited continuation,
@@ -5059,8 +5390,8 @@ def character_step(ctx, cid, nonce, *, skip=None):
     # of its own. Before the fuse, which compares concealment between lines.
     # The owner's chat 126 idx 9 (round 8, 2026-09-23): Mirelle's only line
     # to Hinami was concealed from Hinami and reached nobody.
-    from .director_floors import strip_addressee_concealment
-    from .director_views import _scene_match_forms
+    from .director import strip_addressee_concealment
+    from .director import _scene_match_forms
     # The player and every co-player among the bodies a line can be spoken
     # to: a whisper to the player named by her alias was not stripped here,
     # and the resolve then hid it from her (review, 2026-10-05).

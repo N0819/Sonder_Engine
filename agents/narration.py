@@ -564,9 +564,15 @@ def _page_identity_scrub(ctx, observer_name, scene, known_map, label_for,
             bodies=[{"name": name} for name in (earned or {})],
             titles_of=_charter_titles_of(ctx, scene))
     except Exception as exc:
+        # FAILS CLOSED, the policy `_player_perceives` states for this page:
+        # "a thin beat is a worse page, a leaked act is a broken firewall".
+        # This returned the identity function, so the one failure it exists
+        # for handed the page every canonical name it was built to keep off
+        # it (review 2026-11-01, agents_narration_planner F7).
         ctx.add_warning(f"narrator: the page's identity roster failed ({exc}); "
-                        "the Director's words about the player went as written")
-        return lambda text: text
+                        "the Director's words about the player are withheld "
+                        "this beat")
+        return _withheld_page_words
     recognized, unknown = _composer_unknown_sources(
         observer_name, known_map or {}, roster)
     if present is not None:
@@ -594,6 +600,42 @@ def _page_identity_scrub(ctx, observer_name, scene, known_map, label_for,
             text, allowed_forms=allowed, unknown_sources=unknown, labels=labels)
         return out
     return scrub
+
+
+def _withheld_page_words(text):
+    """The page floor when it cannot be built: a Director-written surface is
+    withheld whole. A name it would have rewritten cannot be told from one it
+    would have kept without the roster, and the player's own words are on
+    the page already, in `current_narration`."""
+    return "" if isinstance(text, str) else text
+
+
+_withheld_page_words.withholds = True
+
+#: What a declared row keeps when the page floor withholds the Director's
+#: words (`_declared_through`): its kind, its id, its delivery -- never a
+#: field of text about somebody.
+_DECLARED_ROW_KEPT = ("type", "event_id", "commitment", "stage", "visibility",
+                      "volume")
+
+
+def _declared_through(declared, scrub):
+    """`player_declared` through the page's floor: every string scrubbed
+    (`scrub_names_deep`), or -- where the floor could not be built
+    (`_withheld_page_words`) -- every Director-written text left out and
+    the declaration's shape kept, so the page still knows what kind of
+    beat the player had and how it was delivered."""
+    if not getattr(scrub, "withholds", False):
+        return scrub_names_deep(declared, scrub)
+    declared = declared if isinstance(declared, dict) else {}
+    return {
+        "sequence": [{key: row[key] for key in _DECLARED_ROW_KEPT if key in row}
+                     for row in declared.get("sequence") or ()
+                     if isinstance(row, dict)],
+        "spoke": bool(declared.get("spoke")),
+        "action": None,
+        "private_thought": None,
+    }
 
 
 def _speaker_display(name, recognized, appearance=None, aliases=None,
@@ -1245,9 +1287,10 @@ def _ordered_beat_events(ctx, p_name, view, recognized, cast_info,
                     continue          # purely mental beat, no outward surface
                 if perceives is None:
                     perceives = _player_perceives(name)
-                if perceives:
-                    raw.append((name, "action", page_names(
-                        resolve_action_referents(surface, e, referent_labels))))
+                shown = page_names(resolve_action_referents(
+                    surface, e, referent_labels)) if perceives else ""
+                if shown:
+                    raw.append((name, "action", shown))
 
     # THE PLAYER'S DECLARATION FIRST -- and only the rows that ARE hers. Each
     # interpret row carries its own actor, and a row whose actor is another
@@ -1279,9 +1322,10 @@ def _ordered_beat_events(ctx, p_name, view, recognized, cast_info,
         elif e.get("type") == "action":
             surface = adjudicated_player_action_text(
                 e, ctx.get("director_resolve") or {})
-            if surface:
-                destination.append((p_name, "action", page_names(
-                    resolve_action_referents(surface, e, referent_labels))))
+            shown = page_names(resolve_action_referents(
+                surface, e, referent_labels)) if surface else ""
+            if shown:
+                destination.append((p_name, "action", shown))
 
     covered = set()
     for r in (ctx.reaction_loop or {}).get("rounds") or []:
@@ -1529,7 +1573,7 @@ def _position_delta_payload(ctx, chat, p_name, p_room, recognized, cast_info):
     return payload, facts, room_names
 
 
-def _visible_portal_states(scene, room_id, visible_rooms):
+def _visible_portal_states(scene, room_id, visible_rooms, sees=None):
     """F3: committed open/shut state of every door/portal the player can
     currently see, keyed by display name -- portal-link entities touching the
     player's room, door-like entities in it, transit hatches of an enclosure
@@ -1537,6 +1581,15 @@ def _visible_portal_states(scene, room_id, visible_rooms):
     generic 'doors' entry is added only when every visible door-state
     agrees, so 'through the open doors' is checkable without a named
     entity (the DW t12 case).
+
+    `sees(entity_id, room) -> bool` is the player's own sight of one THING
+    (the narrator passes `_player_sees_character`): an entity's state is the
+    player's only where the player sees it. The edge branch consults the far
+    room's light through `visible_adjacent_rooms`; the entity branches were
+    gated on the room alone, and the player's own room always counts --
+    so a cabinet another body opened silently in a pitch-dark storeroom
+    reached the page as "open" (review 2026-11-01, agents_narration_planner
+    F18). Without `sees` the reading is as it was.
 
     S3-A5: ``visible_rooms`` (the player's room plus any visible adjacent
     rooms) gates which portal states are included.  A portal/door in a room
@@ -1573,6 +1626,8 @@ def _visible_portal_states(scene, room_id, visible_rooms):
             portal_rooms = set(link.get("rooms") or [])
             if portal_rooms and not portal_rooms.issubset(visible_rooms):
                 continue
+            if sees is not None and not sees(eid, room_of_record(scene, eid, ent) or room_id):
+                continue
             from world.spatial import link_condition
             worn = link_condition(link)
             out[name] = ("open" if worn == "broken"
@@ -1588,7 +1643,8 @@ def _visible_portal_states(scene, room_id, visible_rooms):
         ent_room = room_of_record(scene, eid, ent)
         transit = state.get("transit")
         if isinstance(transit, dict) and transit.get("hatch"):
-            if ent_room == room_id or interior_owner.get(room_id) == eid:
+            if (ent_room == room_id or interior_owner.get(room_id) == eid) and (
+                    sees is None or sees(eid, ent_room or room_id)):
                 hatch = str(transit.get("hatch") or "").lower()
                 out[f"{name} hatch"] = "open" if hatch == "open" else "shut"
             continue
@@ -1596,7 +1652,8 @@ def _visible_portal_states(scene, room_id, visible_rooms):
         # S3-A5: only include door-like entities positioned in a visible room.
         if ent_room in visible_rooms and any(
                 w in blob for w in ("door", "gate", "hatch", "portal",
-                                    "shutter")):
+                                    "shutter")) and (
+                sees is None or sees(eid, ent_room)):
             # UNBOUND, and that is the whole difference from the `link`
             # branch above. A portal-link NAMES the two rooms it joins, so
             # it IS that doorway and speaks for it. This branch is a guess
@@ -1717,16 +1774,36 @@ def _past_narration_block(chat_id, turn_idx, frame_id, depth):
         said = (r["player_input"] or "").strip()
         if said:
             parts.append(said)
-        prose = ""
-        if r["content"]:
-            try:
-                prose = (json.loads(r["content"]) or {}).get("prose") or ""
-            except (TypeError, ValueError):
-                prose = ""
+        prose = _stored_prose(r["content"])
         if prose.strip():
             parts.append(prose.strip())
             prev.append(prose)
     return "\n\n".join(parts), prev[-_PREV_PROSE_TURNS:]
+
+
+def _stored_prose(content, seat=None):
+    """The `prose` a stored narrator variant holds -- under `seat` for a
+    `narrator_extra` row, keyed by persona id -- or "" for any other shape.
+
+    A STEP HOLDS WHATEVER ITS EDITOR GAVE IT. `/api/steps/{sid}/edit`
+    stores the request body with no shape check, so a narrator variant can
+    hold a JSON string, a list or null (`persist.steps.active_mapping`, the
+    rule B23 already applied to the Dramaturge's read). These two readers
+    took `.get("prose")` off whatever parsed, and a string or a list raised
+    AttributeError outside their `except` -- so every narrator call whose
+    history window held that turn failed until it aged out of
+    `narrator_history_turns` (review 2026-11-01, agents_narration_planner
+    F6, by snippet)."""
+    if not content:
+        return ""
+    try:
+        parsed = json.loads(content)
+    except (TypeError, ValueError):
+        return ""
+    if seat is not None:
+        parsed = parsed.get(seat) if isinstance(parsed, dict) else None
+    prose = parsed.get("prose") if isinstance(parsed, dict) else None
+    return prose if isinstance(prose, str) else ""
 
 
 def _past_narration_extra_block(chat_id, turn_idx, frame_id, persona_id,
@@ -1774,13 +1851,7 @@ def _past_narration_extra_block(chat_id, turn_idx, frame_id, persona_id,
         said = (r["player_input"] or "").strip()
         if said:
             parts.append(said)
-        prose = ""
-        if r["content"]:
-            try:
-                prose = ((json.loads(r["content"]) or {}).get(pid_key) or {}
-                         ).get("prose") or ""
-            except (TypeError, ValueError):
-                prose = ""
+        prose = _stored_prose(r["content"], seat=pid_key)
         if prose.strip():
             parts.append(prose.strip())
             prev.append(prose)
@@ -2467,7 +2538,7 @@ def narrator(ctx, nonce):
     _page_scrub = _page_identity_scrub(
         ctx, player_name, _scene_for_frame, known_map, _view_label,
         present=_present, earned=_earned)
-    player_declared = scrub_names_deep(player_declared, _page_scrub)
+    player_declared = _declared_through(player_declared, _page_scrub)
     # Through the same identity floor as every other name in this payload:
     # `spatial_digest` renders `ahead_entity` from `scene.positions`, which is
     # keyed by canonical name, and `_view_label` was built twenty lines up
@@ -2506,9 +2577,11 @@ def narrator(ctx, nonce):
         except Exception as _exc:
             _facing = None
             ctx.add_warning(f"spatial_frame.turned: facing not computed ({_exc})")
+        _looks_shown = [shown for shown in (_page_scrub(look) for look in _player_looks)
+                        if shown]
         _frame["turned"] = {
-            "looks": [_page_scrub(look) for look in _player_looks],
-            "look": _page_scrub(_player_looks[-1]),
+            "looks": _looks_shown,
+            "look": _looks_shown[-1] if _looks_shown else "",
             "facing": _facing,
             "ahead": list(_frame.get("ahead") or [])
                      + ([_frame["ahead_entity"]] if _frame.get("ahead_entity") else []),
@@ -2569,7 +2642,11 @@ def narrator(ctx, nonce):
             str(r["room_id"]) for r in visible_adjacent_rooms(_scene_for_frame, p_room)
             if isinstance(r, dict) and r.get("room_id")
         } | ({p_room} if p_room else set())
-        portal_states = _visible_portal_states(_scene_for_frame, p_room, _visible)
+        portal_states = _visible_portal_states(
+            _scene_for_frame, p_room, _visible,
+            sees=lambda key, room: _player_sees_character(
+                _scene_for_frame, player_name, p_room, key, room,
+                senses=_player_card))
         # WHOSE DRESS THE PAGE MAY SPEAK FOR. The player's own body always --
         # a mind has a channel to its own clothing -- plus exactly the bodies
         # `_position_delta_payload` already admitted, which is the perception
@@ -3009,9 +3086,13 @@ def narrator_extra(ctx, nonce):
         entry = other_players.get(pid_key) or {}
         p_lines = player_speech_lines(entry)
 
+        # The pack's words, as `narrator` takes them: an English literal here
+        # was the extra seat's view in every story (review 2026-11-01,
+        # agents_narration_planner F15).
         view = (establish_views.get(f"extra:{pid_key}") if est else
                 outcome_views.get(f"extra:{pid_key}")) \
-            or "Nothing in particular reaches you this beat."
+            or compositor_text("narrator_immediate" if est else "narrator_nothing",
+                               ctx.language)
 
         perception_stage = ctx.get(
             "perception_establish" if est else "perception_outcome", {}) or {}
@@ -3033,7 +3114,7 @@ def narrator_extra(ctx, nonce):
 
         # This seat's own floor over the Director's words about its conduct
         # (`_page_identity_scrub`), as `narrator` applies the primary's.
-        player_declared = scrub_names_deep(
+        player_declared = _declared_through(
             _narrator_player_declared(entry, _player_identity_forms(
                 ctx, extra.get("name") or "", persona_id=pid)),
             _page_identity_scrub(

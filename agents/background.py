@@ -330,43 +330,89 @@ def _seen_act(percept, surface, *, labelled=True):
     return "full", ("%s %s" % (who, text) if who else text)
 
 
-def _presence_identity_floor(ctx, *presence_names):
+def _presence_identity_floor(ctx, *presence_names, scene=None):
     """`scrub(text) -> text`: the identity floor every act surface passes
     at admission to a cast view (`perception._composer_scrub_surface`), for
-    these presences: a name of the player's or a cast member's that they
-    have no `known` row for becomes the label they would call that body by
-    (`_presence_label_fn`), outside quotation. Several presences sharing one
-    payload share the intersection of what they recognise. An act surface is
-    the encoder's outward form, and it names the bodies it involves -- on
-    the tavern probe (chat 2 turn 7) "angles his shoulder between Corwin and
-    Tamsin" -- which a barman who has met neither sees, and cannot name."""
+    these presences: a name of a body they have no `known` row for becomes
+    the label they would call that body by (`_presence_label_fn`), outside
+    quotation. Several presences sharing one payload share the intersection
+    of what they recognise. An act surface is the encoder's outward form,
+    and it names the bodies it involves -- on the tavern probe (chat 2 turn
+    7) "angles his shoulder between Corwin and Tamsin" -- which a barman who
+    has met neither sees, and cannot name.
+
+    THE BODIES ARE PERCEPTION'S ROSTER (`perception._identity_roster`: the
+    player, the cast, every body the scene stands, with the titles a charter
+    styles its people by), and the tracked presences beside it. The roster
+    here was the cast and the player alone, so an act naming a townsperson or
+    a minted person reached a presence by his full name (review 2026-11-01,
+    agents_character_background F1). `scene` is the beat's where the caller
+    holds it."""
     if ctx is None:
         return lambda text: text
     recognized = _presence_recognizes(ctx, *presence_names)
-    label = _presence_label_fn(ctx, *presence_names)
+    if not isinstance(scene, dict):
+        try:
+            scene = _beat_scene(ctx)
+        except Exception:
+            scene = {}
+    label = _presence_label_fn(ctx, *presence_names, scene=scene)
     own = {str(n or "").strip().casefold() for n in presence_names}
-    bodies = []
-    for row in getattr(ctx, "cast", None) or ():
-        sheet = normalized_character_of_row(row)
-        if sheet is None:
-            continue
-        bodies.append((character_name(sheet), character_appearance(sheet),
-                       character_scene_keys(sheet)[1:]))
     try:
         pers = persona_of(ctx.chat)
         p_name = persona_name(pers)
     except Exception:
         pers, p_name = None, None
-    if p_name:
-        bodies.append((p_name, persona_appearance(pers),
-                       list((pers.get("identity") or {}).get("aliases") or [])))
+    p_aliases = (list((pers.get("identity") or {}).get("aliases") or [])
+                 if isinstance(pers, dict) else [])
+    sources = []
+    try:
+        from agents.perception import _charter_titles_of, _identity_roster
+        sources = _identity_roster(
+            p_name or "", persona_appearance(pers) if pers else "",
+            getattr(ctx, "cast", None) or (), scene=scene,
+            titles_of=_charter_titles_of(ctx, scene))
+        if p_name and sources and sources[0].get("name") == p_name:
+            sources[0] = dict(sources[0], aliases=p_aliases)
+    except Exception:
+        # The roster's own readers failed: the cast and the player, as the
+        # floor read them before, rather than no floor.
+        sources = []
+        for row in getattr(ctx, "cast", None) or ():
+            try:
+                sheet = normalized_character_of_row(row)
+            except Exception:
+                sheet = None
+            if sheet is None:
+                continue
+            sources.append({"name": character_name(sheet),
+                            "appearance": character_appearance(sheet),
+                            "aliases": character_scene_keys(sheet)[1:]})
+        if p_name:
+            sources.append({"name": p_name,
+                            "appearance": persona_appearance(pers),
+                            "aliases": p_aliases})
+    listed = {str(s.get("name") or "").strip().casefold() for s in sources}
+    ledger = wget(ctx.chat.id, "background_presences", {}) or {}
+    for record in (ledger.values() if isinstance(ledger, dict) else ()):
+        name = str((record or {}).get("name") or "").strip() \
+            if isinstance(record, dict) else ""
+        if not name or name.casefold() in listed:
+            continue
+        listed.add(name.casefold())
+        sources.append({"name": name,
+                        "appearance": (record.get("sketch") or {}).get("appearance"),
+                        "aliases": []})
     unknown, labels = [], {}
-    for body, appearance, aliases in bodies:
+    for source in sources:
+        body = str(source.get("name") or "").strip()
         if not body or body.casefold() in own or _recognizes(body, recognized):
             continue
-        unknown.append({"name": body, "appearance": appearance,
-                        "aliases": list(aliases or [])})
-        labels[body] = label(body)
+        unknown.append({**source, "name": body,
+                        "aliases": list(source.get("aliases") or [])})
+        shown = str(label(body) or "").strip()
+        labels[body] = (shown if shown and shown != body else _unknown_actor_label(
+            body, source.get("appearance"), list(source.get("aliases") or [])))
     allowed = [*presence_names, *recognized]
 
     def scrub(text):
@@ -599,7 +645,7 @@ def _player_declaration_caught(ctx, sc, name, here, field=None):
             addressed=spoken_to(aimed, bool(refs)), field=_field())
         return _caught(percept), percept
 
-    scrub = _presence_identity_floor(ctx, name)
+    scrub = _presence_identity_floor(ctx, name, scene=sc)
     parts = []
     for e in elements:
         kind = e.get("type")
@@ -674,7 +720,7 @@ def _beat_for_presence(dr, sc, station_room, name, beat_room=None,
     out = []
     own = str(name or "").strip().casefold()
     if scrub is None:
-        scrub = _presence_identity_floor(ctx, name)
+        scrub = _presence_identity_floor(ctx, name, scene=sc)
     for item in _beat_stream(ctx, dr):
         if item[0] == "line":
             d = item[1]
@@ -1331,7 +1377,7 @@ def _place_block(ctx, room_id, *, walkable_from=None):
         pass
     if walkable_from:
         block["exits"] = _presence_exits(sc, walkable_from)
-        block["rooms"] = _presence_rooms(sc)
+        block["rooms"] = _presence_rooms(sc, walkable_from)
     return block
 
 
@@ -1358,16 +1404,55 @@ def _presence_exits(sc, here):
             for rid in sorted(reachable)]
 
 
-def _presence_rooms(sc):
-    """Every room of the place, as {room_id, name}: the layout anyone who
+def _presence_rooms(sc, here=None):
+    """The rooms of the place, as {room_id, name}: the layout anyone who
     works or lives here knows, and the list a departure's `goes_to` is
     chosen from. Names only -- no description, no contents, no one's
     position -- so the block says where a figure CAN go and nothing about
-    what it would find."""
-    from world.spatial import room_display_name
+    what it would find.
+
+    THE PLACE IS ITS OWN PART OF THE MAP. Every room of the scene went to
+    every voice -- another building's rooms, a room named after a cast
+    member, a space a plan holds open past the map's edge. Measured (review
+    2026-11-01, agents_character_background F4, the owner's engine.db
+    read-only): 368 stored rooms carry `planned: true`, 174 in chats >= 160
+    -- "Mellisande's Room" (177/178), "Decommissioned Corridor West" (160)
+    -- handed to a bystander who never entered the building. Standing in a
+    room (`here`), a presence knows the rooms of its own region
+    (`world.regions.room_region`) and the rooms one doorway off or in view
+    from where it stands; a scene with no regions keeps every room, as
+    before. An unbuilt frontier stub (`spatial.held_open_from`) is a plan,
+    not a room: it is listed nowhere here (`_presence_exits` still shows a
+    way into it)."""
+    from world.regions import room_region
+    from world.spatial import held_open_from, room_display_name
     rooms = (sc or {}).get("rooms") or {}
-    return [{"room_id": rid, "name": room_display_name(room or {}, rid)}
-            for rid, room in sorted(rooms.items()) if isinstance(room, dict)]
+    here = str(here or "").strip()
+    near, region = set(), None
+    if here:
+        near = {str(r["room_id"]) for r in _presence_exits(sc, here)}
+        try:
+            from world.spatial import visible_adjacent_rooms
+            near |= {str(r.get("room_id")) for r in visible_adjacent_rooms(sc, here) or ()
+                     if isinstance(r, dict) and r.get("room_id")}
+        except Exception:
+            pass
+        try:
+            region = room_region(sc, here)
+        except Exception:
+            region = None
+    out = []
+    for rid, room in sorted(rooms.items()):
+        if not isinstance(room, dict):
+            continue
+        rid_s = str(rid)
+        if rid_s != here:
+            if held_open_from(room):
+                continue
+            if region and rid_s not in near and room_region(sc, rid_s) != region:
+                continue
+        out.append({"room_id": rid, "name": room_display_name(room, rid)})
+    return out
 
 
 def _player_room(ctx, sc):
@@ -1754,7 +1839,7 @@ def _manager_events(ctx, dr, sc, managed, level, ears=None):
     voice in it holds whatever is admitted to it."""
     from .common import _muffled_fragment
     events = []
-    label = _presence_label_fn(ctx, *[n for _t, n, _r, _rm in managed])
+    label = _presence_label_fn(ctx, *[n for _t, n, _r, _rm in managed], scene=sc)
     for d in (dr.get("dialogue_log") or []):
         quote = str(d.get("exact_quote") or "").strip()
         if not quote:
@@ -1835,8 +1920,8 @@ def scene_life(ctx, nonce, level, cfg):
     # perceivable to nobody -- it narrates what happened in the street
     # outside and what was done behind them (the tavern probe, chat 2 turn
     # 7, on the per-presence path).
-    _label = _presence_label_fn(ctx, *names)
-    _scrub = _presence_identity_floor(ctx, *names)
+    _label = _presence_label_fn(ctx, *names, scene=sc)
+    _scrub = _presence_identity_floor(ctx, *names, scene=sc)
     _beats = {_beat_for_presence(dr, sc, room, n, label=_label, ctx=ctx,
                                  field=fields[n], scrub=_scrub)
               for _t, n, _r, room in managed} if p_room else {""}
@@ -2354,25 +2439,32 @@ def _room_presences_in(ctx, sc, room):
         name = str(record.get("name") or "").strip()
         if not name or presence_room(sc, name, record) != room:
             continue
-        sketch = record.get("sketch") or {}
-        # THE SAME SHORT LABEL THE CAST HALF USES. `appearance` is the
-        # FULL-SIGHT summary -- "grizzled rotund plump-armed sweat-shining
-        # waddling host, with oily black, ale stains on waistcoat, wearing
-        # wool doublet, iron key ring" -- which is right on first mention and
-        # is not what anybody perceives glancing across a taproom. It went
-        # into this list verbatim on the day it was added.
-        # `_unknown_actor_label` is the canonical short form (its own comment:
-        # "deliberately a short label for repeat/inline reference, not a
-        # substitute for the full appearance description"), and using it here
-        # keeps one implementation for both halves of one list.
-        role = str(sketch.get("role_hint") or "")
-        if sketch.get("surface") and _restates_surface(role, sketch["surface"]):
-            role = ""
-        label = _unknown_actor_label(
-            name, str(sketch.get("appearance") or ""),
-            role=role, surface=sketch.get("surface"))
-        out.append((name, " ".join(str(label or "").split()), record))
+        out.append((name, _record_label(name, record), record))
     return sorted(out)
+
+
+def _record_label(name, record):
+    """What an unacquainted presence calls a tracked presence: the label off
+    its ledger record, the one `present_others` lists it under and every
+    other field of a presence's payload names it by (`_presence_label_fn`).
+
+    THE SAME SHORT LABEL THE CAST HALF USES. `appearance` is the FULL-SIGHT
+    summary -- "grizzled rotund plump-armed sweat-shining waddling host, with
+    oily black, ale stains on waistcoat, wearing wool doublet, iron key
+    ring" -- which is right on first mention and is not what anybody
+    perceives glancing across a taproom. It went into this list verbatim on
+    the day it was added. `_unknown_actor_label` is the canonical short form
+    (its own comment: "deliberately a short label for repeat/inline
+    reference, not a substitute for the full appearance description"), and
+    using it here keeps one implementation for both halves of one list."""
+    sketch = (record or {}).get("sketch") or {}
+    role = str(sketch.get("role_hint") or "")
+    if sketch.get("surface") and _restates_surface(role, sketch["surface"]):
+        role = ""
+    label = _unknown_actor_label(
+        name, str(sketch.get("appearance") or ""),
+        role=role, surface=sketch.get("surface"))
+    return " ".join(str(label or "").split())
 
 
 def _restates_surface(hint, surface):
@@ -2396,11 +2488,12 @@ def _restates_surface(hint, surface):
     return any(re.sub(r"[^\w-]", "", w).casefold() in own for w in str(hint).split())
 
 
-def _presence_label_fn(ctx, *presence_names):
+def _presence_label_fn(ctx, *presence_names, scene=None):
     """`name -> what these presences may call them`: the identity floor
     `observer_label_fn` is for the cast, built on the presences' own
     recognition (`_presence_recognizes`, the intersection when several share
-    one payload).
+    one payload). `scene` is the beat's, where the caller holds it; else the
+    stage's own (`_beat_scene`), read only when a name needs it.
 
     ONE FLOOR FOR EVERY FIELD. `present_others` passed through this gate and
     nothing else in a presence's payload did: the beat's audible lines were
@@ -2409,6 +2502,17 @@ def _presence_label_fn(ctx, *presence_names):
     the player alone -- so a bystander who had never been introduced to
     anyone received every name in the room through three fields beside the
     one that withheld them.
+
+    A BODY WITHOUT A CARD IS STILL SOMEBODY -- the branch the cast's floor
+    gained after "Emory" was handed "Master Leofelric Fenstonwell"
+    (`common.observer_label_fn`, playerless Aldermill round 6), which this
+    floor never got: a townsperson the charter simulates, a person the
+    Director minted, another presence all went through as their full names
+    while `present_others` in the same payload called them by their look
+    (review 2026-11-01, agents_character_background F1, by probe). A
+    tracked presence is called what `present_others` calls it
+    (`_record_label`); a person the scene stands that no ledger tracks, what
+    the cast's floor calls it; a prop or a room stays as it is.
     """
     recognized = _presence_recognizes(ctx, *presence_names)
     own = {str(n or "").strip() for n in presence_names}
@@ -2426,6 +2530,48 @@ def _presence_label_fn(ctx, *presence_names):
     p_name = persona_name(pers)
     if p_name:
         sheets.setdefault(p_name, (persona_appearance(pers), []))
+    held = {}
+
+    def _scene():
+        if "scene" not in held:
+            if isinstance(scene, dict):
+                held["scene"] = scene
+            else:
+                try:
+                    held["scene"] = _beat_scene(ctx)
+                except Exception:
+                    held["scene"] = {}
+        return held["scene"]
+
+    def _presences():
+        """The presence ledger with the charter's derived bodies laid over
+        it -- the read `_room_presences_in` lists a room from."""
+        if "presences" not in held:
+            try:
+                ledger = wget(ctx.chat.id, "background_presences", {}) or {}
+                held["presences"] = with_charter_presences(
+                    ctx.chat.id, ledger, _scene(),
+                    frame_id=getattr(ctx.turn, "frame_id", None),
+                    turn_idx=getattr(ctx.turn, "idx", None))
+            except Exception:
+                held["presences"] = {}
+        return held["presences"]
+
+    def _uncarded(text):
+        from persist.commit import _presence_lookup
+        _key, record, status = _presence_lookup(_presences(), text, _scene())
+        if status == "hit" and isinstance(record, dict):
+            return _record_label(str(record.get("name") or text), record) or None
+        if status == "ambiguous":
+            # Two tracked people answer to the name: somebody, and nobody
+            # this presence can tell apart by look -- never the name.
+            return _unknown_actor_label(text)
+        from .common import _uncarded_person
+        person = _uncarded_person(_scene(), text)
+        if person is None:
+            return None         # not a body: an entity, a room, a prop
+        appearance, aliases = person
+        return _unknown_actor_label(text, appearance, aliases)
 
     def label(name):
         text = str(name or "").strip()
@@ -2433,7 +2579,7 @@ def _presence_label_fn(ctx, *presence_names):
             return text
         info = sheets.get(text)
         if info is None:
-            return text         # not a body: an entity, a room, a prop
+            return _uncarded(text) or text
         return _unknown_actor_label(text, info[0], info[1])
 
     return label
@@ -2506,10 +2652,10 @@ def _thread_heard(ctx, beat, participants, rooms=None, sc=None):
     participant to where it stands; a participant the caller cannot place
     hears nothing, and so admits nothing."""
     from .common import _muffled_fragment
-    label = _presence_label_fn(ctx, *participants)
     rooms = rooms if isinstance(rooms, dict) else {}
     scene = sc if sc is not None else _beat_scene(
         ctx, _ctx_get(ctx, "director_resolve") or {})
+    label = _presence_label_fn(ctx, *participants, scene=scene)
     ears = {n: presence_hearing(ctx, scene, n, rooms.get(n), beat)
             for n in participants}
     order = {"none": 0, "voice": 0, "fragment": 1, "full": 2}
@@ -2547,7 +2693,9 @@ def _voice_thread(ctx, beat, thread, rows, nonce):
     another's knowledge."""
     names = [str(r.get("name") or "") for r in rows]
     room = str(thread.get("room") or "")
-    label = _presence_label_fn(ctx, *names)
+    beat_scene_ = (beat or {}).get("scene")
+    label = _presence_label_fn(
+        ctx, *names, scene=beat_scene_ if isinstance(beat_scene_, dict) else None)
     payload = {
         "place": _place_block(ctx, room),
         "common_knowledge": _common_knowledge(ctx, room),
@@ -2847,11 +2995,32 @@ def declare_charter_figures(ctx, interp, sc, figure_rows, decls, nonce):
     # murmur does. The cap otherwise filled with figures a room or two off,
     # and 24 of their lines "reached no view" in one 24-beat run (playerless
     # Aldermill, 2026-09-23).
-    raised = any(str(d.get("volume") or "").casefold() in ("loud", "shout")
-                 for d in beat["dialogue_log"])
+    #
+    # AND A RAISED VOICE REACHES WHOM IT REACHES. Any loud or shouted line
+    # admitted EVERY figure in the aperture, however far off; the figure's
+    # own payload, graded by the cast's hearing gate, then held nothing of
+    # the shout and the call was spent anyway (review 2026-11-01,
+    # agents_character_background F20). The admission asks that same gate
+    # (`presence_hearing`) of each raised line, from where the figure stands.
+    raised = [d for d in beat["dialogue_log"]
+              if str(d.get("volume") or "").casefold() in ("loud", "shout")]
+    p_room = _player_room(ctx, sc) if raised else None
+
+    def _a_raised_voice_reaches(name):
+        here = str(rooms.get(name) or "").strip()
+        if not raised or not here:
+            return False
+        try:
+            hears = presence_hearing(ctx, sc, name, here, beat)
+            return any(hears(d if d.get("speaker_room") or str(
+                d.get("speaker") or "") != p_name or not p_room
+                else dict(d, speaker_room=p_room)) != "none" for d in raised)
+        except Exception:
+            return False
+
     names = [n for n in names
              if n.casefold() in addressed or n in creatures
-             or rooms.get(n) in own_rooms or raised]
+             or rooms.get(n) in own_rooms or _a_raised_voice_reaches(n)]
     # PEOPLE ALREADY TALKING TO EACH OTHER are voiced together, one exchange
     # a beat (`_thread_declarations`); they are not asked again one by one.
     thread_decls, threaded = _thread_declarations(
@@ -3110,7 +3279,7 @@ def _react_one(ctx, dr, name, present_others, roster, sc, rec, nonce,
         # was named to it every time. The quote itself is already
         # channel-filtered.
         addressed_by = dict(addressed_by)
-        addressed_by["speaker"] = _presence_label_fn(ctx, name)(
+        addressed_by["speaker"] = _presence_label_fn(ctx, name, scene=sc)(
             str(addressed_by.get("speaker") or "").strip())
 
     institutional_context = []
@@ -3131,6 +3300,10 @@ def _react_one(ctx, dr, name, present_others, roster, sc, rec, nonce,
             # This beat's sources go along so the view can carry the body's
             # ANSWERS to what was asked of it -- the same plan the commit
             # applies, previewed; the voice speaks before the ledger writes.
+            # ONE BODY, BY ITS OWN REFS (`presence_view`, lane L11): matched
+            # by display name it returned every body wearing it, so an inn's
+            # and a mill's "Ada Fenn" in one square handed one voice both
+            # private slices (review 2026-11-01, world_charter_core F1).
             institutional_context = presence_view(
                 ctx.chat.id, here, name, frame_id=ctx.turn.frame_id,
                 figures=figures,
@@ -3138,7 +3311,9 @@ def _react_one(ctx, dr, name, present_others, roster, sc, rec, nonce,
                 inventory_ops=(dr.get("state_diff") or {}).get(
                     "inventory_ops") or [],
                 scene=sc,
-                actors=list(_registered_name_roster(ctx.chat, ctx.cast)))
+                actors=list(_registered_name_roster(ctx.chat, ctx.cast)),
+                refs=[r for r in (rec.get("charter_refs") or ())
+                      if isinstance(r, dict) and r.get("charter")] or None)
         except Exception as exc:
             ctx.add_warning(f"charter presence context skipped: {exc}")
     # Engine-authored allowlist paired with the model echo. It never enters
@@ -3179,7 +3354,7 @@ def _react_one(ctx, dr, name, present_others, roster, sc, rec, nonce,
             # (the cast's own gates), never the omniscient account.
             "resolved_event": _beat_for_presence(
                 dr, sc, here, name,
-                label=_presence_label_fn(ctx, name), ctx=ctx, field=field),
+                label=_presence_label_fn(ctx, name, scene=sc), ctx=ctx, field=field),
             "addressed_by": addressed_by,
             "player_declaration": _filtered_player_declaration(
                 ctx, sc, name, here, field=field),

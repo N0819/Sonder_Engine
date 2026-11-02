@@ -24,7 +24,7 @@ from __future__ import annotations
 
 import re
 
-from language_runtime import linguistic
+from language_runtime import linguistic, name_boundary_regex
 from llm.prompts import bare_character_prompt, character_bare_module, character_jev_options
 from mind import affect, affect_pass, notebook
 from mind import character_jev as jev
@@ -220,17 +220,44 @@ def _delivered_memories(memory_context):
     return out
 
 
+def _payload_interior(self_):
+    """The live ledger as a mind's own payload states it -- the drive it was
+    shown (`self.psychology.drive`, already `effective_drive`), its beliefs
+    and its associations -- for a caller that holds no `state["interior"]`
+    (a replay, a test): the same three things `psychology_runtime.
+    live_psychology` reads off the ledger itself."""
+    self_ = self_ if isinstance(self_, dict) else {}
+    shown = self_.get("psychology") if isinstance(self_.get("psychology"), dict) else {}
+    interior = {"beliefs": list(self_.get("learned_beliefs") or []),
+                "associations": list(self_.get("learned_associations") or [])}
+    if isinstance(shown.get("drive"), dict):
+        interior["drive_override"] = dict(shown["drive"])
+    return interior
+
+
 def holding_from(name, sheet, payload, observations, memory_context, active, *,
                  language=None, rupture_open=False, reasoning="", notebook_view=None,
-                 carriage=""):
+                 carriage="", interior=None):
     """`jev.Holding` for one mind, read off its own payload only.
     `notebook_view`: the notebook this call shows it (`mind.notebook.view`),
     kinds included -- the payload carries it without them (`for_payload`).
     `carriage`: the demeanor this mind last showed, from its own stored
     state (`commit_memory` keeps it), which the read-back compares the new
-    one against."""
+    one against.
+
+    ITS PSYCHOLOGY IS THE ONE IT HOLDS NOW (`psychology_runtime.
+    live_psychology`, the one owner of that rule): the drive a rupture
+    shifted it to, the beliefs and the cues its own ledger holds in force --
+    `interior`, the mind's `state["interior"]`, or where the caller holds
+    none, the same three things as its payload states them. The card was
+    read here: the read-back offered the card's essence as the `drive` aim
+    after a drive break, and quoted a cue the story extinguished as "WHAT
+    STIRS YOU, LEARNED" (review 2026-11-01, mind_affect_psychology F7)."""
+    from mind.psychology_runtime import live_psychology
     self_ = (payload or {}).get("self") or {}
-    psy = (sheet or {}).get("psychology") or {}
+    if not isinstance(interior, dict):
+        interior = _payload_interior(self_)
+    psy = live_psychology((sheet or {}).get("psychology") or {}, interior)
     drive = psy.get("drive") or {}
     aims = []
     if str(drive.get("essence") or "").strip():
@@ -249,12 +276,15 @@ def holding_from(name, sheet, payload, observations, memory_context, active, *,
     hedonic = (active or {}).get("hedonic") or {}
     return jev.Holding(
         name=name, language=language,
-        psychology=affect_pass.psychology_text(sheet),
+        psychology=affect_pass.psychology_text(sheet, interior),
         events=affect_pass.events_from(observations)[:jev.MAX_EVENTS],
         people=_actor_labels(observations, name),
         known=[str(k) for k in ((payload or {}).get("relationships") or {})],
         memories=_delivered_memories(memory_context),
-        aims=aims[:jev.MAX_AIMS],
+        # Every held project among them, the cap filled around it
+        # (`jev.aims_offered`): a plain cut dropped the projects, which come
+        # last (review 2026-11-01, mind_affect_psychology F8).
+        aims=jev.aims_offered(aims),
         beliefs=[_text(b.get("belief")) for b in self_.get("learned_beliefs") or []
                  if isinstance(b, dict) and str(b.get("belief") or "").strip()][:jev.MAX_BELIEFS],
         associations=[a for a in self_.get("learned_associations") or []
@@ -638,7 +668,15 @@ def _distinct_concerns(concerns):
 
 def _named_here(to_text, people):
     """The person here a line's `to` names: an exact label first, else a
-    label standing in it as a whole word; None when it names no one here."""
+    label standing in it as a WHOLE NAME, by the name's own script
+    (`language_runtime.name_boundary_regex`), the longest first; None when
+    it names no one here.
+
+    `(?<!\\w)...(?!\\w)` describes scripts that space their words: a
+    particle or an honorific is a word character, so `_named_here('田中さん',
+    ['田中'])` was None while `_named_here('Mr. Tanaka', ['Tanaka'])` was
+    'Tanaka' -- and an unread Japanese line whose `to` carried one went to
+    nobody (review 2026-11-01, agents_character_background F12)."""
     text = " ".join(str(to_text or "").split())
     if not text:
         return None
@@ -646,7 +684,7 @@ def _named_here(to_text, people):
         if person.casefold() == text.casefold():
             return person
     for person in sorted(people, key=len, reverse=True):
-        if re.search(r"(?<!\w)" + re.escape(person) + r"(?!\w)", text, re.IGNORECASE):
+        if person and name_boundary_regex(person, re.IGNORECASE).search(text):
             return person
     return None
 

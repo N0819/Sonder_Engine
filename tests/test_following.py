@@ -105,6 +105,10 @@ def test_character_knows_its_own_following_state(temp_db, monkeypatch):
                  "reason": "travelling together"},
     }
     temp_db.wset(chat_id, "scene", scene)
+    # She knows whom she travels with by name. `following.target` passes the
+    # identity floor like every named field (review 2026-11-01, F14): without
+    # this row she is handed the label her view gives him, never his name.
+    temp_db.wset(chat_id, "known", {"Mara": ["The Stranger"]})
     cast = temp_db.q(
         "SELECT ch.*,cc.state AS cstate,cc.status FROM chat_chars cc "
         "JOIN characters ch ON ch.id=cc.char_id WHERE cc.chat_id=?",
