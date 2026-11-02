@@ -27,8 +27,14 @@ from story.scene import persona_of
 from world.spatial import room_of, sense_adjusted, visual_level_between
 
 from agents.common_base import _ling
-from agents.common_names import _recognizes, _unknown_actor_label
+from agents.common_names import (
+    _name_tokens,
+    _recognizes,
+    _unknown_actor_label,
+    _unspaced_name_parts,
+)
 from agents.common_cast import character_room, character_scene_keys
+from agents.common_rooms import chatter_inputs
 from agents.common_figures import presence_figures_for_room
 
 def _uncarded_person(scene, name):
@@ -76,6 +82,17 @@ def observer_view_label_fn(chat, observer_name, cast, scene, senses=None):
     label here too.
     """
     base = observer_label_fn(chat, observer_name, cast, scene=scene)
+    # ONE derivation of the figures per labeller, shared by every name it is
+    # asked about: `presence_figures_for_room` memoizes a room's rows on the
+    # `inputs` it is handed, and handed none it built a fresh `chatter_inputs`
+    # (registry slices, presence ledger, placements, derived records) for
+    # EACH dim-light name (agents_common audit, Efficiency 3).
+    inputs_box = []
+
+    def _inputs():
+        if not inputs_box:
+            inputs_box.append(chatter_inputs(chat["id"], scene))
+        return inputs_box[0]
 
     def label(name):
         out = base(name)
@@ -90,7 +107,7 @@ def observer_view_label_fn(chat, observer_name, cast, scene, senses=None):
         if level in ("full", "none"):
             return out
         from world.charter_surface import surface_label
-        surface = _presence_surface(chat, scene, text)
+        surface = _presence_surface(chat, scene, text, _inputs())
         described = surface_label(surface, level) if surface else ""
         if described:
             return str(compositor_text("unknown_actor", description=described))
@@ -99,22 +116,23 @@ def observer_view_label_fn(chat, observer_name, cast, scene, senses=None):
     return label
 
 
-def _presence_surface(chat, scene, name):
+def _presence_surface(chat, scene, name, inputs=None):
     """The structured surface the charter dealt `name`, read off the rows
     perception lays presence bodies from (`presence_figures_for_room`, the
-    body's own room), or None -- a carded body has none."""
+    body's own room), or None -- a carded body has none. ``inputs`` is a
+    caller's shared `chatter_inputs`, on which the room's rows are memoized."""
     room = room_of(scene, name)
     if not room:
         return None
     folded = str(name).casefold()
-    for row in presence_figures_for_room(chat["id"], scene, room) or ():
+    for row in presence_figures_for_room(chat["id"], scene, room, inputs) or ():
         if str(row.get("name") or "").casefold() == folded:
             surface = row.get("surface")
             return surface if isinstance(surface, dict) else None
     return None
 
 
-def observer_label_fn(chat, observer_name, cast, scene=None):
+def observer_label_fn(chat, observer_name, cast, scene=None, *, known=None):
     """`name -> what THIS observer may call them`, for any payload that names
     a body outside perception's own scrubbing.
 
@@ -136,7 +154,9 @@ def observer_label_fn(chat, observer_name, cast, scene=None):
     ("Commander Riker" to a mind introduced to "William T. Riker") was a
     person in the view and a stranger in every payload beside it.
     """
-    known = set((wget(chat["id"], "known", {}) or {}).get(observer_name) or [])
+    if known is None:
+        known = set((wget(chat["id"], "known", {}) or {}).get(observer_name)
+                    or [])
     sheets = {}
     for row in (cast or []):
         # Normalized once per card text (C14): `label` below reads appearance
@@ -243,8 +263,11 @@ def observer_name_scrub(chat, observer_name, cast):
     entry is not a transcript, and prose that quotes somebody naming a person
     is still telling the reader who they are.
     """
-    label = observer_label_fn(chat, observer_name, cast)
+    # ONE read of the observer's `known` ledger for both halves -- it was
+    # read here again after `observer_label_fn` had read it (agents_common
+    # audit, Efficiency 3), and two reads are two answers free to differ.
     known = set((wget(chat["id"], "known", {}) or {}).get(observer_name) or [])
+    label = observer_label_fn(chat, observer_name, cast, known=known)
     sheets = []
     for row in (cast or []):
         # Normalized once per card text (C14): the loop below reads a name and
@@ -325,7 +348,12 @@ def _other_peoples_names(chat, sheets, subjects):
     which is the scrub as it was.
     """
     scrubbed = {str(form).casefold() for form, _ in subjects}
-    words = {w for form, _ in subjects for w in str(form).casefold().split()}
+    # A NAME WRITTEN WITHOUT SPACES HAS WORDS TOO -- its script runs
+    # (`_unspaced_name_parts`: 佐藤 | アベル). By whitespace alone 佐藤アベル
+    # was one word and never a multi-word name, so it was never shielded and
+    # the scrub for an unmet 佐藤 cut into it (agents_common audit F14).
+    words = {w for form, _ in subjects
+             for w in _words_of_a_name(str(form).casefold())}
     if not words:
         return []
     candidates = set()
@@ -351,11 +379,19 @@ def _other_peoples_names(chat, sheets, subjects):
     for name in candidates:
         name = " ".join(str(name or "").split())
         folded = name.casefold()
-        if (not name or " " not in name or folded in scrubbed
-                or not words & set(folded.split())):
+        name_words = _words_of_a_name(folded)
+        if (not name or len(name_words) < 2 or folded in scrubbed
+                or not words & set(name_words)):
             continue
         out.add(name)
     return sorted(out, key=len, reverse=True)
+
+
+def _words_of_a_name(name):
+    """A name's words: by whitespace, exactly as before, plus the script runs
+    of a name written without spaces (`_unspaced_name_parts`)."""
+    text = str(name or "")
+    return text.split() + _unspaced_name_parts(text)
 
 
 def scrub_names_deep(value, scrub):
@@ -450,7 +486,14 @@ def scene_figures(chat, cast, scene, recognized=None):
 # counts as content only when a word char follows it (I'm, don't), so the
 # span still closes at the real terminating quote.
 
-_SURFACE_CLAUSE_SPLIT = re.compile(r"(?<=[,;:])\s+|\s+[—–]\s+|\s+--\s+")
+_SURFACE_CLAUSE_SPLIT = re.compile(
+    r"(?<=[,;:])\s+|\s+[—–]\s+|\s+--\s+"
+    # The full-width clause marks, with no whitespace required: Japanese
+    # writes none after 、, so a Japanese act was ONE span and naming one
+    # unseen body cut the actor's whole conduct (agents_common audit F7).
+    r"|(?<=[、，；：])\s*")
+#: The marks a kept clause sheds before it is rejoined, of both families.
+_SURFACE_CLAUSE_MARKS = ",;:、，；："
 
 
 def _act_surface_admission(surface, *, actor, observer, forms_by_body,
@@ -530,11 +573,14 @@ def _act_surface_admission(surface, *, actor, observer, forms_by_body,
         if hits:
             cut.extend(hits)
             continue
-        span = span.strip().rstrip(",;:").strip()
+        span = span.strip().rstrip(_SURFACE_CLAUSE_MARKS).strip()
         if span:
             kept.append(span)
     cut = sorted(set(cut))
-    trimmed = ", ".join(kept)
+    # Rejoined with the clause mark the act itself was written with: 、 in a
+    # Japanese act, a comma otherwise (an English act naming 佐藤 included).
+    joiner = "、" if "、" in text and "," not in text else ", "
+    trimmed = joiner.join(kept)
     note_step_decision(
         "act_percept", who, "refused" if not trimmed else "delivered",
         "the observable named %s, whom this observer has no channel to; "
@@ -646,16 +692,31 @@ def _scrub_unknown_identities(view, *, allowed_forms, unknown_sources,
         # and the personal parts are still scrubbed.
         _generic |= {tok.casefold() for key in ("role", "noun", "titles")
                      for tok in re.findall(r"[\w-]+", str(src.get(key) or ""))}
+        # ...and the runs of a role written without spaces (衛兵隊長), which
+        # the word split above keeps whole.
+        _generic |= {tok.casefold() for key in ("role", "noun", "titles")
+                     for tok in _name_tokens(str(src.get(key) or ""))
+                     if _UNSPACED_SCRIPT.match(tok[:1])}
         # A HYPHENATED COMPOUND IS ONE WORD, the rule the label check below
         # already keeps: its fragments are not spellings of the body. Split
         # on every non-word character, the post "Flume-tender" gave a part
         # "Flume", and the room "Wheelhouse and Flume" read "Wheelhouse and
         # the hard-bitten barrel-chested hand ..." in Emory's views, with
         # eight false tripwires (playerless Aldermill round 7, 2026-09-23).
-        parts = [tok.strip("-") for tok in re.split(r"[^\w-]+", name)
-                 if tok.strip("-")
-                 and tok.strip("-").casefold() not in _generic] \
-            if len(name.split()) > 1 else []
+        if len(name.split()) > 1:
+            parts = [tok.strip("-") for tok in re.split(r"[^\w-]+", name)
+                     if tok.strip("-")
+                     and tok.strip("-").casefold() not in _generic]
+        else:
+            # A NAME WRITTEN WITHOUT SPACES HAS PARTS TOO: 佐藤ヒナミ and
+            # 佐藤・ヒナミ are 佐藤 | ヒナミ (`_unspaced_name_parts`, script
+            # runs at the length that script identifies somebody in). The
+            # whitespace test above derived none, so a bare ヒナミ in free
+            # prose reached the view and `leaked` stayed empty -- no tripwire
+            # (agents_common audit F2, 2026-11-01). A Latin name with no
+            # space ("Jean-Luc") is still one word.
+            parts = [tok for tok in _unspaced_name_parts(name)
+                     if tok.casefold() not in _generic]
         authored = {name.casefold()} | {
             str(a or "").strip().casefold() for a in (src.get("aliases") or [])}
         derived = {tok for tok in parts if tok.casefold() not in authored}

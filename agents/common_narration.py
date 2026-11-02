@@ -9,6 +9,7 @@ now a facade that re-exports every name defined here
 from __future__ import annotations
 
 import re
+from language_runtime import UNSPACED_SCRIPT, script_of
 from story.character_schema import _UNSPACED_SCRIPT, name_boundary_pattern
 
 from agents.common_base import _ling
@@ -77,15 +78,42 @@ def _named_tokens(blocks):
     return named
 
 
-def _phrase_ngrams(text, n):
-    """Lower-cased n-word phrases of `text`, none of them spanning a
-    punctuation boundary."""
+def _join_units(units):
+    """Units back into the phrase they were read from: a space between two
+    words of a spaced script, none between two characters of an unspaced
+    one. `" ".join` spelled a Japanese phrase one character at a time --
+    the narrator was handed "っ て い る" to vary (agents_common audit F10).
+    Identical to `" ".join` for Latin units."""
+    out = ""
+    for unit in units:
+        if out and not (_UNSPACED_SCRIPT.match(out[-1:])
+                        and _UNSPACED_SCRIPT.match(unit[:1])):
+            out += " "
+        out += unit
+    return out
+
+
+def _all_inflection(units):
+    """Whether every unit is hiragana: particles and inflection, the
+    caseless script's analogue of a function-word run. `_TIC_STOPWORDS` is
+    the same English set in both packs, so it never excluded -ている."""
+    return bool(units) and all(script_of(u[:1]) == "hiragana" for u in units)
+
+
+def _phrase_unit_ngrams(text, n):
+    """The lower-cased n-unit windows of `text`, as tuples of units, none of
+    them spanning a punctuation boundary."""
     out = []
     for segment in _phrase_segments(text):
         words = [w.lower() for w in segment]
-        out.extend(" ".join(words[i:i + n])
-                   for i in range(len(words) - n + 1))
+        out.extend(tuple(words[i:i + n]) for i in range(len(words) - n + 1))
     return out
+
+
+def _phrase_ngrams(text, n):
+    """Lower-cased n-word phrases of `text`, none of them spanning a
+    punctuation boundary."""
+    return [_join_units(units) for units in _phrase_unit_ngrams(text, n)]
 
 
 # Content words whose repetition is a genuine tic; function-word runs ("in the
@@ -134,9 +162,11 @@ def _overused_phrases(recent_prose, current_prose="", n=3, min_hits=2, cap=12,
     named = _named_tokens(blocks)
     counts = {}
     for block in blocks:
-        for phrase in set(_phrase_ngrams(block, n)):
-            words = phrase.split()
+        for words in set(_phrase_unit_ngrams(block, n)):
+            phrase = _join_units(words)
             if all(w in _ling("_TIC_STOPWORDS") for w in words):
+                continue
+            if _all_inflection(words):
                 continue
             if any(w in named for w in words):
                 continue
@@ -155,12 +185,12 @@ def _overused_phrases(recent_prose, current_prose="", n=3, min_hits=2, cap=12,
             words = [w.lower() for w in segment]
             start = None
             for i in range(len(words) - n + 2):
-                window = " ".join(words[i:i + n])
+                window = _join_units(words[i:i + n])
                 if i <= len(words) - n and window in hits:
                     start = i if start is None else start
                     continue
                 if start is not None:
-                    grown.add(" ".join(words[start:i + n - 1]))
+                    grown.add(_join_units(words[start:i + n - 1]))
                     start = None
     # Prefer the longest/most-specific phrases; drop a phrase fully contained
     # in a longer flagged one so "clock ticks" and "the clock ticks" don't both
@@ -320,8 +350,11 @@ def _word_shingles(text, n=6, *, labels=()):
     words = [w for w in re.findall(r"[a-z0-9']+|" + _UNSPACED_SCRIPT.pattern,
                                    lowered)
              if w not in _SHINGLE_STOPWORDS]
+    # Joined as written (`_join_units`): the same set either way, so every
+    # comparison is unchanged, and a shingle handed to the narrator reads
+    # "の外を見てい", never "の 外 を 見 て い" (agents_common audit F10).
     return {
-        " ".join(words[i:i + n])
+        _join_units(words[i:i + n])
         for i in range(len(words) - n + 1)
     }
 
@@ -606,8 +639,13 @@ def _check_player_person(prose, player_name, narration_person, player_aliases=No
         if not form:
             continue
         flags = 0 if form.casefold() in _ling("_COMMON_WORD_NAMES") else re.I
+        # A form in an unspaced script by its own boundary: `(?!\w)` never
+        # fell between a Japanese name and its particle, so a Japanese page
+        # naming the player in the third person was never caught
+        # (agents_common audit F14). A Latin form's pattern is unchanged.
         pattern = re.compile(
-            r"(?<!\w)" + re.escape(form) + r"(?:['’]s)?(?!\w)", flags)
+            name_boundary_pattern(form) if UNSPACED_SCRIPT.search(form)
+            else r"(?<!\w)" + re.escape(form) + r"(?:['’]s)?(?!\w)", flags)
         for i in range(0, len(segments), 2):  # even indices = unquoted prose
             if pattern.search(segments[i]):
                 hits.append(form)

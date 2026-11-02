@@ -14,6 +14,7 @@ import re
 from llm.schemas import normalize_speech_volume, normalize_vocal_affect
 
 from agents.common_base import _ling, _quote_body
+from agents.common_names import _word_count
 from agents.common_acts import (
     _COMMUNICATIVE_TYPES,
     _classify_action_commitment,
@@ -210,8 +211,11 @@ def split_stage_directions(text):
         body = " ".join(match.group(1).split())
         if not body:
             return ""
-        if len(body.split()) == 1:
-            # Emphasis on a single spoken word. It stays in the line.
+        if _word_count(body) == 1:
+            # Emphasis on a single spoken word, counted in its own script
+            # (`_word_count`: `.split()` made every Japanese span one word,
+            # so no Japanese stage direction was ever cut -- agents_common
+            # audit F4). It stays in the line.
             return body
         spans.append(body)
         return ""
@@ -220,7 +224,8 @@ def split_stage_directions(text):
     # Collapse the whitespace and orphaned punctuation the excision leaves
     # behind, so "*leans in* You will..." does not become " You will...".
     spoken = re.sub(r"\s{2,}", " ", spoken).strip()
-    spoken = re.sub(r"^[,;:.\-—\s]+", "", spoken).strip()
+    # The full-width marks too: "*彼女の手を取って*、行こう。" left "、行こう。".
+    spoken = re.sub(r"^[,;:.\-—\s、，。；：]+", "", spoken).strip()
     return spoken, spans
 
 

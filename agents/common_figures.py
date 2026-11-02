@@ -305,6 +305,11 @@ def presence_figures_for_room(cid, sc, room_id, inputs=None, *,
         placed = _placement_for(refs)
         if placed:
             row["placement"] = dict(placed)
+            if placed.get("posture") == "lying":
+                # A RECORD OUTLIVES ITS BODY: the ledger keeps the person a
+                # dead body was, and the placement lays the corpse. Remains,
+                # as below -- laid, never voiced.
+                row["remains"] = True
         rows.append(row)
 
     try:
@@ -333,6 +338,41 @@ def presence_figures_for_room(cid, sc, room_id, inputs=None, *,
         placed = _placement_for(refs)
         if placed:
             row["placement"] = dict(placed)
+        rows.append(row)
+
+    # A CORPSE IS LAID WHERE IT FELL, presence record or none. The dead are
+    # in no room as people (`charter_harm.in_a_room`): no crowd, no voice,
+    # and since L11 (audit world_charter_behaviours F11) no derived presence
+    # record either -- so a body that died where nobody had filed a presence
+    # for it reached no view, though its placement still lies where it fell
+    # (`charter_place.charter_placements`, ``posture: "lying"``). It is a row
+    # of its own, marked ``remains``: perception lays it at its cell, lying,
+    # and `lay_charter_figures` lays it without offering it a voice.
+    for _uid, placed in sorted(placements.items()):
+        if not isinstance(placed, dict) or placed.get("posture") != "lying":
+            continue
+        refs = {(str(placed.get("charter") or ""),
+                 str(placed.get("body") or ""))}
+        name = str(placed.get("key") or placed.get("name") or "")
+        if (not name or name.casefold() in seen or (refs & seen_refs)
+                or (refs & carried) or name.casefold() in carried_names):
+            continue
+        seen.add(name.casefold())
+        seen_refs |= refs
+        row = {"name": name, "room": room, "appearance": _noun_for(refs),
+               "role": _noun_for(refs), "remains": True,
+               "placement": dict(placed)}
+        creature_noun = _creature_noun_for(refs)
+        if creature_noun:
+            row["noun"] = creature_noun
+        titles = _titles_for(refs)
+        if titles:
+            row["titles"] = titles
+        surface = _surface_for(refs)
+        if surface:
+            from world.charter_surface import appearance_text
+            row["surface"] = surface
+            row["appearance"] = appearance_text(surface, noun=_noun_for(refs))
         rows.append(row)
     memo[room] = rows
     return [dict(row) for row in rows]
@@ -407,6 +447,10 @@ def lay_charter_figures(ctx, sc, rooms):
                 keys[placed["uid"]] = name
             elif not room_of(sc, name):
                 sc.setdefault("positions", {})[name] = row["room"]
+            if row.get("remains"):
+                # Laid on the stage's scene, lying, so the hands resolve
+                # against a room that holds the body -- and never a voice.
+                continue
             rows.append({"name": name, "room": row["room"],
                          "role": row.get("role") or "",
                          "appearance": row.get("appearance") or "",

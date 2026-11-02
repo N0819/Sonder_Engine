@@ -13,7 +13,14 @@ from functools import lru_cache
 import re
 from story.character_schema import _UNSPACED_SCRIPT, name_boundary_pattern
 from language_runtime import referring as _referring
-from language_runtime import compositor_text, compositor_value, linguistic
+from language_runtime import (
+    UNSPACED_SCRIPT,
+    compositor_text,
+    compositor_value,
+    fold_words,
+    linguistic,
+    script_of,
+)
 
 from agents.common_base import _ling, _text
 
@@ -67,6 +74,32 @@ def _countable_word_units(text):
     return units
 
 
+def _word_count(text):
+    """How many WORDS `text` holds, counted in its own script.
+
+    Text with no letter of an unspaced script: by whitespace, `.split()`,
+    exactly the count every caller made before. Text holding one: by its
+    CONTENT runs -- `fold_words`' script runs less the hiragana ones, which
+    are particles and inflection, the use `fold_words`' own docstring names
+    -- so 本当 and 本当に are one word as "really" is, 奇妙な硬貨 is two as
+    "strange coins" is, and 身を乗り出して彼女の肩に手を置く is seven. A run
+    of hiragana alone is one word.
+
+    `.split()` made every Japanese span ONE word, so every "is this a phrase
+    or a word" rule fell to whichever side one points at (agents_common audit
+    F3, F4: no Japanese stage direction was ever cut, and no unspaced alias
+    was ever a phrase). Not `_countable_word_units`, which counts a
+    CHARACTER as a unit -- right for "is this long enough to be an
+    utterance", wrong for "is this one word": it makes 本当 two.
+    """
+    body = str(text or "")
+    if not UNSPACED_SCRIPT.search(body):
+        return len(body.split())
+    content = [run for run in fold_words(body)
+               if script_of(run[:1]) != "hiragana"]
+    return max(1, len(content))
+
+
 def _name_token_floor(token):
     """The shortest this token could be and still identify somebody."""
     return (_UNSPACED_NAME_TOKEN_MIN if _UNSPACED_SCRIPT.match(token[:1])
@@ -84,6 +117,42 @@ def _display_floor(name, spaced=4):
     """
     return (_UNSPACED_NAME_TOKEN_MIN if _UNSPACED_SCRIPT.match(str(name)[:1])
             else spaced)
+
+
+def _name_parts(name):
+    """The parts of a name that identify its body on their own: its script
+    runs (`_name_tokens` -- 佐藤 | ヒナミ for 佐藤ヒナミ and 佐藤・ヒナミ alike,
+    "Hinami" | "Sato" for "Hinami Sato"), each at least as long as its script
+    needs to tell a name from a word (`_name_token_floor`). [] for a name of
+    one run: the name itself is its only spelling.
+
+    A NAME'S PARTS WERE FOUND BY WHITESPACE, so a name written without
+    spaces had none, and the two places that decide what a stranger may read
+    -- the label (`_summary_label`) and the last-pass scrub
+    (`_scrub_unknown_identities`) -- let the bare given name through
+    (agents_common audit F1/F2, 2026-11-01: "見知らぬヒナミは狐耳の背の高い
+    女性", and ヒナミが手を振る。 delivered with no leak reported).
+    Callers drop what their own rules exempt (titles, a role worn in the
+    name)."""
+    tokens = _name_tokens(name)
+    if len(tokens) < 2:
+        return []
+    out = []
+    for tok in tokens:
+        if len(tok) >= _name_token_floor(tok) and tok not in out:
+            out.append(tok)
+    return out
+
+
+def _unspaced_name_parts(name):
+    """`_name_parts` for a name written with NO space and in a script that
+    does not space its words (佐藤ヒナミ, 佐藤・ヒナミ); [] otherwise. A
+    spaced name's parts are its caller's own split, and a Latin name with no
+    space ("Jean-Luc") is one word."""
+    text = str(name or "").strip()
+    if not text or len(text.split()) > 1 or not _UNSPACED_SCRIPT.search(text):
+        return []
+    return _name_parts(text)
 
 
 def _significant_name_tokens(name):
@@ -491,7 +560,22 @@ def _summary_label(actor_name, appearance_text, aliases=None, *, role="",
         return description
 
     if referring.head_final() or referring.unspaced(text):
-        sentence = _strip_identity_tokens(referring.first_sentence(text), forms)
+        # THE NAME'S PARTS COME OFF TOO, as the token strip below takes them
+        # in an article language: an unspaced card named 佐藤ヒナミ whose
+        # summary leads with ヒナミ minted "見知らぬヒナミは..." for every
+        # observer who had not met her (agents_common audit F1). A title, a
+        # generic head, a function word or the role worn in the name is the
+        # language's word, not the body's spelling -- the exemptions
+        # `_scrub_unknown_identities` keeps for the same parts.
+        exempt = (function_words | set(_ling("_NAME_TITLE_TOKENS"))
+                  | set(_ling("_GENERIC_LABEL_HEADS")))
+        if role:
+            exempt |= _identity_token_set(role) | {
+                tok.casefold() for tok in _name_tokens(role)}
+        parts = [tok for tok in _name_parts(actor_name)
+                 if tok.casefold() not in exempt]
+        sentence = _strip_identity_tokens(referring.first_sentence(text),
+                                          forms + parts)
         clause = referring.head_final_clause(sentence)
         description = _label_safe(clause).strip(" ,.;:、。")
         description = _close(description, noun)
@@ -772,10 +856,11 @@ def _player_name_forms(player_name):
 
 
 #: Bounded, because this is the file's one piece of mutable module state and it
-#: is keyed by NAME FORM -- so it grows with every cast of every chat the
-#: process has served, and nothing ever cleared it. An LRU is the right shape:
-#: the working set is one scene's cast, and a form that falls out is recompiled
-#: in microseconds.
+#: is keyed by NAME FORM (and the active pack's title alternation, which the
+#: pattern embeds) -- so it grows with every cast of every chat the process has
+#: served, and nothing ever cleared it. An LRU is the right shape: the working
+#: set is one scene's cast, and a form that falls out is recompiled in
+#: microseconds.
 _SUBJECT_OPENER_CACHE = 512
 
 
@@ -832,7 +917,6 @@ def name_occurrence_pattern(form, *, flags=0, possessive=True):
     return re.compile(prefix + "(?:" + body + ")" + tail, flags)
 
 
-@lru_cache(maxsize=_SUBJECT_OPENER_CACHE)
 def _subject_opener(form):
     """Does a sentence OPEN with this name, as subject or possessive?
 
@@ -878,7 +962,17 @@ def _subject_opener(form):
     # rule.
     # Inline-insensitive: the name itself keeps this function's case rule, and
     # a title never carries identity, so "Dr." and "dr." are the same word.
-    lead = _name_title_alternation()
+    #
+    # KEYED ON THE TITLES IT COMPILES, never on the form alone: the pattern
+    # embeds the ACTIVE pack's title alternation, and a cache keyed by the
+    # form handed whichever language compiled it first to every later story
+    # in the process (agents_common audit F9, 2026-11-01) -- the server runs
+    # stories in both packs at once.
+    return _compiled_subject_opener(form, _name_title_alternation())
+
+
+@lru_cache(maxsize=_SUBJECT_OPENER_CACHE)
+def _compiled_subject_opener(form, lead):
     return re.compile(
         rf"^(?:(?i:{lead})\s+)?(?:[Tt]he\s+|[Aa]n?\s+)?"
         rf"{name_boundary_pattern(form)}(?:['’]s)?",
@@ -894,6 +988,10 @@ def _ends_with_abbreviation(piece, abbreviations):
     if not word.endswith("."):
         return False
     return word[:-1].casefold() in abbreviations
+
+
+#: A sentence stop of a script that does not space its words.
+_UNSPACED_STOP = re.compile("[。！？｡]")
 
 
 def split_sentences(text, split=None):
@@ -923,6 +1021,20 @@ def split_sentences(text, split=None):
     and name particles, which are also the class that appears immediately
     before a NAME, which is what makes the split damaging in the first place.
     """
+    # A TEXT THAT ENDS ITS SENTENCES IN AN UNSPACED SCRIPT IS SPLIT BY
+    # `language_runtime.split_sentences`, the one script-aware splitter: this
+    # module's own pattern ate the closing 」 after 。 and cut a quotation
+    # carried on by its quotative particle (「行こう。」と彼は言った。) in two.
+    # Only there, because only there is it the same answer for English: on
+    # the owner's English prose (2,682 narrator/perception texts, 2026-11-01)
+    # the two splitters disagreed on 850, every one a closing quote before
+    # the next sentence ('…it." Mellisande holds…'), which this splitter has
+    # always kept together and its callers' guards were measured against.
+    # A caller's own `split` is still that caller's (UNBUILT_PIPELINE 1.69 is
+    # the class: several splitters, one now script-aware).
+    if (split is None or split is _SENTENCE_SPLIT) \
+            and _UNSPACED_STOP.search(str(text or "")):
+        return _split_sentences_by_script(str(text or ""))
     pattern = split if split is not None else _SENTENCE_SPLIT
     abbreviations = _ling("_SENTENCE_ABBREVIATIONS")
     out = []
@@ -935,6 +1047,11 @@ def split_sentences(text, split=None):
         else:
             out.append(piece)
     return out
+
+
+def _split_sentences_by_script(text):
+    from language_runtime import split_sentences as _by_script
+    return _by_script(text)
 
 
 def _sentence_subjects(prose, names, split=None, pronouns=None):
@@ -984,9 +1101,13 @@ def _sentence_subjects(prose, names, split=None, pronouns=None):
     passage one "sentence" again.
     """
     current = None
-    pieces = split_sentences(
-        prose or "",
-        split if split is not None else re.compile(r"(?<=[.!?])\s+"))
+    # The default is this module's splitter: on text without an unspaced
+    # script's stop its pattern IS the `(?<=[.!?])\s+` this used, so English
+    # splits exactly as it did; on text with one it is the script-aware
+    # splitter. The ASCII-only default made a Japanese paragraph ONE sentence
+    # whose subject was its first name, and the four authority checks read
+    # nothing past it (agents_common audit F14, the class's root).
+    pieces = split_sentences(prose or "", split)
     groups = {name: _pronoun_group(p) for name, p in (pronouns or {}).items()}
     for sentence in pieces:
         stripped = sentence.strip()
@@ -1044,20 +1165,34 @@ def _predicate_heads(tail, window):
     clause for tests that read wider than the verb (see `_PROXIMITY_RE`).
     """
     heads = []
-    for part in re.split(r",|\band\b|\bthen\b|;", tail or "", flags=re.I):
+    # 、 is the clause mark of the unspaced scripts: absent from English text,
+    # so the English split is unchanged.
+    for part in re.split(r",|、|\band\b|\bthen\b|;", tail or "", flags=re.I):
         part = part.strip()
         if not part or _ling("_NEW_SUBJECT_RE").match(part):
             continue
         # The window is counted in the clause's own script (A2), the same
         # unit `_countable_word_units` measures: `[A-Za-z']+` found no head
         # at all in an unspaced clause, so every conjunct's head was the
-        # empty string. DEFERRED, and measured by the A2 skeptic: the one
-        # consumer, `_check_character_act_authority`, still searches the head
-        # with `\b(?:{verbs})\b`, which never matches inside an unspaced
-        # clause, so in ja that verb check is still inert until that site
-        # takes the script-safe boundary its siblings took -- and a three-
-        # token window also cuts before the verb there, so the window unit
-        # needs thought before it does.
+        # empty string.
+        #
+        # AN UNSPACED CLAUSE IS READ AS WRITTEN, FROM ITS END. Joining its
+        # script runs with spaces made 話す the head "話 す", which no verb
+        # alternation can match, and a window counted from the subject cut
+        # before the verb, because the scripts the engine reads without
+        # spaces (Japanese) put the predicate LAST -- the A2 skeptic's
+        # measured deferral ("the window unit needs thought"). So the window
+        # is the clause's last `window` runs, as the text writes them:
+        # 「静かに話す」 -> "かに話す". A spaced clause is unchanged: its first
+        # `window` tokens, joined by single spaces.
+        if UNSPACED_SCRIPT.search(part):
+            runs = list(_NAME_TOKEN_RE.finditer(part))
+            if not runs:
+                continue
+            kept = runs[-window:] if window > 0 else []
+            head = part[kept[0].start():kept[-1].end()] if kept else ""
+            heads.append((head, part))
+            continue
         heads.append((" ".join(_name_tokens(part)[:window]), part))
     return heads
 

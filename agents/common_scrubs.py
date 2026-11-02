@@ -11,7 +11,10 @@ from __future__ import annotations
 
 import re
 
+from language_runtime import UNSPACED_SCRIPT
+
 from agents.common_base import _dangling_speech, _ling, _quote_body
+from agents.common_names import _countable_word_units
 
 
 def _cap_repeated_quotes(prose, view, exclude_bodies=()):
@@ -157,6 +160,20 @@ def _protected_view_quotes(view, player_lines=None):
 _ECHO_FOLD_RE = re.compile(r"[^\w\s]+")
 
 
+def _length_in_units(text):
+    """How long a span is, in the unit its script is measured in: words by
+    whitespace in a spaced script -- exactly the `.split()` count these
+    floors always took -- and, for text holding an unspaced script, the A2
+    unit (`_countable_word_units`, one per character), which every other
+    "long enough to be an utterance" floor in these files already uses.
+    `.split()` measured any Japanese line as ONE word, so both floors read
+    every Japanese span as too short to act on (agents_common audit F14)."""
+    body = str(text or "")
+    if UNSPACED_SCRIPT.search(body):
+        return _countable_word_units(body)
+    return len(body.split())
+
+
 def _echo_fold(text):
     """One spoken line, folded so only its WORDS remain."""
     return " ".join(_ECHO_FOLD_RE.sub(" ", str(text or "")).casefold().split())
@@ -217,7 +234,7 @@ def _strip_player_echo(prose, lines, protect_quotes=None):
             # span whose words are the player's, whatever punctuation and
             # capitalisation the narrator gave them.
             folded = _echo_fold(body)
-            if len(folded.split()) < _ECHO_FOLD_MIN_WORDS:
+            if _length_in_units(folded) < _ECHO_FOLD_MIN_WORDS:
                 continue
             hit = next((m for m in _ling("_QUOTE_SPAN_RE").finditer(prose)
                         if _echo_fold(m.group(2)) == folded), None)
@@ -375,8 +392,11 @@ def _scrub_invented_dialogue(view, spoken_bodies, *, cast_names=(), mode="all"):
                    for m in _ling("_VIEW_QUOTE_BODY_RE").finditer(view)]
     boundaries = {0}
     inside = False
+    # Read once, not once per character of the view (agents_common audit,
+    # Efficiency 2: ~3 ms per 3,000-character view, per observer, per pass).
+    quote_chars = _ling("_QUOTE_CHARS")
     for i, ch in enumerate(view):
-        if ch in _ling("_QUOTE_CHARS"):
+        if ch in quote_chars:
             inside = not inside
         elif ch in ".!?…" and not inside:
             boundaries.add(i + 1)
@@ -480,7 +500,11 @@ def _scrub_undeclared_player_speech(view, declared_bodies, protected_bodies=(),
 # body contains sentence punctuation mis-splits into fragments, but every such
 # fragment carries a quote character and is therefore exempt from dropping
 # (below), so mis-splits can only UNDER-dedupe, never eat real content.
-_VIEW_SENTENCE_SPLIT_RE = re.compile(r"(?<=[.!?…])(\s+)")
+# One capture group, so a split alternates [sentence, separator, ...]. The
+# second alternative is the full-width stop, after which Japanese writes no
+# space: without it a Japanese view was one sentence and nothing in it was
+# ever a repeat (agents_common audit F14). No English text carries 。！？.
+_VIEW_SENTENCE_SPLIT_RE = re.compile(r"((?<=[.!?…])\s+|(?<=[。！？])\s*)")
 _VIEW_DEDUPE_MIN_WORDS = 5
 
 _VIEW_MASK = "\x00Q%d\x00"
@@ -560,7 +584,7 @@ def _dedupe_view_sentences(text):
         sep = pieces[i + 1] if i + 1 < len(pieces) else ""
         key = re.sub(r"\s+", " ", sent).strip().strip(".!?…").casefold()
         droppable = (
-            len(key.split()) >= _VIEW_DEDUPE_MIN_WORDS
+            _length_in_units(key) >= _VIEW_DEDUPE_MIN_WORDS
             # A masked span means this sentence carries a quotation. The raw
             # check stays alongside it for an UNTERMINATED quote, which the
             # span regex cannot match and which must still be protected.

@@ -10,8 +10,10 @@ now a facade that re-exports every name defined here
 
 from __future__ import annotations
 
+from functools import lru_cache
 from typing import NamedTuple
 import re
+from language_runtime import SPACED_WORD_CHARS
 from story.character_schema import (
     _UNSPACED_SCRIPT,
     cue_boundary_pattern,
@@ -395,6 +397,13 @@ def scan_claims_for(elem, resolved):
     deferred siblings to completed fact. With no such row, the action counts
     as realized only when some realized row lists its event id in
     ``realized_event_ids``.
+
+    NO LIVE PRODUCER WRITES ``realized_event_ids`` (agents_common audit F20,
+    2026-11-01): the pre-split card asked for it, today's encoder card
+    (`claim_dispositions.txt`) asks for ``{claim_id, status, reason?}``, and
+    nothing in `agents/`, `llm/` or `persist/` sets it -- only tests do. So
+    in play the first rule is the whole rule; whether to restore the field
+    to the card or drop this fallback is the owner's.
     """
     event_id = str((elem or {}).get("event_id") or "").strip()
     match = re.search(r":player:(\d+):action$", event_id)
@@ -750,8 +759,10 @@ def adjudicated_player_action_text(elem, resolved=None):
     """Return only the outward portion resolution made true.
 
     Asserted acts retain their complete observable surface. A contestable act
-    does so only when a claim disposition names its event id in
-    ``realized_event_ids``; otherwise only the onset is safe. Missing or
+    does so only when the claim dispositions that speak for it all realized
+    it (`scan_claims_for`: a row naming its event id or an intent claim of
+    its sequence index -- the ``realized_event_ids`` fallback has no live
+    producer, see there); otherwise only the onset is safe. Missing or
     malformed disposition data therefore loses detail instead of inventing a
     successful conditional branch.
     """
@@ -971,9 +982,68 @@ def _requires_reaction_phase(event, valid_actor_ids, actor_names):
         event.get("intended_effects")
         or event.get("asserted_effects")
         or verb in _ling("_REACTIVE_VERBS")
-        or any(term in attempt for term in _ling("_REACTIVE_VERBS"))
+        or _names_a_cue(attempt, _ling("_REACTIVE_VERBS"))
         or stage in _REACTIVE_STAGES
     )
+
+
+#: The inflection a cue written in a spaced script may carry and still be
+#: the same word: the `(?:e?s|ed|ing|d)?` shape the pack's own verb
+#: alternations append to every stem (`_LOCOMOTION_VERBS`,
+#: `_MANIPULATION_VERBS` ...), plus the doubled final consonant English
+#: writes before -ing/-ed ("grab" -> "grabbing"). A closed morphology table,
+#: not a vocabulary: it can only narrow what a bare substring test matched.
+_CUE_INFLECTION = r"(?:{last}(?:ing|ed)|e?s|ed|ing|d)?"
+_SPACED_LETTER = re.compile(f"[{SPACED_WORD_CHARS}]")
+
+
+@lru_cache(maxsize=64)
+def _whole_cue_regex(cues):
+    """One alternation over a pack cue table, each cue a WHOLE word.
+
+    Per edge, by the edge's script -- the rule `name_boundary_pattern` and
+    `cue_boundary_pattern` apply: a cue edge in a spaced script needs no
+    spaced-script letter beside it (on the right after an optional
+    inflection); an edge in a script that does not space its words stays
+    open, as the substring test left it, because a Japanese verb is written
+    straight onto its particle and carries its inflection on the same run.
+    Every match is therefore one the old `cue in text` also made."""
+    parts = []
+    for cue in sorted(cues, key=len, reverse=True):
+        lead = (f"(?<![{SPACED_WORD_CHARS}])"
+                if _SPACED_LETTER.match(cue[0]) else "")
+        tail = ""
+        if _SPACED_LETTER.match(cue[-1]):
+            tail = (_CUE_INFLECTION.format(last=re.escape(cue[-1]))
+                    + f"(?![{SPACED_WORD_CHARS}])")
+        parts.append(lead + re.escape(cue) + tail)
+    return re.compile("|".join(parts), re.I) if parts else None
+
+
+def _names_a_cue(text, cues):
+    """Whether `text` holds one of a pack cue table's entries as a whole
+    word (`_whole_cue_regex`), never as a piece of a longer one.
+
+    THE SUBSTRING TEST IT REPLACES ENDED BEATS ON ORDINARY WORDS. Measured
+    2026-11-01 (agents_common audit F5, the owner's db read-only, 2,554
+    action elements of the 2,500 most recent interaction_loop variants):
+    153 asserted, overt acts ended the beat through `_CONFLICT_VERBS`, and
+    at least 52 of them (34%) matched inside a longer word -- "center" 30,
+    "stable" 6, "restraint(s)" 8, "entertaining", "interleaved", "forceful",
+    "established"; `ATTEMPT_CUES` turned acts contestable on "brushing" (36
+    hosts with "brush"/"brushes"), "pastry" 10, "entry" 6, "claim" 6.
+    Re-measured on the fix (same db, today's 1,273 distinct action elements):
+    conflict-verb exits 76 -> 51 and attempt-cue `contestable` 56 -> 25, every
+    removal an in-word host, every remaining match one the substring test
+    also made. The tables are unchanged; whether their word-level remainder
+    ("breaks eye contact", "casts a glance") belongs in them is a separate
+    measurement."""
+    body = str(text or "")
+    if not body or not cues:
+        return False
+    key = frozenset(str(c).casefold() for c in cues if str(c or "").strip())
+    rx = _whole_cue_regex(key) if key else None
+    return bool(rx and rx.search(body))
 
 def _requires_director_resolution(result):
     """Does this declaration need the Director before anyone can answer it.
@@ -1021,7 +1091,7 @@ def acts_awaiting_resolution(result):
         text = str(action.get("attempt") or "").casefold()
         if (action.get("visibility") == "concealed"
                 or action.get("commitment") == "contestable"
-                or any(term in text for term in _ling("_CONFLICT_VERBS"))):
+                or _names_a_cue(text, _ling("_CONFLICT_VERBS"))):
             waiting.append(action)
     return waiting
 
@@ -1043,7 +1113,7 @@ def _classify_action_commitment(raw_text):
     text = (raw_text or "").casefold().strip()
     if not text:
         return "contestable"
-    if any(cue in text for cue in _ling("ATTEMPT_CUES")):
+    if _names_a_cue(text, _ling("ATTEMPT_CUES")):
         return "contestable"
     return "asserted"
 

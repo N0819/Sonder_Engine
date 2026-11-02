@@ -12,7 +12,7 @@ from __future__ import annotations
 import re
 from story.character_schema import _UNSPACED_SCRIPT
 from language_runtime import referring as _referring
-from language_runtime import compositor_value
+from language_runtime import UNSPACED_SCRIPT, compositor_value, find_names
 from world.spatial import has_visual
 
 from agents.common_base import (
@@ -375,6 +375,16 @@ def _self_second_person(text, forms):
     if not text:
         return text
     patterns = []
+    # A NAME WRITTEN IN AN UNSPACED SCRIPT is matched by its own boundary
+    # (`find_names`): `name_occurrence_pattern` bounds a name with
+    # `(?<!\w)`/`(?!\w)`, and a Japanese particle is a word character, so
+    # ヒナミの / ヒナミは never matched and the perceiver read herself in the
+    # third person inside her own view (agents_common audit F8). It becomes
+    # the pack's own word for the perceiver (`self_label`: あなた), and the
+    # particle stays, which is how Japanese writes the case.
+    unspaced = sorted({str(f or "").strip() for f in (forms or [])
+                       if str(f or "").strip()
+                       and UNSPACED_SCRIPT.search(str(f))}, key=len, reverse=True)
     # WIDEST FORM FIRST. The forms of one body overlap by construction -- a
     # full name and the word tokens of it -- and applied in the order they
     # arrived, the short one fired inside the long one and the long one then
@@ -384,17 +394,19 @@ def _self_second_person(text, forms):
     # at each caller, because every caller wants the same answer.
     for form in sorted({str(f or "").strip() for f in (forms or [])
                         if str(f or "").strip()}, key=len, reverse=True):
+        if form in unspaced:
+            continue
         # Ordinary-English single-token names ("Rose", "Hope") are matched
         # case-sensitively, exactly as the identity scrub does, so common
         # lowercase prose is never rewritten into second person.
         flags = 0 if form.casefold() in _ling("_COMMON_WORD_NAMES") else re.I
         patterns.append(name_occurrence_pattern(form, flags=flags))
-    if not patterns:
+    if not patterns and not unspaced:
         return text
     segments = _ling("_QUOTED_SPAN_RE").split(text)
     for i in range(0, len(segments), 2):  # even indices = unquoted prose
         before = segments[i]
-        after = before
+        after = _self_unspaced_names(before, unspaced) if unspaced else before
         for pattern in patterns:
             after = pattern.sub(_self_pronoun_sub, after)
         # A name in SUBJECT position leaves the verb inflected for third
@@ -437,6 +449,37 @@ def _fix_you_agreement(text):
         return f"{you}{gap}{fixed}"
 
     return _ling("_YOU_VERB_RE").sub(_sub, str(text or ""))
+
+
+#: An English possessive written straight after a name in an unspaced script
+#: ("ヒナミ's hand" in an English story).
+_TRAILING_POSSESSIVE = re.compile(r"['’]s(?![A-Za-z])")
+
+
+def _self_unspaced_names(text, forms):
+    """The perceiver's unspaced-script name forms in `text` rewritten to the
+    pack's word for the perceiver (`compositor.self_label`), longest form
+    first and never inside a longer name (`find_names`). An English
+    possessive written after the name takes "your", as `_self_pronoun_sub`
+    gives a Latin name."""
+    hits = find_names(text, tuple(forms), flags=0)
+    if not hits:
+        return text
+    self_word = str(compositor_value("self_label") or "")
+    if not self_word:
+        return text
+    out, at = [], 0
+    for start, end, _form in hits:
+        out.append(text[at:start])
+        possessive = _TRAILING_POSSESSIVE.match(text, end)
+        word = "your" if possessive else self_word
+        before = "".join(out).rstrip()
+        if (not before or before[-1] in ".!?\n") and word[:1].islower():
+            word = word.capitalize()
+        out.append(word)
+        at = possessive.end() if possessive else end
+    out.append(text[at:])
+    return "".join(out)
 
 
 def _self_pronoun_sub(m):

@@ -10,6 +10,7 @@ now a facade that re-exports every name defined here
 from __future__ import annotations
 
 import re
+from language_runtime import JA_NAME_LEADERS, UNSPACED_SCRIPT, fold_words, script_of
 from story.character_schema import (
     character_name,
     character_name_from_text,
@@ -22,10 +23,13 @@ from world.spatial import contact_id, hiding_holders_of, room_of
 from agents.common_base import _dict_list, _ling, _quote_body
 from agents.common_names import (
     _countable_word_units,
+    _display_floor,
     _player_name_forms,
     _predicate_heads,
     _sentence_subjects,
     _strip_subject,
+    _unspaced_name_parts,
+    _word_count,
 )
 from agents.common_scrubs import _echo_fold
 
@@ -157,7 +161,10 @@ def _check_character_act_authority(resolved_event, declared_actions, name,
         without_quotes = _ling("_NARRATION_QUOTE_RE").sub(" ", sentence)
         tail = _strip_subject(without_quotes, subject)
         for head, clause in _predicate_heads(tail, 3):
-            if re.search(rf"\b(?:{verbs})\b", head, re.I) or (
+            # The script-safe boundary its siblings take (A2's deferral):
+            # `\b` never falls inside an unspaced clause, so in Japanese this
+            # verb check was inert. Identical for a head of Latin tokens.
+            if re.search(cue_boundary_pattern(verbs), head, re.I) or (
                     proximity and _ling("_PROXIMITY_RE").search(clause)):
                 warnings.append(
                     f"Character {kind} this beat (character-act authority): "
@@ -295,6 +302,45 @@ def director_may_voice(speaker, scene, presence_rec=None):
     return kind in _ling("_DIRECTOR_VOICEABLE_KINDS")
 
 
+#: The determiner of a script that does not space its words binds the noun it
+#: is written onto, across at most this many modifiers (その奇妙な硬貨) -- the
+#: `{0,2}` the English determiner pattern allows between "the" and its noun.
+_DETERMINER_MODIFIERS = 2
+#: Where a clause ends inside a line, for a determiner written onto its noun:
+#: whitespace and the sentence and clause marks of both script families.
+_CLAUSE_EDGE = re.compile(r"[\s、。，．！？!?,;:「」『』（）()…・]")
+#: The particles that END the phrase before them (`JA_NAME_LEADERS`, a closed
+#: class the engine owns), less the genitive の, which stays inside a noun
+#: phrase (彼の硬貨, 鉄の扉): a determiner across one of them modifies an
+#: earlier noun, as この町では硬貨 is "this town", never "these coins".
+_PHRASE_ENDING_PARTICLES = tuple(sorted(set(JA_NAME_LEADERS) - {"の"},
+                                        key=len, reverse=True))
+
+
+def _unspaced_definite(q, form, determiners):
+    """Whether `form` occurs in `q` under a determiner of a script that does
+    not space its words: the determiner written straight onto the noun, or
+    across at most `_DETERMINER_MODIFIERS` content words (`_word_count`) in
+    the same clause with no particle that ends a phrase between them."""
+    if not determiners:
+        return False
+    for match in re.finditer(name_boundary_pattern(form), q):
+        clause = _CLAUSE_EDGE.split(q[:match.start()])[-1]
+        for det in determiners:
+            at = clause.rfind(det)
+            if at < 0:
+                continue
+            between = clause[at + len(det):]
+            if between and _word_count(between) > _DETERMINER_MODIFIERS:
+                continue
+            if any(run.endswith(_PHRASE_ENDING_PARTICLES)
+                   for run in fold_words(between)
+                   if script_of(run[:1]) == "hiragana"):
+                continue
+            return True
+    return False
+
+
 def _check_presence_knowledge_channel(speaker, quote, sc, presence_rec,
                                       heard_text):
     """Scene-entity references in a Director-voiced presence line that the
@@ -346,6 +392,8 @@ def _check_presence_knowledge_channel(speaker, quote, sc, presence_rec,
         p_room = ((presence_rec or {}).get("sketch") or {}).get("station_room")
 
     warnings = []
+    dets = list(_ling("_DEFINITE_DETS"))
+    unspaced_dets = [d for d in dets if UNSPACED_SCRIPT.search(d)]
     for eid, edef in entities.items():
         if not isinstance(edef, dict):
             continue
@@ -353,10 +401,12 @@ def _check_presence_knowledge_channel(speaker, quote, sc, presence_rec,
         name_cf = name.casefold()
         if name_cf and name_cf == speaker_cf:
             continue  # a presence may always speak of itself
+        # Floored by the form's own script (`_display_floor`): three
+        # characters is a spaced-script floor, and 硬貨 is a whole noun at two.
         phrases = {p for p in
                    ({name} | {str(a).strip()
                               for a in (edef.get("aliases") or [])})
-                   if p and len(p) >= 3}
+                   if p and len(p) >= _display_floor(p, spaced=3)}
         if not phrases:
             continue
         if any(p.casefold() in heard_cf for p in phrases):
@@ -368,20 +418,32 @@ def _check_presence_knowledge_channel(speaker, quote, sc, presence_rec,
         if p_room and e_room == p_room and not concealed:
             continue  # placed here, in the open: a channel exists
         hit = None
+        # SCRIPT-AWARE, three ways (agents_common audit F3, 2026-11-01): a
+        # phrase is counted in words of its own script (`_word_count` --
+        # 奇妙な硬貨 is two words, `.split()` called it one), a Japanese noun
+        # is bounded by its script (`name_boundary_pattern`; `(?!\w)` refused
+        # every noun with its particle on), and a Japanese determiner is
+        # written onto its noun (`_unspaced_definite`). In a Japanese story
+        # this floor could not fire at all. A spaced-script form keeps its
+        # exact old patterns.
         for p in sorted(phrases, key=len, reverse=True):
             pcf = p.casefold()
-            if len(p.split()) >= 2:
-                if re.search(r"(?<!\w)%s(?!\w)" % re.escape(pcf), q):
+            unspaced = bool(UNSPACED_SCRIPT.search(pcf))
+            bound = (name_boundary_pattern(pcf) if unspaced
+                     else re.escape(pcf) + r"(?!\w)")
+            if _word_count(p) >= 2:
+                if re.search((r"" if unspaced else r"(?<!\w)") + bound, q):
                     hit = p
                     break
-            elif re.search(
-                    r"(?<!\w)(?:%s)\s+(?:[\w'-]+\s+){0,2}%s(?!\w)"
+            elif (dets and re.search(
+                    r"(?<!\w)(?:%s)\s+(?:[\w'-]+\s+){0,2}%s"
                     # Determiners that make a reference DEFINITE. "That explains the strange
                     # coins" refers to HER coins, a thing in the world; "local trade runs on
                     # copper and silver coins" is knowledge about coins in general. The definite
                     # article is what turns a generality into a claim of acquaintance, so it is
                     # what gates the single-word match below.
-                    % ("|".join(_ling("_DEFINITE_DETS")), re.escape(pcf)), q):
+                    % ("|".join(dets), bound), q)) \
+                    or _unspaced_definite(q, pcf, unspaced_dets):
                 hit = p
                 break
         if hit:
@@ -822,8 +884,17 @@ def _check_player_contact_authority(contact_ops, declared_actions, player_name,
             # spelling a person would -- t32's "run fingers through Mirelle's
             # hair" names her as surely as the full "Mirelle Sulmirath" does,
             # and requiring the whole string read that beat as reaching nobody.
+            #
+            # A name written without spaces has parts too -- its script runs
+            # (佐藤 | ヒナミ), floored by their script (`_display_floor`: 4 in
+            # a spaced script, as before; 2 in an unspaced one). `.split()`
+            # gave 佐藤ヒナミ one part, itself, so a declaration naming her
+            # ヒナミ reached nobody and the contact was reported and, after a
+            # retry, dropped (agents_common audit F14).
+            parts = name.split() + _unspaced_name_parts(name)
             if name and (name in text or any(
-                    len(part) >= 4 and part in text for part in name.split())):
+                    len(part) >= _display_floor(part) and part in text
+                    for part in parts)):
                 reached.add(name)
     out = []
     for index, op in enumerate(contact_ops):

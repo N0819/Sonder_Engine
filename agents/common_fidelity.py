@@ -10,8 +10,13 @@ now a facade that re-exports every name defined here
 from __future__ import annotations
 
 import re
-from story.character_schema import _UNSPACED_SCRIPT, cue_boundary_pattern
-from language_runtime import compositor_value
+from story.character_schema import (
+    _UNSPACED_SCRIPT,
+    cue_boundary_pattern,
+    name_boundary_pattern,
+)
+from language_runtime import UNSPACED_SCRIPT, compositor_value
+from language_runtime import referring as _referring
 
 from agents.common_base import (
     _contains_quote,
@@ -27,6 +32,7 @@ from agents.common_names import (
     _name_tokens,
     _pronoun_group,
     _pronoun_to_group,
+    _unspaced_name_parts,
     split_sentences,
 )
 from agents.common_narration import (
@@ -217,48 +223,24 @@ def _check_event_order(prose, event_order):
 
 
 def _check_action_direction(prose, event_order):
-    """F5: an ACT listed in event_order, rendered in the wrong direction or
-    dropped from the page entirely.
+    """CUT 2026-09-15: returns nothing, and is kept only because
+    `_check_narrator_fidelity` and a pinned test still name it.
 
-    An act is prose, not a quote, so unlike DIALOGUE FIDELITY there is no
-    verbatim string to search for, and demanding a vocabulary match would
-    force stilted wording ("the floor rising to meet him" is a correct
-    rendering of a descent). Two findings, at different confidence:
+    It compared the direction an act in `event_order` named (lowering,
+    raising) with the direction words in the narrator's prose, and reported
+    REVERSED and MISSING findings. Measured before it was cut: 19 stored
+    REVERSED findings over the corpus and every one false (it bound no
+    subject, read no negation and allowed no sequence -- "fox ears fold
+    downward" against "a tail lifts"), then 4 fires in 167 scratch turns,
+    the ones read all false ("You descend the ladder" against prose that
+    took the rungs "down through the hatch" and raised a lantern). The rule
+    lives on in `perception._inverted_motion_check`.
 
-    - REVERSED (warning only since 2026-09-06): the act names exactly one
-      direction and the prose names only the other. Judged without
-      interpretation. From play: the Director resolved one character carrying
-      another downward and the page rendered a lift.
-
-      IT WAS ENFORCEABLE AND BOUGHT REWRITES OF CORRECT PAGES. Measured over
-      the corpus: 19 stored findings, and every one false -- and stored means
-      SURVIVED a rewrite, because a finding the retry clears never reaches
-      the variant. The vocabularies are tight (below) and tightness was not
-      the problem; three things this comparison does not do are:
-        * BIND A SUBJECT. `fox ears fold downward` was contradicted by "a
-          tail lifts"; `lowers both arms` by "You lift your chin" -- another
-          body part, and another person.
-        * READ NEGATION. `lowering his mug` was contradicted by "Veronica's
-          pen doesn't lift".
-        * ALLOW A SEQUENCE. A beat may legitimately do both: `lifts her
-          mouth` was contradicted by "she descends" three words after the
-          prose said "Higher", and `lowers face` by "She lifts her face just
-          clear" earlier in the same paragraph.
-      And a direction word need not be motion at all: "cadence already fading
-      downward" is a voice, "toward my raised hands" a posture the falling
-      thing is falling TOWARD (chat 117 turn 91, the twentieth).
-      Fixing any of the three needs subject-bound parsing this codebase does
-      not do, so the finding stays visible and stops buying an edit.
-    - MISSING (warning only): the act names a direction and the prose names
-      neither. Legitimate prose can carry a descent with no directional verb
-      at all, so this stays visible in fidelity_warnings for review rather
-      than buying a rewrite it might not deserve.
+    Its pack keys, `agents.common._NARR_LOWERING` / `_NARR_RAISING`, are now
+    read by no engine module (agents_common audit F19, 2026-11-01).
     """
-    # CUT 2026-09-15: 4 fires in 167 scratch turns, the ones read all false
-    # ("You descend the ladder" flagged against prose that took the rungs
-    # "down through the hatch" and raised a lantern). See
-    # `perception._inverted_motion_check` for the rule. Returns nothing.
     return []
+
 
 def _actor_reference_patterns(display):
     """Compiled patterns that count as a prose reference to one actor.
@@ -842,6 +824,17 @@ def _check_attire_fidelity(prose, attire_facts):
     return warnings
 
 
+def _whole_on_the_page(form):
+    """A form as a whole word of the page: no word character on either side
+    for a form in a spaced script, exactly as this module always bounded one,
+    and the form's own script boundary (`name_boundary_pattern`) for a form
+    holding an unspaced script, whose particle is a word character."""
+    text = str(form or "")
+    if UNSPACED_SCRIPT.search(text):
+        return name_boundary_pattern(text)
+    return rf"(?<!\w){re.escape(text)}(?!\w)"
+
+
 def _check_narrator_fidelity(out, view, recent_prose=None, exclude_quotes=None,
                              cast_pronouns=None, player_name=None,
                              narration_person=None, player_aliases=None,
@@ -894,21 +887,32 @@ def _check_narrator_fidelity(out, view, recent_prose=None, exclude_quotes=None,
     # multi-word cast name is now nobody's unless it is this arm's. Each
     # part of a name counts as the name, which is the surname tolerance the
     # old arm had and the reason "Voss" answers for "Elyra Voss".
+    #
+    # AN ARTICLE IS NOT A PART OF THE NAME IT LEADS (agents_common audit
+    # F15): "The" was a part of "The Doctor", matched case-insensitively, so
+    # any page containing the word *the* had "mentioned" him. And every form
+    # is bounded by its own script (`_whole_on_the_page`): `(?<!\w)…(?!\w)`
+    # never matched a Japanese name with its particle on, so in Japanese the
+    # name was never in the view and this arm never ran (F14). A name written
+    # without spaces answers by its script runs as a spaced one by its words.
+    articles = _referring.articles()
     for name, pronouns in (cast_pronouns or {}).items():
         text = str(name or "").strip()
         if not text or text == player_name:
             continue
-        if not re.search(rf"(?<!\w){re.escape(text)}(?!\w)", view_text):
+        if not re.search(_whole_on_the_page(text), view_text):
             continue
-        parts = [w for w in text.split() if len(w) >= 3] or [text]
-        if any(re.search(rf"(?<!\w){re.escape(w)}(?!\w)", prose, re.I)
-               for w in parts):
+        parts = [w for w in text.split()
+                 if len(w) >= 3 and w.casefold() not in articles] \
+            + _unspaced_name_parts(text)
+        parts = parts or [text]
+        if any(re.search(_whole_on_the_page(w), prose, re.I) for w in parts):
             continue
         forms = [str(pronouns.get(k) or "").strip().lower()
                  for k in ("subject", "object", "possessive")
                  ] if isinstance(pronouns, dict) else []
-        if any(form and re.search(rf"(?<!\w){re.escape(form)}(?!\w)",
-                                  prose.lower()) for form in forms):
+        if any(form and re.search(_whole_on_the_page(form), prose.lower())
+               for form in forms):
             continue
         warnings.append(
             f"Proper noun from view missing in narrator prose: '{text}'")

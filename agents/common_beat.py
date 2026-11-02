@@ -454,7 +454,28 @@ def declared_goal(result):
     return str(active.get("goal") or "").strip()
 
 
-def widen_reactors_to_hearers(chat_id, cast_rows, interp, reactors):
+def _widening_reads(chat_id, scene=None, player_name=None):
+    """``(scene, player name)`` for a reactor widening: what the caller
+    already holds, else one read of each.
+
+    Each `widen_reactors_*` read the committed scene (an uncached SELECT and
+    a ~0.8 ms parse of a median 50 KB scene), the chat row and the persona
+    for itself, from thirteen call sites a beat -- the planner six, the
+    interaction loop seven -- though every caller already holds both
+    (agents_common audit, Efficiency 1: ~15-25 ms of reads a beat). A caller
+    that hands them in pays nothing here; one that does not reads exactly
+    as before."""
+    from story.character_schema import persona_name
+    if scene is None:
+        scene = get_scene(chat_id)
+    if player_name is None:
+        chat = q("SELECT * FROM chats WHERE id=?", (chat_id,), one=True)
+        player_name = persona_name(persona_of(dict(chat))) if chat else ""
+    return scene, player_name
+
+
+def widen_reactors_to_hearers(chat_id, cast_rows, interp, reactors, *,
+                              scene=None, player_name=None):
     """`reactors` plus every present cast body OUTSIDE the player's room
     that hears the player's line this beat (`hear_level` over
     `spatial_rel_between`, at the line's volume).
@@ -469,13 +490,10 @@ def widen_reactors_to_hearers(chat_id, cast_rows, interp, reactors):
     its foot in full, the Director's list was empty, and he stood there
     for the beat. Bodies in the player's own room stay the Director's call.
     """
-    from story.character_schema import persona_name
     from world.spatial import (hear_level, room_of, spatial_rel_between,
                                spoken_to)
     try:
-        scene = get_scene(chat_id)
-        chat = q("SELECT * FROM chats WHERE id=?", (chat_id,), one=True)
-        p_name = persona_name(persona_of(dict(chat))) if chat else ""
+        scene, p_name = _widening_reads(chat_id, scene, player_name)
     except Exception:
         return reactors
     if not p_name or not room_of(scene, p_name):
@@ -502,7 +520,8 @@ def widen_reactors_to_hearers(chat_id, cast_rows, interp, reactors):
     return widened
 
 
-def widen_reactors_to_enclosure(chat_id, cast_rows, reactors):
+def widen_reactors_to_enclosure(chat_id, cast_rows, reactors, *,
+                                scene=None, player_name=None):
     """`reactors` plus every present cast body the player is INSIDE, or that
     is inside the player.
 
@@ -518,12 +537,9 @@ def widen_reactors_to_enclosure(chat_id, cast_rows, reactors):
     `enclosure_joins_rooms` joins the pair for contact -- strictly the pair,
     never a third body standing in the holder's room.
     """
-    from story.character_schema import persona_name
     from world.spatial import enclosure_joins_rooms, room_of
     try:
-        scene = get_scene(chat_id)
-        chat = q("SELECT * FROM chats WHERE id=?", (chat_id,), one=True)
-        p_name = persona_name(persona_of(dict(chat))) if chat else ""
+        scene, p_name = _widening_reads(chat_id, scene, player_name)
     except Exception:
         return reactors
     here = room_of(scene, p_name) if p_name else None
@@ -582,7 +598,7 @@ def widen_reactors_to_rejoined(chat_id, cast_rows, reactors, turn_idx,
 
 
 def widen_reactors_to_engaged(chat_id, cast_rows, reactors, turn_idx,
-                              frame_id=None):
+                              frame_id=None, *, scene=None, player_name=None):
     """`reactors` plus every present cast body OUTSIDE the player's room
     that addressed the player on the previous beat: a conversation across
     rooms is still a conversation, and the body that just said "Coming
@@ -613,10 +629,7 @@ def widen_reactors_to_engaged(chat_id, cast_rows, reactors, turn_idx,
                 "AND s.key='director_resolve' LIMIT 1",
                 (chat_id, idx - 1, frame_id), one=True)
         resolve = json.loads(row["content"]) if row else None
-        scene = get_scene(chat_id)
-        chat = q("SELECT * FROM chats WHERE id=?", (chat_id,), one=True)
-        from story.character_schema import persona_name
-        p_name = persona_name(persona_of(dict(chat))) if chat else ""
+        scene, p_name = _widening_reads(chat_id, scene, player_name)
     except Exception:
         return reactors
     if not isinstance(resolve, dict) or not p_name:
@@ -714,7 +727,8 @@ def acted_upon_cast(scene, cast_rows, interp, player_name):
     return out
 
 
-def widen_reactors_to_acted_upon(chat_id, cast_rows, interp, reactors):
+def widen_reactors_to_acted_upon(chat_id, cast_rows, interp, reactors, *,
+                                 scene=None, player_name=None):
     """`reactors` plus every cast body an element of this beat's
     declaration is aimed at, where the beat reaches them
     (`acted_upon_cast`).
@@ -748,9 +762,7 @@ def widen_reactors_to_acted_upon(chat_id, cast_rows, interp, reactors):
     the spot.
     """
     try:
-        scene = get_scene(chat_id)
-        chat = q("SELECT * FROM chats WHERE id=?", (chat_id,), one=True)
-        p_name = persona_name(persona_of(dict(chat))) if chat else ""
+        scene, p_name = _widening_reads(chat_id, scene, player_name)
         aimed = acted_upon_cast(scene, cast_rows, interp, p_name)
     except Exception:
         return reactors
