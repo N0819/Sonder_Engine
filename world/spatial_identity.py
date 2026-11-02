@@ -228,19 +228,71 @@ def same_subject(scene: dict, a: str, b: str) -> bool:
         return False
     if left == right:
         return True
-    for name, other in ((a, right), (b, left)):
-        entity = _entity_named(scene, name)
-        if not entity:
+    # BOTH SIDES RESOLVE STRICTLY, as `room_of` and `canonical_subject_map`
+    # already do: AMBIGUITY RESOLVES TO NOTHING, and names beat aliases. Each
+    # side used to be resolved first-match and the OTHER compared against its
+    # labels, so an alias two beings share ("the guard" on Guard Aldo AND
+    # Guard Bren) named both of them -- `contact_sensation` told BOTH guards
+    # they felt a touch written to the shared alias (audit
+    # world_spatial_structure_light F5, 2026-11-01). Two spellings name one
+    # being exactly when each names exactly one entity, and it is the same
+    # record; a spelling no entity answers to matches only itself.
+    _a_id, a_entity = _unique_entity_keyed(scene, a)
+    if not a_entity:
+        return False
+    _b_id, b_entity = _unique_entity_keyed(scene, b)
+    return bool(b_entity) and b_entity is a_entity
+
+
+def holder_key(scene: dict, spelling) -> str:
+    """The entity KEY a holder spelling names, or the spelling as written.
+
+    A room's `parent_entity` is read by EXACT KEY in the structural readers --
+    the interior index (`spatial_transit._interior_rooms_of`), the dock
+    rewrite (`apply_transit_dock_edges`), the frames' vehicle-zone stamp --
+    and by identity in the permissive ones (`room_of`). A writer that spells
+    the holder by its display name, an alias or another case therefore
+    splits the two families: measured 2026-11-01 (audit world_spatial_truth
+    F1), `parent_entity: "Mirelle"` for an entity keyed `mirelle_01` left the
+    interior unindexed, its way in an authored `open` where the key spelling
+    gets `membrane`, and a body inside a body visible from the room outside.
+
+    Canonicalised against the HOLDER, once, at ingest -- the class of the
+    `inside`/`interior` synonym (a structural reader and a permissive reader
+    must not hold two spellings of one fact). An exact key is kept; a name,
+    alias or case variant that names exactly one entity becomes its key; an
+    ambiguous or unknown spelling is left as written, because folding two
+    beings into one is worse than leaving one spelled twice."""
+    text = str(spelling or "").strip()
+    if not text:
+        return text
+    entities = (scene or {}).get("entities")
+    if not isinstance(entities, dict) or text in entities:
+        return text
+    eid, entity = _unique_entity_keyed(scene, text)
+    return str(eid) if eid is not None and entity else text
+
+
+def normalize_room_parents(scene: dict) -> list:
+    """Fold every room's `parent_entity` onto its holder's entity key
+    (`holder_key`). Returns `[(room id, written, key)]` for what it folded;
+    mutates. Run by the merge before the interior index is derived, so a
+    stored scene heals on its next merge."""
+    rooms = (scene or {}).get("rooms")
+    if not isinstance(rooms, dict):
+        return []
+    folded = []
+    for rid, room in rooms.items():
+        if not isinstance(room, dict):
             continue
-        labels = {str(label).strip().casefold()
-                  for label in (entity.get("name"),
-                                *(entity.get("aliases") or [])) if label}
-        for eid, record in (scene.get("entities") or {}).items():
-            if record is entity:
-                labels.add(str(eid).strip().casefold())
-        if other in labels:
-            return True
-    return False
+        written = room.get("parent_entity")
+        if not isinstance(written, str) or not written.strip():
+            continue
+        key = holder_key(scene, written)
+        if key != written:
+            room["parent_entity"] = key
+            folded.append((str(rid), written, key))
+    return folded
 
 
 def _entities_named(scene: dict, name: str):
@@ -340,7 +392,7 @@ def _body_kinds():
     return _ANIMATE_ENTITY_KINDS
 
 
-def scene_names_body(scene: dict, name: str) -> bool:
+def scene_names_body(scene: dict, name: str, *, ledgers: bool = True) -> bool:
     """Is `name` a BODY of this scene, or a thing that merely stands in it?
 
     THE ONE BODY PREDICATE (review 2026-09-07 A56 and its rework). Four
@@ -403,7 +455,11 @@ def scene_names_body(scene: dict, name: str) -> bool:
     if isinstance(ent, dict):
         keys.append(ent.get("name"))
         keys.extend(ent.get("aliases") or [])
-    if _keyed_body_ledger(scene, keys):
+    # `ledgers=False` asks tiers 2 and 3 alone, for a reader memoised inside
+    # a `scene_read_pass` (`world/scene_memo.py`), whose read set
+    # (`SCENE_READS`) does not stamp the body ledgers: a field build that read
+    # them would be served stale after a write the pass cannot see.
+    if ledgers and _keyed_body_ledger(scene, keys):
         return True
     if eid:
         kind = str((ent or {}).get("kind") or "").strip().casefold() \
@@ -794,7 +850,17 @@ def is_derived_room_name(room_id, name) -> bool:
 
 
 def normalize_room_id(name: str) -> str:
-    return re.sub(r"[^a-z0-9]+", "_", (name or "").lower()).strip("_")
+    """A room spelling's comparison slug: `language_runtime.fold_key` with
+    `_` between words -- the SAME string the ASCII class gave for ASCII input
+    (every id already minted keeps matching its own spelling), and the
+    letters of every other script kept. The ASCII class folded "台所" to "",
+    so a Japanese room could not be found by its name, a Japanese new place
+    was never reserved and two Japanese names keyed one dict slot; "Café
+    Rouge" lost its "é" (audit world_spatial_structure_light F2,
+    2026-11-01). An empty answer still means "no letter at all", and a
+    caller keying a dict by this must refuse it."""
+    from language_runtime import fold_key
+    return fold_key(name or "", "_")
 
 
 def room_spellings(room_id, room_def=None) -> tuple:
@@ -898,26 +964,46 @@ def room_name_words(text) -> tuple:
     ("copes", "boatyard"): an apostrophe is dropped before the split, and a
     lone "s" the split leaves behind is joined to the word before it.
     """
-    raw = re.sub(r"[\u2019']", "", str(text or "").casefold())
+    from language_runtime import fold_words, script_of
+    raw = re.sub(r"[\u2019']", "", str(text or ""))
     words = []
-    for word in re.split(r"[^a-z0-9]+", raw):
-        if not word:
-            continue
+    # `fold_words`: the ASCII token class for ASCII input, and for a name in
+    # an unspaced script the runs it is written in (F2, 2026-11-01).
+    for word in fold_words(raw):
         if word == "s" and words:
             words[-1] += "s"
             continue
         if word in _ROOM_NAME_FILLER:
+            continue
+        # The function words of an unspaced script are its hiragana runs --
+        # the particle in 裏庭の台所 -- the closed class `_ROOM_NAME_FILLER`
+        # is for English.
+        if script_of(word[0]) == "hiragana":
             continue
         words.append(word)
     return tuple(words)
 
 
 def room_words_answer(want, held) -> bool:
-    """Every wanted word is a word of the held name or the tail of one."""
+    """Every wanted word is a word of the held name or the tail of one --
+    and at least one of them is a WHOLE word of it.
+
+    A tail is evidence only beside a whole word. "Cope's yard" names "Cope's
+    Boatyard" (the case the tail rule was written for: "copes" is a word of
+    the name, "yard" the tail of "boatyard"); "the den" does not name the
+    Walled Garden, nor "the pit" the Cockpit, because nothing anchors the
+    tail to that room. Measured (audit world_spatial_structure_light F6,
+    2026-11-01): a destination naming an unbuilt place resolved to whichever
+    room's name happened to end in its letters, so the movement compiler
+    raised no planning need and "she retreats to the den" walked her into the
+    garden while no den was ever built."""
     if not want or not held:
         return False
+    whole = False
     for word in want:
-        if not any(h == word or (len(word) >= 3 and h.endswith(word))
-                   for h in held):
+        if word in held:
+            whole = True
+            continue
+        if not any(len(word) >= 3 and h.endswith(word) for h in held):
             return False
-    return True
+    return whole

@@ -47,7 +47,14 @@ PLAYER = "The Stranger"
 
 def _trail(following=None, player_room="trail_a", mara_room="trail_a", extra=None):
     """Trail A opens on Trail B and the Side Path; the Far Glade is beyond
-    Trail B, out of sight and earshot of Trail A."""
+    Trail B, out of sight and earshot of Trail A.
+
+    The glade's way is FAR since 2026-11-01. The far field now answers for a
+    listener whose room has no grid (audit world_spatial_sound F1: the room
+    graph's stamps need none), and it prices a normal voice two NEAR open
+    trail segments off as carrying (25 dB of loss against a 30 dB floor) --
+    so "out of earshot" has to be a distance the world states, not the edge
+    model's old blanket `separated` row."""
     scene = {
         "location": "Open Trail", "time": "day",
         "rooms": {
@@ -57,13 +64,13 @@ def _trail(following=None, player_room="trail_a", mara_room="trail_a", extra=Non
             ]},
             "trail_b": {"name": "Trail B", "adjacent": [
                 {"to": "trail_a", "barrier": "open", "distance": "near"},
-                {"to": "far_glade", "barrier": "open", "distance": "near"},
+                {"to": "far_glade", "barrier": "open", "distance": "far"},
             ]},
             "side_path": {"name": "Side Path", "adjacent": [
                 {"to": "trail_a", "barrier": "open", "distance": "near"},
             ]},
             "far_glade": {"name": "Far Glade", "adjacent": [
-                {"to": "trail_b", "barrier": "open", "distance": "near"},
+                {"to": "trail_b", "barrier": "open", "distance": "far"},
             ]},
         },
         "positions": {PLAYER: player_room, "Mara": mara_room, **(extra or {})},

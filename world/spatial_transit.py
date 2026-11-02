@@ -976,6 +976,18 @@ def medium_rooms(scene: dict) -> set:
             continue
         route = str(transit.get("route_room") or "").strip()
         route = route if route in rooms else scene_room_id(scene, route)
+        # THE ROOM IT SET OFF FROM IS NOT A MEDIUM BECAUSE IT FLOATS THERE.
+        # The owner's D2 (2026-10-09) keeps a journey that names no other
+        # space in the room it left, by writing that room as its
+        # `route_room` -- and read here as "the space a vessel moves
+        # through", it made the room itself a medium: a TARDIS written
+        # `in_transit, hatch: closed` on a beach made the beach water, and
+        # the skip's walk graph lost every way onto and off it (audit
+        # world_spatial_movement_sight F5, 2026-11-01; 18 stored TARDIS
+        # writes have the shape, UNBUILT_WORLD 1.194). Such a room is a
+        # medium only by what it IS -- its own `floor` above.
+        if route and _same_room(route, transit.get("departed_from")):
+            continue
         if route and route in rooms:
             out.add(str(route))
     return out

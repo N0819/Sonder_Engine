@@ -406,12 +406,15 @@ def test_a_name_in_any_script_is_compared_by_its_own_letters():
     again = deal_place_name(pattern, scope="minato", key="nagaya_2",
                             lanes=[KANA], taken=["北長屋", "nagaya", dealt])
     assert again and again != dealt
-    # The frontier: a later stretch is named and keeps its key.
+    # The frontier: a later stretch is named and keeps its key. Since
+    # 2026-11-01 a kana name folds to ITSELF (`normalize_room_id` is
+    # `fold_key`, audit world_spatial_structure_light F2), so the stub is
+    # keyed by its own name where it used to fall back to "planned_room".
     first, spec = mint_frontier(MINATO, "hatoba", "長屋", "1:minato", ["hatoba"])
-    assert (first, spec["name"]) == ("planned_room", "長屋")
+    assert (first, spec["name"]) == ("長屋", "長屋")
     uid, spec = mint_frontier(MINATO, first, "長屋", "1:minato",
                               ["hatoba", first], lanes=[KANA])
-    assert uid == "planned_room_2"
+    assert uid == "長屋_2"
     assert pattern_filler(pattern, spec["name"])
     # The closure.
     grammar = [{"kind": "長屋", "names": [pattern, "{name} Nagaya"],
@@ -509,14 +512,16 @@ def test_the_frontier_holds_a_dealt_word_apart_from_the_towns_people(
 def test_a_stretch_named_in_kana_keeps_its_room_key(chat, temp_db):
     """Review H1, end to end: the registry gained a row keyed '' and the
     holder recorded its axis as spent into it."""
+    # Keyed by the kana name's own letters since 2026-11-01 (see above);
+    # "planned_room" was the fallback for the ASCII fold's empty answer.
     scene, first = _walk_out(temp_db, chat, MINATO, "hatoba", "長屋", KANA)
-    assert first == "planned_room"
+    assert first == "長屋"
     _scene, mutations = prepare_frontier_expansion(chat, scene)
     uids = [m["room_uid"] for m in mutations]
-    assert "" not in uids and "planned_room_2" in uids
-    stretch = next(m for m in mutations if m["room_uid"] == "planned_room_2")
+    assert "" not in uids and "長屋_2" in uids
+    stretch = next(m for m in mutations if m["room_uid"] == "長屋_2")
     assert pattern_filler("{name}長屋", stretch["name"])
     holder = next(m for m in mutations if m["room_uid"] == first)
     assert holder["payload"]["planned"]["frontier_standing"] == {
-        "長屋": "planned_room_2"}
+        "長屋": "長屋_2"}
     assert "" not in _scene["rooms"]

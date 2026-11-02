@@ -1039,7 +1039,44 @@ def normalize_scene_containment(scene: dict, carriers=None) -> dict:
             record = _ci_get(scene["contained"], current)
             current = record.get("in") if isinstance(record, dict) else None
 
+    # ...AND THE CYCLE THAT RUNS THROUGH THE PLACE FORM. A thing carried by a
+    # body standing inside the thing's OWN interior is inside itself: the
+    # ledger walk above cannot see it (the second half of the loop is a
+    # room's `parent_entity`, not a record), and `derive_contained_positions`
+    # then puts the thing where its holder is -- in its own interior -- AFTER
+    # `evict_self_contained_entities` has run. Measured (audit
+    # world_spatial_truth F6, 2026-11-01, the chat 151 shape): with the police
+    # box recorded `held` by the Doctor, a Doctor who stepped through its
+    # doors left `{tardis: console, Doctor: console}` on every merge, while the
+    # dock edge said `console -> beach`. The record is dropped: a body that
+    # walked into the thing is no longer carrying it, and the thing stays
+    # where it stood (or its eviction puts it outside its own door).
+    for subject in list(scene["contained"]):
+        record = scene["contained"].get(subject)
+        if isinstance(record, dict) and _holder_inside_subject(
+                scene, subject, record.get("in")):
+            scene["contained"].pop(subject, None)
+
     return scene
+
+
+def _holder_inside_subject(scene: dict, subject, holder) -> bool:
+    """Does `holder` stand inside `subject`'s own interior -- directly, or in
+    an interior of something that is itself inside it? Walked outward from
+    the holder's room through each room's `parent_entity`, by identity
+    (`same_subject`), cycle-guarded."""
+    rooms = scene.get("rooms") if isinstance(scene.get("rooms"), dict) else {}
+    room = room_of(scene, str(holder or "")) if holder else None
+    seen = set()
+    while room and room in rooms and room not in seen:
+        seen.add(room)
+        parent = str((rooms.get(room) or {}).get("parent_entity") or "").strip()
+        if not parent:
+            return False
+        if same_subject(scene, parent, str(subject)):
+            return True
+        room = room_of(scene, parent)
+    return False
 
 
 def derive_worn_containment(scene: dict) -> dict:
@@ -1201,7 +1238,8 @@ def derive_held_by_containment(scene: dict) -> list:
 
 
 def _label_tokens(text):
-    return set(re.findall(r"[a-z0-9]+", str(text or "").casefold()))
+    from language_runtime import fold_words
+    return set(fold_words(text))
 
 
 def carrier_lookup(carriers, label):
@@ -1332,11 +1370,46 @@ def derive_contained_positions(scene: dict, carriers=None) -> dict:
             if room is not None:
                 break
         if room is None:
+            # WHAT RIDES A VESSEL THAT HAS GONE INTO NO ROOM IS IN NO ROOM.
+            # Under way a vessel stands in its route or in no room (the owner's
+            # ruling of 2026-09-25), and `settle_departures` takes it out of
+            # `positions` -- while a body or thing CONTAINED in it kept the
+            # room it was last derived into, in view of everyone on the quay
+            # (audit world_spatial_movement_sight F6, 2026-11-01: a skiff left
+            # for the harbour with no route, Ada stayed `positions: quay`,
+            # containment intact). Its position goes with the vessel's; any
+            # other unplaced holder keeps the old answer -- stale, never wrong.
+            chain = carrier_chain(scene, subject)
+            if chain and _departed_into_no_room(scene, chain[-1]):
+                _positions_drop(scene, subject)
             continue
         # Write under the key already in use, so this never mints a second
         # spelling of a name that positions already carries.
         _positions_write(positions, subject, room)
     return scene
+
+
+def _departed_into_no_room(scene: dict, holder) -> bool:
+    """Is `holder` a vessel UNDER WAY that stands in no room -- the one
+    unplaced holder whose contents are known to have left with it?"""
+    from world.spatial_transit import _UNDER_WAY_PHASES, _transit_state
+    _eid, entity = _unique_entity_keyed(scene, str(holder or ""))
+    transit = _transit_state(entity) if entity else None
+    if not transit or str(transit.get("phase") or "").strip().casefold() \
+            not in _UNDER_WAY_PHASES:
+        return False
+    return room_of(scene, str(holder)) is None
+
+
+def _positions_drop(scene: dict, subject) -> None:
+    """Take `subject` out of `positions` and `stations` under every spelling
+    those tables file it by."""
+    folded = str(subject or "").strip().casefold()
+    for table_name in ("positions", "stations"):
+        table = scene.get(table_name)
+        if isinstance(table, dict):
+            for key in [k for k in table if str(k).strip().casefold() == folded]:
+                table.pop(key, None)
 
 
 def _positions_write(positions: dict, subject: str, room: str) -> None:
@@ -1631,14 +1704,30 @@ def mint_transferred_objects(scene: dict, inventory_ops, shedding=()) -> list:
     attire = scene.get("attire") if isinstance(scene.get("attire"), dict) else {}
     bodies = {str(k).strip().casefold() for k in positions}
     bodies |= {str(k).strip().casefold() for k in attire}
-    body_slugs = {re.sub(r"[^a-z0-9]+", "_", b).strip("_") for b in bodies}
+    # THE ATTIRE SEAM'S KEY, SPELLED AS IT SPELLS IT. `persist.commit_attire.
+    # shed_garment_key` folds garment and owner with `fold_key`, which keeps
+    # the letters of every script (the ASCII class folded 上着 and every kana
+    # owner to "", review 2026-11-01 persist_scene_entities F2); an owner with
+    # no letter at all keys by its own string. The ASCII spelling is reserved
+    # beside it, because the op key this is compared against below is still
+    # the ASCII slug, and for a name outside ASCII the two differ: reserving
+    # both yields every spelling either side may produce. Identical for
+    # ASCII names.
+    from language_runtime import fold_key
+    body_slugs = set()
+    for b in bodies:
+        body_slugs.add(fold_key(b, "_") or b)
+        body_slugs.add(re.sub(r"[^a-z0-9]+", "_", b).strip("_"))
+    body_slugs.discard("")
     reserved = set()
     for garment in (shedding or ()):
-        slug = re.sub(r"[^a-z0-9]+", "_", str(garment).casefold()).strip("_")
-        if not slug:
-            continue
-        reserved.add(slug)
-        reserved |= {"%s_%s" % (slug, b) for b in body_slugs if b}
+        slugs = {fold_key(garment, "_"),
+                 re.sub(r"[^a-z0-9]+", "_", str(garment).casefold()).strip("_")}
+        slugs.discard("")
+        for slug in slugs:
+            reserved.add(slug)
+            reserved |= {("%s_%s" % (slug, b))[:60] for b in body_slugs}
+            reserved |= {"%s_%s" % (slug, b) for b in body_slugs}
     minted = []
     for op in inventory_ops:
         if not isinstance(op, dict):

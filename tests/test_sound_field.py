@@ -132,8 +132,13 @@ def test_a_scene_without_geometry_stamps_nothing_and_composes_byte_identically()
     sc = scene(rooms, {"S": "hall", "L": "hall"}, {})
     assert sound_field(sc, "L") is None
     rel = spatial_rel_between(sc, "L", "S")
+    # THE PIN MOVED 2026-11-01 (audit world_spatial_sound F1): `air` is a
+    # ROOM-GRAPH fact and is stamped with no grid -- one room, neighbours, or
+    # rooms any chain of edges joins. Withheld for a gridless listener, the
+    # composer's addressed rescue delivered a named line through a wall in
+    # 492 of 693 such live pairs. Nothing cell-dependent is stamped here.
     assert rel == {"same_room": True, "barrier": "open", "distance": "same",
-                   "light": "lit"}
+                   "light": "lit", "air": True}
     assert levels(sc, "S", "L") == {v: "full" for v in VOLUMES}
     # And across a room boundary without geometry: the edge rules verbatim.
     rooms = two_rooms("closed_door")

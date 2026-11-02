@@ -146,6 +146,17 @@ def travel_bearing(
     if back is not None:
         bearing = normalize_bearing(back.get("dir"))
         if bearing:
+            # A STAIR IS ONE SHAFT (`normalize_scene_bearings`): its bearing
+            # is the wall its own end sits on, per floor, and a floor that
+            # names none takes the other's -- never its opposite. Reversed
+            # here, a stair declared from one floor only faced a climber the
+            # opposite way from the same stair declared from both, and every
+            # left/right in the next view was mirrored by an accident of which
+            # side wrote the edge (audit world_spatial_movement_sight F11,
+            # 2026-11-01). A doorway is the same opening seen from the other
+            # wall, and is still reversed.
+            if back.get("vertical") or (forward or {}).get("vertical"):
+                return bearing
             return opposite_bearing(bearing)
     return None
 

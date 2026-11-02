@@ -2385,7 +2385,13 @@ class SoundField:
         if room_id in self._siblings:
             return self._siblings[room_id]
         field = None
-        if room_has_geometry(self.scene, room_id):
+        # THE SAME GATE `sound_field` USES (`_room_grid_exists`: a size tier,
+        # an extent or any anchors), not the FOV layer's furniture opt-in.
+        # 479 of the owner's 1,093 live rooms have a field by the one and
+        # none by the other, so a speaker standing in one was never raised
+        # over the din where THEY stand -- no `speaker_din_db`, no
+        # `speaker_masking_db` (audit world_spatial_sound F5, 2026-11-01).
+        if _room_grid_exists(self.scene, room_id):
             grid = acoustic_grid(self.scene, room_id)
             if grid is not None:
                 field = SoundField(self.scene, room_id, grid,
@@ -3440,34 +3446,47 @@ def stamp_sound_relation(scene: dict, rel: dict, observer: str, target: str,
     index); absent, a field is derived from the scene alone."""
     if any(rel.get(flag) for flag in _CONDUCTED):
         return rel
-    if sound is None:
-        sound = sound_field(scene, observer, room=observer_room)
-    if sound is None or sound.locate(observer, observer_room) is None:
-        # AN UNBUILT FRONTIER STUB'S JOIN IS PRICED AS THE WAY IT IS, laid
-        # out or not (`spatial_barriers.frontier_joins`). The room graph's
-        # loss is a room-level answer, and a space held open past the map's
-        # edge is never laid out -- so a listener standing in one, or beyond
-        # one, heard the room it hangs off through the edge model's opening,
-        # in full. The relation is new, so stamping it keeps every scene
-        # without a frontier join byte-identical.
-        if rel.get("frontier_join"):
-            _stamp_far_path(scene, rel, observer_room or room_of(scene, observer),
-                            target_room or room_of(scene, target))
-        return rel
+    # THE ROOM GRAPH'S ANSWERS NEED NO GRID, so they are stamped before the
+    # field gate below: `air` (the two rooms are one, neighbours, or joined
+    # by any chain of edges) and, rooms away, the far field's loss, muffle
+    # and the listening room's quiet floor -- every one of them read off
+    # `far_path`, `rooms_adjacent`, `_rooms_joined` and `quiet_floor`, none
+    # off a cell. Only the cell-dependent stamps (the open air's and the
+    # doorway's legs, paces, din, masking, facing) wait on a field.
+    #
+    # Measured (audit world_spatial_sound F1, 2026-11-01): these used to
+    # return with the gate, and a listener whose room has no grid -- 440 of
+    # the owner's 1,093 live rooms -- got no `air`, so the composer's
+    # addressed rescue (`line_hear_level`) delivered a named line the table
+    # refuses through a WALL as "a transmission by device" in 492 of 693
+    # such joined pairs, and rooms-away pairs kept the edge model's
+    # `separated` row instead of the far field.
     from world.spatial_senses import rooms_adjacent
     o_room = str(observer_room or room_of(scene, observer) or "")
     t_room = str(target_room or room_of(scene, target) or "")
+    far = None
+    if o_room and t_room:
+        far = far_path(scene, o_room, t_room)
+        if far is not None:
+            rel["air"] = True
+            rel["far_loss_db"] = far["loss_db"]
+            rel["far_muffled"] = far["muffled"]
+            rel["floor_db"] = db_of_power(quiet_floor(scene, o_room))
+        elif o_room == t_room or rooms_adjacent(scene, o_room, t_room) \
+                or _rooms_joined(scene, o_room, t_room):
+            rel["air"] = True
+    # (AN UNBUILT FRONTIER STUB'S JOIN IS PRICED AS THE WAY IT IS by the
+    # stamp above, laid out or not -- `spatial_barriers.frontier_joins`: a
+    # space held open past the map's edge is never laid out, and a listener
+    # standing in one, or beyond one, used to hear the room it hangs off
+    # through the edge model's opening, in full. That case had its own
+    # gridless branch here; the far stamp now runs for every gridless pair.)
     if not o_room or not t_room:
         return rel
-    far = far_path(scene, o_room, t_room)
-    if far is not None:
-        rel["air"] = True
-        rel["far_loss_db"] = far["loss_db"]
-        rel["far_muffled"] = far["muffled"]
-        rel["floor_db"] = db_of_power(quiet_floor(scene, o_room))
-    elif o_room == t_room or rooms_adjacent(scene, o_room, t_room) \
-            or _rooms_joined(scene, o_room, t_room):
-        rel["air"] = True
+    if sound is None:
+        sound = sound_field(scene, observer, room=observer_room)
+    if sound is None or sound.locate(observer, observer_room) is None:
+        return rel
     if o_room == t_room or _open_between(scene, rel, o_room, t_room):
         loss = open_air_loss_db(scene, sound, observer, target, o_room,
                                 speaker_room=t_room)
@@ -4767,6 +4786,22 @@ def room_sound_flood(scene: dict, source_room, source_db: float, *,
     strict improvement of more than `_DB_EPS`, which is what makes it
     terminate.
     """
+    # ONCE PER (source room, level, kind) PER READ PASS (`scene_memo`): the
+    # flood depends on the source alone, and `far_path` ran it per relation --
+    # 72 floods for 2 distinct source rooms in one 72-relation sweep on chat
+    # 167, ~18% of the sweep -- and `distant_sounds` per (listener x source)
+    # (audit world_spatial_sound E1, 2026-11-01). Every reader only `.get`s
+    # the answer, so it is shared by reference. Outside a pass it is computed
+    # each time, exactly as before.
+    from world.scene_memo import scene_memo
+    return scene_memo(
+        scene, ("room_sound_flood", str(source_room or ""), source_db, bool(voice)),
+        lambda: _room_sound_flood(scene, source_room, source_db, voice=voice))
+
+
+def _room_sound_flood(scene: dict, source_room, source_db: float, *,
+                      voice: bool = False) -> dict:
+    """`room_sound_flood`'s derivation, uncached."""
     source_room = str(source_room or "")
     rooms = (scene or {}).get("rooms") or {}
     if not source_room or source_room not in rooms:

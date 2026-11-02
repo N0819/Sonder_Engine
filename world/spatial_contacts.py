@@ -180,7 +180,14 @@ def _part_identity(part: str) -> tuple:
     fold into the singular kind ('hands' is both of them, which supersedes
     either), and a sub-part keeps its own kind.
     """
-    text = re.sub(r"[^a-z0-9]+", " ", str(part or "").casefold()).strip()
+    # IN EVERY SCRIPT (`language_runtime.fold_key`, one space between words):
+    # the ASCII class gave every Japanese part the empty identity -- 口 was
+    # no region, a Japanese release was discarded, a re-asserted 手 never
+    # moved, and two contacts between one pair shared one `contact_id`
+    # (audit world_spatial_movement_sight F2, 2026-11-01). Identical for
+    # ASCII input.
+    from language_runtime import fold_key
+    text = fold_key(part or "", " ")
     if not text:
         return "", ""
     words = text.split()
@@ -1393,6 +1400,21 @@ def _hold_the_containment_keeps(scene, contact) -> bool:
     return False
 
 
+def _a_party(scene, who, contact) -> bool:
+    """Is `who` -- in any spelling the scene knows -- one of this contact's
+    two bodies?"""
+    return same_subject(scene, who, contact.get("actor", "")) \
+        or same_subject(scene, who, contact.get("target", ""))
+
+
+def _the_pair(scene, a, b, contact) -> bool:
+    """Do `a` and `b` name this contact's two bodies, in either order and any
+    spelling?"""
+    left, right = contact.get("actor", ""), contact.get("target", "")
+    return (same_subject(scene, a, left) and same_subject(scene, b, right)) \
+        or (same_subject(scene, a, right) and same_subject(scene, b, left))
+
+
 def apply_contact_ops(scene: dict, ops, *, _age=True, report=None) -> dict:
     """Apply state_diff.contact_ops to scene.contacts.
 
@@ -1514,34 +1536,42 @@ def apply_contact_ops(scene: dict, ops, *, _age=True, report=None) -> dict:
             continue
         op = str(raw.get("op") or "add").strip().casefold()
 
+        # A RELEASE NAMES ITS BODIES BY WHATEVER SPELLING THE WRITER REACHED
+        # FOR. The ledger's endpoints are canonicalised (the display name,
+        # `normalize_scene_contacts`) and the encoder writes entity keys, so
+        # a raw casefold comparison missed every release written as
+        # `char_emory_vane` against a hold standing under "Emory Vane" -- the
+        # hold stood, unreported, and was delivered to both minds as a live
+        # touch (audit world_spatial_movement_sight F3, 2026-11-01). Adds
+        # already worked either way, because hygiene canonicalises AFTER
+        # apply; the releases compare by identity (`same_subject`) instead.
         if op == "clear":
-            who = _contact_text(raw.get("actor"), 120).casefold()
+            who = _contact_text(raw.get("actor"), 120)
             if not who:
                 current = {}
                 cross_sources = {}
                 continue
             current = {
                 key: c for key, c in current.items()
-                if who not in (c["actor"].casefold(), c["target"].casefold())
+                if not _a_party(scene, who, c)
             }
             cross_sources = {
                 key: c for key, c in cross_sources.items()
-                if who not in (c["actor"].casefold(), c["target"].casefold())
+                if not _a_party(scene, who, c)
             }
             continue
 
         if op == "remove":
-            actor = _contact_text(raw.get("actor"), 120).casefold()
-            target = _contact_text(raw.get("target"), 120).casefold()
+            actor = _contact_text(raw.get("actor"), 120)
+            target = _contact_text(raw.get("target"), 120)
             actor_part = _contact_text(raw.get("actor_part")).casefold()
             target_part = _contact_text(raw.get("target_part")).casefold()
             if not actor or not target:
                 continue
             def _survives_removal(c):
-                pair = {c["actor"].casefold(), c["target"].casefold()}
                 # Contact is physically symmetric, so a removal naming the two
                 # in either order ends it.
-                if pair != {actor, target}:
+                if not _the_pair(scene, actor, target, c):
                     return True
                 if actor_part and c["actor_part"].casefold() != actor_part:
                     return True
@@ -1556,8 +1586,8 @@ def apply_contact_ops(scene: dict, ops, *, _age=True, report=None) -> dict:
             continue
 
         if op == "cross":
-            actor = _contact_text(raw.get("actor"), 120).casefold()
-            target = _contact_text(raw.get("target"), 120).casefold()
+            actor = _contact_text(raw.get("actor"), 120)
+            target = _contact_text(raw.get("target"), 120)
             actor_part = _contact_text(raw.get("actor_part")).casefold()
             crossed = _contact_text(raw.get("crossed_target_part")).casefold()
             downstream = _contact_text(raw.get("target_interior"))
@@ -1566,8 +1596,8 @@ def apply_contact_ops(scene: dict, ops, *, _age=True, report=None) -> dict:
             for old_key, standing in available.items():
                 if standing.get("relation") != "interior":
                     continue
-                if standing.get("actor", "").casefold() != actor \
-                        or standing.get("target", "").casefold() != target:
+                if not (same_subject(scene, standing.get("actor", ""), actor)
+                        and same_subject(scene, standing.get("target", ""), target)):
                     continue
                 if actor_part and standing.get("actor_part", "").casefold() \
                         != actor_part:
@@ -1903,8 +1933,8 @@ def _normalize_contact_motion(value) -> str:
 
 def _contact_motion_from_text(manner, detail="") -> str:
     """Backward-compatible kinematics for contacts saved before `motion`."""
-    words = set(re.findall(
-        r"[a-z]+", f"{str(manner or '').casefold()} {str(detail or '').casefold()}"))
+    from language_runtime import fold_words
+    words = set(fold_words(f"{manner or ''} {detail or ''}"))
     if words & (CONTACT_MOVING_MANNERS | _INTERIOR_MOVING_MANNERS):
         return "moving"
     return "settled"

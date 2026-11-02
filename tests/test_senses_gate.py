@@ -21,7 +21,10 @@ from story.character_schema import default_character_data
 from core.pipeline_context import ChatData, PipelineContext, TurnData
 from world.spatial import (
     HEARING_LEVELS,
-    SCENT_LEVELS,
+    # The scent GRADE ladder. `SCENT_LEVELS` on the facade is the scent
+    # field's strength ladder; the two shared one name until 2026-11-01 and
+    # this test iterated the wrong one (audit world_spatial_structure_light F13).
+    SCENT_GRADE_LEVELS,
     SIGHT_LEVELS,
     sense_acuity_offset,
     sense_adjusted,
@@ -41,7 +44,7 @@ def test_ordinary_and_unlisted_are_byte_identical():
     default = [_sense("vision"), _sense("hearing")]
     for channel, ladder in (("hearing", HEARING_LEVELS),
                             ("sight", SIGHT_LEVELS),
-                            ("scent", SCENT_LEVELS)):
+                            ("scent", SCENT_GRADE_LEVELS)):
         for level in ladder:
             assert sense_adjusted(level, channel, None) == level
             assert sense_adjusted(level, channel, default) == level

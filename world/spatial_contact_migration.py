@@ -4,9 +4,10 @@ contact records."""
 
 import re
 
+from language_runtime import fold_words
 from story.character_schema import fold_identity_key
 from world.spatial_contacts import (_MAX_CONTACT_DETAIL, _MAX_CONTACT_PART,
-                              _part_identity, _same_appendage,
+                              _clean_contact, _part_identity, _same_appendage,
                               apply_contact_ops, contacts_of)
 from world.spatial_identity import _ci_get
 
@@ -51,8 +52,51 @@ _CONTACT_KEY_MANNERS = (
     ("embrac", "hold"), ("hug", "hold"), ("cling", "hold"),
     ("squish", "press"), ("press", "press"), ("flush", "press"),
     ("lean", "lean"), ("rest", "rest"), ("touch", "touch"),
-    ("contact", "touch"), ("against", "press"), ("_on", "touch"),
+    ("contact", "touch"), ("against", "press"),
 )
+# `_on` WAS HERE, and it is a preposition, not a contact verb: the module's
+# own rule converts "a key whose NAME carries a contact verb". Measured (audit
+# world_spatial_structure_light F3, 2026-11-01): `eyes_on: Hinami` became
+# Elyra's eyes TOUCHING Hinami and `focus_on` a touch with the part 'focus'.
+# A key whose only contact word is "on" now stays the state it was written as
+# -- the conservative direction this module states: inventing a hold is worse
+# than missing one.
+
+#: What may follow a contact verb's stem inside ONE word of a key or a value:
+#: the English inflections of that verb ("pinned", "wrapping", "kisses",
+#: "embraced"), a doubled final consonant before -ed/-ing included. A closed
+#: grammatical class, not a vocabulary: it is what stops a stem matching
+#: INSIDE another word -- "expression" was a press, "interest" a rest,
+#: "threshold" a hold, "spine" a pin and "pink" a pin (F3).
+_INFLECTIONS = ("", "e", "s", "es", "d", "ed", "ing")
+
+#: The token that makes a key PASSIVE: `held_by: Hinami` says Hinami holds
+#: the thing, and lifting it the way an active key lifts reversed the act --
+#: "the lantern holds Hinami" (F3). Refused; the key stays.
+_PASSIVE_MARK = "by"
+
+
+def _verb_form(token, fragment) -> bool:
+    """Is this one word a form of the contact verb whose stem is `fragment`?"""
+    if not token.startswith(fragment):
+        return False
+    tail = token[len(fragment):]
+    if tail in _INFLECTIONS:
+        return True
+    # grip -> gripped, hug -> hugging, pin -> pinned
+    return len(tail) >= 3 and tail[0] == fragment[-1] \
+        and tail[1:] in ("ed", "ing")
+
+
+def _key_manner(key):
+    """`(manner, index of the verb word)` a state key's NAME asserts, or
+    `(None, -1)`. Whole words of the key, in the table's order."""
+    words = fold_words(key)
+    for fragment, mapped in _CONTACT_KEY_MANNERS:
+        for index, word in enumerate(words):
+            if _verb_form(word, fragment):
+                return mapped, index
+    return None, -1
 
 # `proximity` values that assert actual contact rather than mere nearness.
 _CONTACT_PROXIMITIES = (
@@ -115,10 +159,9 @@ def contacts_from_entity_state(scene: dict) -> dict:
         for name, slug in sorted(normalized_positions,
                                  key=lambda item: -len(item[1])):
             if slug and text.startswith(slug) and len(text) > len(slug):
-                remainder = str(value or "").casefold()
-                remainder = re.sub(r"[^a-z0-9]+", " ", remainder).strip()
+                remainder = " ".join(fold_words(value))
                 # Drop the name's own words, keep what is left as the part.
-                for word in re.split(r"[^a-z0-9]+", str(name).casefold()):
+                for word in fold_words(name):
                     if word:
                         remainder = remainder.replace(word, " ", 1)
                 part = " ".join(remainder.split())[:_MAX_CONTACT_PART]
@@ -166,20 +209,24 @@ def contacts_from_entity_state(scene: dict) -> dict:
             partner, partner_part = _resolve(value)
             if partner is None or partner == actor:
                 continue
-            manner = None
-            fragment = ""
-            for frag, mapped in _CONTACT_KEY_MANNERS:
-                if frag in str(key).casefold():
-                    manner, fragment = mapped, frag
-                    break
+            words = fold_words(key)
+            if _PASSIVE_MARK in words:
+                continue  # `held_by`: the act runs the other way; not lifted
+            manner, index = _key_manner(key)
             if manner is None:
                 continue  # not a contact assertion: leave it exactly as it is
-            derived.append({
+            record = {
                 "actor": actor,
-                "actor_part": _part_from_key(key, fragment),
+                "actor_part": " ".join(words[:index])[:_MAX_CONTACT_PART],
                 "target": partner, "target_part": partner_part,
                 "manner": manner,
-            })
+            }
+            # POPPED ONLY WHEN THE LEDGER WILL TAKE IT: a record
+            # `apply_contact_ops` refuses (a part that is no part of a body)
+            # used to cost the state key anyway, so the fact was simply lost.
+            if _clean_contact(dict(record, op="add"), scene) is None:
+                continue
+            derived.append(record)
             state.pop(key, None)
 
         # Pattern B: the verb is in the VALUE, and the key names the part.
@@ -196,7 +243,8 @@ def contacts_from_entity_state(scene: dict) -> dict:
             if key in _PROTECTED_STATE_KEYS or not isinstance(value, str):
                 continue
             lifted = _lift_valued_contact(actor, key, value, positions)
-            if lifted is not None:
+            if lifted is not None and _clean_contact(
+                    dict(lifted, op="add"), scene) is not None:
                 derived.append(lifted)
                 state.pop(key, None)
 
@@ -242,7 +290,7 @@ def _lift_valued_contact(actor, key, value, positions):
     would trade a stale fact for a lost one.
     """
     text = str(value or "")
-    words = re.split(r"[^a-z0-9]+", text.casefold())
+    words = fold_words(text)
     partner = None
     for name in positions:
         slug = fold_identity_key(name)
@@ -255,10 +303,14 @@ def _lift_valued_contact(actor, key, value, positions):
     manner = index = None
     for fragment, mapped in _CONTACT_KEY_MANNERS:
         for position, word in enumerate(words):
-            if word.startswith(fragment):
+            # A form of the verb, never a word that merely starts with its
+            # stem ("pink" is not "pin", F3).
+            if _verb_form(word, fragment):
                 nxt = words[position + 1] if position + 1 < len(words) else ""
                 if nxt in _DIRECTION_AFTER_VERB:
                     continue      # a bearing, not a hold
+                if nxt == _PASSIVE_MARK:
+                    continue      # "pinned_by_Hinami": the act runs the other way
                 manner, index = mapped, position
                 break
         if manner:
@@ -272,11 +324,11 @@ def _lift_valued_contact(actor, key, value, positions):
         if part.endswith(suffix):
             part = part[:-len(suffix)]
             break
-    part = re.sub(r"[^a-z0-9]+", " ", part).strip()
+    part = " ".join(fold_words(part))
 
     # What is left after the verb, the partner's own name and the joining
     # words: the far part if it reads like one, everything else as detail.
-    drop = set(re.split(r"[^a-z0-9]+", partner.casefold())) | {"s", ""} \
+    drop = set(fold_words(partner)) | {"s", ""} \
         | set(_DIRECTION_AFTER_VERB) | {"the", "a", "an", "her", "his", "their",
                                         "its", "on", "along", "against", "and",
                                         "around", "of", "to", "with"}

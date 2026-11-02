@@ -687,6 +687,7 @@ def passable_route_next_step(
     scene: dict,
     from_room: Optional[str],
     to_room: Optional[str],
+    body=None,
 ) -> Optional[str]:
     """The FIRST room on a shortest passable walk from one room to another,
     or None when there is no such walk.
@@ -718,7 +719,7 @@ def passable_route_next_step(
     # sent a body UP it from the bottom. `passable_route_exists` and
     # `passable_path` search forward and were right; three private searches
     # of one graph is how one of them came to disagree.
-    path = passable_path(scene, from_room, to_room, limit=None)
+    path = passable_path(scene, from_room, to_room, limit=None, body=body)
     return path[0] if path else None
 
 
@@ -1057,6 +1058,23 @@ _CORRIDOR_VAGUENESS = ((2, "a short way"), (4, "some way"), (99, "far"))
 _CORRIDOR_NAMED = 2
 
 
+def _a_way_on(edge) -> bool:
+    """Could a body go through this edge, now or by opening it -- the
+    question a "way on" asks? A route a remembering mind records
+    (`route_memory_barrier`: open, an open or shut door, a membrane) or a link
+    that admits someone; never a window, bars, a wall, `unknown` or
+    `separated`. Audit world_spatial_movement_sight F12-F14 (2026-11-01):
+    three readers counted every non-wall edge, so a chamber whose only other
+    opening is glass had an "exit", a corridor ending at a side window "bent
+    on", and a run into a wall stopped "at a door" -- the class
+    `_ROUTE_MEMORY_BARRIERS` states: a map that records a window as a doorway
+    "sends its owner marching at a pane of glass"."""
+    if not isinstance(edge, dict):
+        return False
+    return normalize_barrier(edge.get("barrier")) in _ROUTE_MEMORY_BARRIERS \
+        or bool(isinstance(edge.get("admits"), list) and edge.get("admits"))
+
+
 def corridor_sightlines(scene, room_id):
     """What can be seen looking STRAIGHT along each passage out of a room.
 
@@ -1124,7 +1142,16 @@ def corridor_sightlines(scene, room_id):
                          and not sees_across(rooms, cur, e.get("to"),
                                              e.get("barrier")))
             ]
-            if not onward:
+            # WAYS ON are what a body could go through (`_a_way_on`); a side
+            # window or bars is no way on, so it neither keeps a dead end
+            # open nor makes a junction (F13, 2026-11-01). The line itself
+            # still runs on through anything sight crosses straight ahead.
+            ways = [e for e in onward if _a_way_on(e)]
+            straight = [e for e in onward
+                        if str(e.get("dir") or "").lower() == heading
+                        and not e.get("frontier_join")
+                        and sees_across(rooms, cur, e.get("to"), e.get("barrier"))]
+            if not ways and not straight:
                 terminus = "dead_end"
                 break
             if len(along) < _CORRIDOR_NAMED:
@@ -1132,19 +1159,25 @@ def corridor_sightlines(scene, room_id):
                     "room": room.get("name") or cur,
                     "detail": "clear" if dist == 1 else "landmark",
                 })
-            straight = [e for e in onward
-                        if str(e.get("dir") or "").lower() == heading
-                        and not e.get("frontier_join")
-                        and sees_across(rooms, cur, e.get("to"), e.get("barrier"))]
-            if len(onward) > 1:
+            if len(ways) > 1:
                 terminus = "opening"      # a junction: the line stops being one line
                 break
             if not straight:
+                # A WAY STRAIGHT AHEAD THAT SIGHT DOES NOT CROSS -- a shut door,
+                # a curtain -- ends the line AT IT: "door". It used to read
+                # "turn", telling a character the passage bent on where it
+                # ended at a door (F13, 2026-11-01).
+                shut_ahead = [e for e in ways
+                              if str(e.get("dir") or "").lower() == heading
+                              and not e.get("frontier_join")]
+                if shut_ahead:
+                    terminus = "door"
+                    break
                 # The passage bends. You cannot see ROUND a corner, but you can
                 # see that it goes on rather than stopping -- which is the
                 # difference between "bends and continues" and "bends into
                 # who knows what". Nothing beyond the corner is claimed.
-                terminus = "turn"
+                terminus = "turn" if ways else "dead_end"
                 break
             prev, cur, dist = cur, straight[0].get("to"), dist + 1
         # A CORRIDOR SIGHT IS WHAT THE LINE MEETS BEYOND THE ROOM YOU CAN
@@ -1181,7 +1214,7 @@ _ROOM_COST = {"tiny": 1, "small": 1, "": 1, "medium": 1,
               "large": 2, "huge": 3, "vast": 3}
 
 
-def passable_path(scene, from_room, to_room, limit=12):
+def passable_path(scene, from_room, to_room, limit=12, body=None):
     """The shortest walk of passable doorways from one room to another, as a
     list of rooms EXCLUDING the start and ending at `to_room` -- or [] when
     there is none.
@@ -1197,6 +1230,15 @@ def passable_path(scene, from_room, to_room, limit=12):
     teleport up as ground covered. `None` lifts the bound -- for a walk that
     CONTINUES a leg at a time (`passable_route_next_step`), where the route's
     length is the number of beats it will take, not a claim about one.
+
+    `body` names the walker, as `passable_route_exists(body=)` has always
+    taken it: a link that admits that body (`spatial_transit._link_edge`'s
+    `{barrier: wall, admits: [...]}`) is a way for it and a wall to everyone
+    else. Without it the two answered one question on two graphs -- the
+    shrine's Seal said the goddess's route existed while her path was `[]`,
+    her next step None and `walk` None (audit world_spatial_movement_sight
+    F7, 2026-11-01), so a declared walk teleported and a continuing one was
+    held "no passable route" every beat.
     """
     if not from_room or not to_room or from_room == to_room:
         return []
@@ -1205,7 +1247,7 @@ def passable_path(scene, from_room, to_room, limit=12):
     # so it could not have refused a one-way passage against its direction
     # however the edge was declared.
     neighbors = {str(k): {str(v) for v in vs}
-                 for k, vs in passable_neighbors(scene).items()}
+                 for k, vs in passable_neighbors(scene, body).items()}
 
     from collections import deque
     prev = {str(from_room): None}
@@ -1370,9 +1412,13 @@ def sprint_reach(scene, room_id, known_rooms=None):
                 break
             spent += cost
             path.append(cur)
+            # Ways a body could go through only (`_a_way_on`): a wall or a pane
+            # beyond the way back leaves a dead end, where it used to report
+            # "door" -- a runner told to expect a door he may open (F14).
             onward = [
                 e for e in effective_adjacent(scene, cur)
                 if str(e.get("to")) != str(prev) and e.get("to")
+                and _a_way_on(e)
             ]
             if not onward:
                 stops = "dead_end"
@@ -1450,7 +1496,9 @@ def _onward_exits(scene, all_rooms, target_id, from_room):
     for edge in (all_rooms.get(target_id) or {}).get("adjacent") or []:
         if not isinstance(edge, dict):
             continue
-        if normalize_barrier(edge.get("barrier")) == "wall":
+        # A WAY ON, not any non-wall edge: a chamber whose only other opening
+        # is a window reported an exit made of glass (F12, 2026-11-01).
+        if not _a_way_on(edge):
             continue
         dest = str(edge.get("to") or "")
         if held.get(frozenset((str(target_id), dest))) == FRONTIER_MEDIUM:
@@ -1467,12 +1515,15 @@ def _onward_exits(scene, all_rooms, target_id, from_room):
         for edge in other.get("adjacent") or []:
             if not isinstance(edge, dict) or str(edge.get("to")) != str(target_id):
                 continue
-            if normalize_barrier(edge.get("barrier")) == "wall":
+            if not _a_way_on(edge):
                 continue
             # Seen from the far side, so the bearing is the far side's,
-            # reversed. Same doorway, opposite wall.
-            ways[str(other_id)] = opposite_bearing(
-                normalize_bearing(edge.get("dir")))
+            # reversed. Same doorway, opposite wall -- and a stair's kept
+            # (one shaft; MS#F11, 2026-11-01).
+            far_bearing = normalize_bearing(edge.get("dir"))
+            ways[str(other_id)] = far_bearing if (
+                far_bearing and edge.get("vertical")) \
+                else opposite_bearing(far_bearing)
             break
     out = {"onward_exits": len(ways)}
     bearings = []
@@ -1609,9 +1660,16 @@ def visible_adjacent_rooms(
                 or (held and frozenset((str(room_id), str(other_id))) in held)
                 # The reverse pass exists so a bidirectional doorway declared
                 # from one side is visible from both. A one-way window is the
-                # one edge where that generosity is wrong: it is declared in
-                # the direction it looks, and looking back is what it refuses.
-                or barrier == "one_way_window"
+                # one edge where that generosity is wrong -- declared in the
+                # direction it looks, looking back is what it refuses -- UNLESS
+                # it names its watcher (`sight_from`, the repair
+                # `sight_direction` endorses "by naming a room rather than by
+                # deleting a declaration"). The forward loop asks
+                # `sees_across`; this one skipped every reverse-declared
+                # mirror outright, so the watcher of one declared from the
+                # blind side saw nothing (audit world_spatial_movement_sight
+                # F10, 2026-11-01). The same question, both loops.
+                or not sees_across(all_rooms, room_id, other_id, barrier)
                 or barrier not in _SIGHT_BARRIERS
                 or _is_carried_interior(scene, other_id)
                 or interior_hidden_from_below(scene, room_id, other_id)

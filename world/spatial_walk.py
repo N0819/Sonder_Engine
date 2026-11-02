@@ -390,7 +390,10 @@ def walk(scene: dict, name: str, to_room, to_cell=None, *, paces,
     goal_cell = normalize_cell(list(to_cell)) if to_cell is not None else None
     if goal_cell is not None:
         goal_cell = free_cell_near(scene, to_room, goal_cell, name)
-    route = [] if here == to_room else passable_path(scene, here, to_room, limit=None)
+    # The walker's own graph: a link that admits THIS body is a way for it
+    # (`passable_path(body=)`, audit world_spatial_movement_sight F7).
+    route = [] if here == to_room else passable_path(scene, here, to_room,
+                                                     limit=None, body=name)
     if here != to_room and not route:
         return None
     budget = max(0, int(paces))

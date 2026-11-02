@@ -6,6 +6,7 @@ import re
 from typing import Optional
 
 from story.character_schema import fold_identity_key
+from language_runtime import fold_key, fold_words, name_boundary_pattern
 
 from world.scene_memo import scene_memo
 
@@ -379,7 +380,7 @@ def room_windows(room) -> list:
         if not isinstance(raw, dict) and held.get(bearing):
             held[bearing] -= 1
             continue
-        wid = re.sub(r"[^a-z0-9_]+", "_", str(rec.get("id") or "").casefold()).strip("_")
+        wid = fold_key(rec.get("id") or "", "_")
         wid = wid or bearing
         base, n = wid, 1
         while wid in used:
@@ -587,7 +588,9 @@ def _effective_anchors(scene: dict, room_id, *, derive=False) -> dict:
                 normalize_cell(edge.get("cell")), edge.get("desc"))
     # An edge declared only from the neighbour's side is still a doorway in
     # THIS room; its bearing and verticality read reciprocally, the same rule
-    # travel_bearing already applies.
+    # travel_bearing already applies -- a doorway's bearing reversed, a
+    # STAIR's kept (one shaft, its end on the same wall of each floor; audit
+    # world_spatial_movement_sight F11, 2026-11-01).
     for other_id, other in rooms.items():
         if other_id == room_id or not isinstance(other, dict):
             continue
@@ -596,8 +599,10 @@ def _effective_anchors(scene: dict, room_id, *, derive=False) -> dict:
         for edge in other.get("adjacent") or []:
             if isinstance(edge, dict) and edge.get("to") == room_id:
                 edge = resolve_edge(scene, edge)
+                far_bearing = normalize_bearing(edge.get("dir"))
                 add(other_id, edge.get("barrier"),
-                    opposite_bearing(normalize_bearing(edge.get("dir")))
+                    (far_bearing if (far_bearing and edge.get("vertical"))
+                     else opposite_bearing(far_bearing))
                     or derived.get((str(room_id), str(other_id))),
                     opposite_vertical(normalize_vertical(edge.get("vertical"))),
                     normalize_offset(edge.get("offset")), edge.get("width"),
@@ -1491,6 +1496,15 @@ def _clean_pose(raw):
         field: _pose_value(raw.get(field))
         for field in _POSE_FIELDS
     }
+    # THE ENGINE'S OWN POSTURE CLASS, kept beside the free `posture` text when
+    # a writer states it and it is one of the closed classes sight reads
+    # (`spatial_fov.POSTURE_CLASSES`). Kept only when present and valid, so
+    # no stored pose grows an empty key (audit world_spatial_movement_sight
+    # F1, 2026-11-01).
+    stated = str(raw.get("posture_class") or "").strip().casefold()
+    from world.spatial_fov import POSTURE_CLASSES
+    if stated in POSTURE_CLASSES:
+        pose["posture_class"] = stated
     return pose if any(pose.values()) else None
 
 
@@ -1513,7 +1527,9 @@ def _retire_pose_relation(pose, other):
     pose["relative_to"] = ""
     pose["relation"] = ""
     pose["constraint"] = ""
-    if other and re.search(r"\b%s\b" % re.escape(other),
+    # A whole name in whatever script it is written (`name_boundary_pattern`;
+    # `\b` never bounds a kana or kanji name a particle follows).
+    if other and re.search(name_boundary_pattern(other),
                            pose.get("detail") or "", re.I):
         pose["detail"] = ""
     return pose
@@ -1638,6 +1654,34 @@ _CONTACT_BOUND_POSE_WORDS = frozenset({
     "grappled", "gripped", "lifted", "cradled",
 })
 
+#: Where one clause of pose prose ends: the ASCII marks, a spaced dash, an em
+#: dash, and the full-width marks an unspaced script ends a clause with.
+_CLAUSE_BREAKS = re.compile(r"[,;:.\u3001\u3002\uff0c\uff1b\uff1a\uff01\uff1f!?]| -- |\u2014")
+
+
+def _claims_carriage(clause, names=()) -> bool:
+    """Does this clause of pose prose claim to be holding/bearing something?
+
+    THE CLASS IS THE LEDGER'S: the ledger moved the thing (or the body) and
+    the clause names it. `_CONTACT_BOUND_POSE_WORDS` is the English
+    REFINEMENT of that rule -- "watching the padd" names it and claims
+    nothing -- and it can only speak for prose written in a script it reads.
+    A clause whose prose (the names taken out) is in an unspaced script has
+    no word that list could match, so the structural rule decides alone.
+    Measured (audit world_spatial_truth F17, 2026-11-01): the same transfer
+    that retires "holding the jar against her chest" retired nothing for
+    壺を胸に抱えて持っている, and a moved body's ミレルを抱きかかえている stood --
+    the chat 98/99 defects, recurring in every Japanese story."""
+    from language_runtime import UNSPACED_SCRIPT
+    rest = str(clause or "")
+    for name in names:
+        if str(name or "").strip():
+            rest = re.sub(name_boundary_pattern(str(name).strip()), " ", rest,
+                          flags=re.I)
+    if UNSPACED_SCRIPT.search(rest):
+        return True
+    return bool(set(fold_words(rest)) & _CONTACT_BOUND_POSE_WORDS)
+
 
 def _carriage_labels(scene: dict, object_id) -> list:
     """Every spelling this beat's transfer could be naming the thing by.
@@ -1728,13 +1772,12 @@ def invalidate_moved_body_pose_details(scene: dict, previous_positions) -> list:
         detail = str(pose.get("detail") or "")
         if not detail:
             continue
-        words = set(re.findall(r"[a-z'\u2019-]+", detail.casefold()))
-        if not (words & _CONTACT_BOUND_POSE_WORDS):
-            continue
         for mover in movers:
             if same_subject(scene, holder, mover):
                 continue        # their own pose, about themselves
             if not _detail_names_subject(scene, detail, mover):
+                continue
+            if not _claims_carriage(detail, _subject_spellings(scene, mover)):
                 continue
             pose["detail"] = ""
             dropped.append((holder, mover))
@@ -1964,19 +2007,30 @@ def _detail_names_subject(scene, detail, subject) -> bool:
     alias -- the same generosity `_carriage_labels` shows a transferred thing,
     for the same reason: one body, every name it goes by.
     """
+    from language_runtime import UNSPACED_SCRIPT
     low = str(detail or "").casefold()
+    for spelling in _subject_spellings(scene, subject):
+        token = spelling.strip().casefold()
+        # A Latin name of two letters is too short to be evidence; a name in
+        # an unspaced script is whole at any length (`name_boundary_pattern`
+        # decides its edges -- `(?<!\w)` never bounded one a particle
+        # follows, F17).
+        if (len(token) > 2 or UNSPACED_SCRIPT.search(token)) and re.search(
+                name_boundary_pattern(token), low):
+            return True
+    return False
+
+
+def _subject_spellings(scene, subject) -> list:
+    """The spellings `_detail_names_subject` looks for: the subject as given,
+    and its entity's name and aliases."""
     spellings = {str(subject or "").strip()}
     entity = ((scene or {}).get("entities") or {}).get(subject)
     if isinstance(entity, dict):
         spellings.add(str(entity.get("name") or ""))
         for alias in (entity.get("aliases") or []):
             spellings.add(str(alias or ""))
-    for spelling in spellings:
-        token = spelling.strip().casefold()
-        if len(token) > 2 and re.search(
-                r"(?<!\w)%s(?!\w)" % re.escape(token), low):
-            return True
-    return False
+    return [s for s in spellings if s.strip()]
 
 
 def invalidate_transferred_pose_details(scene: dict, inventory_ops) -> list:
@@ -2078,12 +2132,11 @@ def invalidate_transferred_pose_details(scene: dict, inventory_ops) -> list:
             # clause. A detail is retired only where a carriage word and the
             # thing's own name sit in one clause together.
             claimed = False
-            for clause in re.split(r"[,;:.]| -- |—", low):
-                if not (set(re.findall(r"[\w'-]+", clause))
-                        & _CONTACT_BOUND_POSE_WORDS):
-                    continue
-                if any(re.search(r"\b%s\b" % re.escape(label.casefold()),
-                                 clause) for label in labels):
+            for clause in _CLAUSE_BREAKS.split(low):
+                named = [label for label in labels
+                         if re.search(name_boundary_pattern(label.casefold()),
+                                      clause)]
+                if named and _claims_carriage(clause, labels):
                     claimed = True
                     break
             if not claimed:
@@ -2423,8 +2476,7 @@ def derive_scene_stations(scene: dict, explicit=None, fresh_ops=None) -> dict:
         state = _entity_named(scene, name).get("state")
         if not isinstance(state, dict):
             continue
-        words = [w for w in re.split(r"[^a-z0-9]+",
-                                     str(state.get("position") or "").casefold()) if w]
+        words = fold_words(state.get("position") or "")
         if not words:
             continue
         for word in words:

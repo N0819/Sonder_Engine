@@ -21,11 +21,40 @@ from world.spatial_contacts import (
 )
 from world.spatial_geometry import (entity_arc, entity_side, pose_facts,
                               proximity_rel, spatial_digest)
-from world.spatial_identity import room_of, same_subject
+from world.spatial_identity import _unique_entity_keyed, room_of, same_subject
 from world.spatial_light import effective_light
 
 
-def _interior_label(raw, owner) -> str:
+#: What joins a holder to the part it holds, at the head of an interior's
+#: label: the English possessive in both apostrophes (a bare apostrophe after
+#: a name ending in s), and the Japanese genitive particle. A closed
+#: grammatical class, the way `language_runtime.JA_NAME_FOLLOWERS` is.
+_POSSESSIVE_MARKS = ("'s", "\u2019s", "'", "\u2019", "\u306e")
+
+#: A label headed by a PROPER NAME's possessive -- "Mirelle's Mouth", "Mirelle
+#: Sulmirath's Throat" -- every word of the holder capitalised.
+_PROPER_POSSESSIVE = re.compile(
+    r"^(?:[A-Z\u00c0-\u024f][\w\-]*\s+){0,3}[A-Z\u00c0-\u024f][\w\-]*"
+    r"['\u2019]s?\s+(?=\S)")
+
+
+def _owner_spellings(scene, owner) -> list:
+    """Every spelling the holder `owner` answers to in this scene: the one
+    given, and -- when it names exactly one entity -- that entity's key, name
+    and aliases. Asked of the record AS IT IS SPELLED, before any identity
+    floor relabels it."""
+    text = str(owner or "").strip()
+    out = [text] if text else []
+    if scene is not None and text:
+        eid, entity = _unique_entity_keyed(scene, text)
+        if isinstance(entity, dict) and entity:
+            out.append(str(eid))
+            out.append(str(entity.get("name") or ""))
+            out.extend(str(alias or "") for alias in entity.get("aliases") or [])
+    return [spelling.strip() for spelling in out if str(spelling or "").strip()]
+
+
+def _interior_label(raw, owner, *, also=()) -> str:
     """An enclosing passage, ready to sit inside somebody's possessive.
 
     `target_interior` is whatever the fiction called the place, and a Director
@@ -37,21 +66,47 @@ def _interior_label(raw, owner) -> str:
     Mirelle's Mouth" in his. Structural, not a word list: strip a leading
     possessive that names the owner, by any part of their name, and lower the
     remainder so it reads as the body part it is rather than as a room title.
+
+    THE OWNER'S REAL NAME, NOT ITS LABEL. `also` carries every spelling the
+    holder answers to (`_owner_spellings`), asked BEFORE an identity floor
+    relabels the party; stripping by the label alone left "the woman's
+    Mirelle's Mouth" in an occupant's view that had not learned the name (audit
+    world_spatial_structure_light F1, 2026-11-01: 2 of the corpus's 24
+    interior contacts name their own holder). And a label still headed by a
+    PROPER NAME's possessive is stripped whoever it names: the renderer is
+    about to put the holder's own possessive in front of it, and a caller
+    that relabelled the record before calling (`agents.character`'s
+    `standing_contacts`) can no longer say whose name it is.
     """
     label = str(raw or "").strip().replace("_", " ")
     if not label:
         return ""
-    tokens = [t for t in re.split(r"\s+", str(owner or "").strip()) if t]
-    # The whole name first, then any single part of it: a Director writes
-    # "Mirelle Sulmirath's Esophagus" as readily as "Mirelle's Mouth".
-    candidates = ([" ".join(tokens)] if len(tokens) > 1 else []) + sorted(
-        tokens, key=len, reverse=True)
+    candidates = []
+    for spelling in (owner, *also):
+        tokens = [t for t in re.split(r"\s+", str(spelling or "").strip()) if t]
+        if not tokens:
+            continue
+        # The whole name first, then any single part of it: a Director writes
+        # "Mirelle Sulmirath's Esophagus" as readily as "Mirelle's Mouth".
+        if len(tokens) > 1:
+            candidates.append(" ".join(tokens))
+        candidates.extend(tokens)
+    candidates = sorted(set(candidates), key=len, reverse=True)
+    stripped = False
     for token in candidates:
-        for suffix in ("'s", "\u2019s"):
-            prefix = token + suffix
-            if label.casefold().startswith(prefix.casefold()):
+        for mark in _POSSESSIVE_MARKS:
+            if mark in ("'", "\u2019") and not token.casefold().endswith("s"):
+                continue
+            prefix = token + mark
+            if label.casefold().startswith(prefix.casefold()) \
+                    and label[len(prefix):].strip():
                 label = label[len(prefix):].strip()
+                stripped = True
                 break
+        if stripped:
+            break
+    if not stripped:
+        label = _PROPER_POSSESSIVE.sub("", label, count=1).strip() or label
     # A room title reads as a place; the same words in lower case read as the
     # part of a body they name, which is what a possessive needs.
     return label.lower() if label.istitle() else label
@@ -117,9 +172,14 @@ def contact_phrase(contact: dict, *, you=None) -> str:
         # structure doing the enclosing. Treating it as the container turned a
         # blade at a shoulder into "inside the shoulder" and a contact at a
         # terminal boundary into "inside the boundary".
-        if target_interior:
-            container = (f"your {target_interior}" if target_is_you else
-                         f"{target}'s {target_interior}")
+        # The label as a part of the target's body, never a room title that
+        # carries the holder's name past whatever the caller relabelled the
+        # target to (audit world_spatial_structure_light F1).
+        interior_label = _interior_label(
+            target_interior, you if target_is_you else target)
+        if interior_label:
+            container = (f"your {interior_label}" if target_is_you else
+                         f"{target}'s {interior_label}")
         else:
             container = "you" if target_is_you else target
         plural = _part_is_plural(actor_part) if actor_part else actor_is_you
@@ -240,6 +300,10 @@ def contact_sensation(contact: dict, *, you: str, scene: dict = None,
     # reached a view and a memory as "you's fingertips" and "me's" (playerless
     # Aldermill round 6, 2026-09-23, idx 16 and 21).
     self_contact = _is_observer(other)
+    # Every spelling the other party answers to, asked before the identity
+    # floor relabels it: an interior label is stripped of its holder's REAL
+    # name, not of the label this observer may call them by (F1, 2026-11-01).
+    other_spellings = _owner_spellings(scene, other)
     if callable(label_for) and not self_contact:
         other = str(label_for(other) or other)
     owner = "your" if self_contact else f"{other}'s"
@@ -292,7 +356,8 @@ def contact_sensation(contact: dict, *, you: str, scene: dict = None,
             yours = f"your {mine}" if mine else "you"
             # The passage belongs to the OTHER body here -- the observer is
             # the one inside it.
-            target_interior = _interior_label(raw_interior, other)
+            target_interior = _interior_label(raw_interior, other,
+                                              also=other_spellings)
             enclosure = (f"{owner} {target_interior}"
                          if target_interior else other)
             relation = f"{enclosure} enclosing {yours}"
@@ -301,7 +366,8 @@ def contact_sensation(contact: dict, *, you: str, scene: dict = None,
         else:
             source = f"{owner} {theirs}" if theirs else other
             # ...and to the OBSERVER here, who is the one enclosing.
-            target_interior = _interior_label(raw_interior, you)
+            target_interior = _interior_label(
+                raw_interior, you, also=_owner_spellings(scene, you))
             enclosure = f"your {target_interior}" if target_interior else "you"
             relation = f"{source} within {enclosure}"
             if mine:

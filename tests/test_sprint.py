@@ -185,7 +185,11 @@ def test_you_cannot_run_through_glass():
     sc2 = _corridor(4)
     sc2["rooms"]["c1"]["adjacent"][1]["barrier"] = "window"
     run = _one(sprint_reach(sc2, "start"))
-    assert run["path"] == ["c1"] and run["stops"] == "door"
+    # A pane is no way on, so the run ends at a DEAD END, not at a door the
+    # runner may open: this pin read "door" until 2026-11-01 (audit
+    # world_spatial_movement_sight F14 -- the subject here is "you cannot
+    # run through glass", and the label was incidental and wrong).
+    assert run["path"] == ["c1"] and run["stops"] == "dead_end"
 
 
 def test_a_closed_door_ends_the_run_rather_than_opening_itself():

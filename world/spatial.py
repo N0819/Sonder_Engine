@@ -55,9 +55,11 @@ from world.spatial_orientation import (
 
 
 from world.spatial_identity import (
-    _ci_get, _entities_named, _entity_named, _live_subject_spellings,
+    _BODY_LEDGERS, _ci_get, _entities_named, _entity_named,
+    _live_subject_spellings,
     _positions_lookup, _unique_entity_keyed, PositionsIndex,
     _SUBJECT_KEYED, canonical_subject, canonical_subject_map,
+    holder_key, normalize_room_parents,
     ROOM_NAME_DERIVED, derived_room_name, is_derived_room_name,
     room_name_is_placeholder, normalize_room_id,
     normalize_scene_subjects, room_display_name, room_of, room_of_record,
@@ -279,7 +281,7 @@ from world.spatial_senses import (
     crossing_visible_from, EAR_VOLUME, has_visual, hear_level,
     HEARING_LEVELS, hearing_reason, into_another_ear, OPEN_BARRIERS,
     REACH_TIERS, UNVOICED_VOLUMES,
-    is_alarming, normalize_scene_comms, scent_level, SCENT_LEVELS,
+    is_alarming, normalize_scene_comms, scent_level, SCENT_GRADE_LEVELS,
     sense_acuity_offset, sense_adjusted, sense_entry, sense_needs_light,
     sense_range_class,
     sight_block, sight_level, sight_verdict,

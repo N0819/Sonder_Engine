@@ -1024,7 +1024,9 @@ def detect_split(chat_id, frame_id, turn_idx):
     ):
         return None
 
-    scene = wget(chat_id, "scene", None)
+    # THE FRAME ASKED ABOUT, not the ambient one (audit world_spatial_truth
+    # F7, 2026-11-01): `wget` resolves `scene` through `active_frame_id`.
+    scene = wget_for_frame(chat_id, "scene", frame_id, None)
     if not isinstance(scene, dict):
         return None
     groups = zone_groups(chat_id, frame_id, scene)
@@ -1250,7 +1252,13 @@ def perform_split(chat_id, parent_frame_id, turn_idx, away_zone=None, *,
             "perform_split needs an away_zone (a declared locale) or "
             "away_names (the bodies that left), and exactly one of them")
     with transaction():
-        scene = wget(chat_id, "scene", {}) or {}
+        # THE PARENT FRAME'S SCENE, read and written through the same explicit
+        # frame every other key here uses. `wget`/`wset` resolve `scene`
+        # through the AMBIENT `active_frame_id`: split off a past frame with
+        # no active frame set, the PRESENT's scene was partitioned and
+        # written back while the past frame's was never touched (audit
+        # world_spatial_truth F7, 2026-11-01).
+        scene = wget_for_frame(chat_id, "scene", parent_frame_id, {}) or {}
         leaving = {_cf(n) for n in (away_names or [])}
         if away_names is None:
             away_persona_ids = _extra_personas_in_zone(
@@ -1316,6 +1324,12 @@ def perform_split(chat_id, parent_frame_id, turn_idx, away_zone=None, *,
             # child's first beat diffs an empty snapshot and reports the
             # whole population as having just moved.
             ("charter_last_places", {}),
+            # WHAT CIRCLES EACH MIND IS INSIDE: per party, frame-scoped, and
+            # a never-touched frame starts blank -- so a character initiated
+            # at turn 60 who walked out of reach had the order's lore
+            # withheld in her bubble (audit world_spatial_truth F10,
+            # 2026-11-01). Unioned back by `perform_merge`.
+            ("knowledge_circles", {}),
         ):
             wset_for_frame(chat_id, key, wget_for_frame(chat_id, key, parent_frame_id, default),
                            new_frame_id)
@@ -1383,7 +1397,7 @@ def perform_split(chat_id, parent_frame_id, turn_idx, away_zone=None, *,
         }
         scene = {**_partition_scene(scene, parent_positions, set(scene.get("rooms") or {})),
                  "positions": parent_positions}
-        wset(chat_id, "scene", scene)
+        wset_for_frame(chat_id, "scene", scene, parent_frame_id)
 
         # Cast partition: active_cast folds every base-active character
         # into every frame by default (chat_char_frames overlay falls
@@ -1747,9 +1761,32 @@ def perform_merge(chat_id, parent_frame_id, child_frame_id, turn_idx):
                     "diverged during the separation; the parent frame's version was kept."
                 )
 
+        # THE CIRCLES THE AWAY CAST JOINED OR LEFT COME HOME WITH THEM, as
+        # their relationships do above (F10, 2026-11-01): a returning
+        # character's rows are the away frame's; anyone else's the parent's,
+        # with a membership only the away frame holds added.
+        _merge_circles_home(chat_id, parent_frame_id, child_frame_id, returning)
+
         parent_scene = wget_for_frame(chat_id, "scene", parent_frame_id, {}) or {}
         child_scene = wget_for_frame(chat_id, "scene", child_frame_id, {}) or {}
-        parent_scene = merge_frame_scenes(parent_scene, child_scene)
+        # THE AWAY PARTY'S ROOMS ARE THE ONES IT STANDS IN. Both frames hold
+        # the whole map since 2026-09-17, so the default rule -- every room
+        # the child carries is the child's -- reverted every room the home
+        # party touched to the away copy from the split instant: a door shut
+        # at home reopened at reunion, a new way to a cellar lost its near
+        # side (audit world_spatial_truth F2, 2026-11-01). The sibling
+        # meeting's rule (`perform_sibling_merge`): the child's copy of the
+        # rooms its bodies stand in, the parent's elsewhere, and a doorway
+        # either copy planted survives (`_merged_rooms`).
+        from world.spatial_bubbles import frame_body_names
+        ours = {str(room_of(parent_scene, n))
+                for n in frame_body_names(chat_id, parent_frame_id)
+                if room_of(parent_scene, n)}
+        theirs = {str(room_of(child_scene, n))
+                  for n in frame_body_names(chat_id, child_frame_id)
+                  if room_of(child_scene, n)}
+        parent_scene = merge_frame_scenes(parent_scene, child_scene,
+                                          child_rooms=theirs - ours)
         wset_for_frame(chat_id, "scene", parent_scene, parent_frame_id)
 
         for row in active_cast(chat_id, child_frame_id):
@@ -1772,6 +1809,37 @@ def perform_merge(chat_id, parent_frame_id, child_frame_id, turn_idx):
         wset_for_frame(chat_id, "offscreen_log", log, parent_frame_id)
 
     return warnings
+
+
+def _merge_circles_home(chat_id, parent_frame_id, child_frame_id, returning):
+    """Union the away frame's `knowledge_circles` into the parent's: the rows
+    of a character coming home are the away frame's (they lived them), and
+    any other key keeps the parent's rows plus a membership only the away
+    frame holds."""
+    from mind.knowledge_circles import CIRCLES_KEY, identity_key
+    child = wget_for_frame(chat_id, CIRCLES_KEY, child_frame_id, {}) or {}
+    if not isinstance(child, dict) or not child:
+        return
+    parent = wget_for_frame(chat_id, CIRCLES_KEY, parent_frame_id, {}) or {}
+    parent = dict(parent) if isinstance(parent, dict) else {}
+    coming_home = set()
+    for row in active_cast(chat_id, child_frame_id):
+        if row["id"] in returning:
+            coming_home.add(identity_key(
+                normalized_character_from_text(row["sheet"])))
+    for key, rows in child.items():
+        if not isinstance(rows, list):
+            continue
+        if key in coming_home or key not in parent:
+            parent[key] = rows
+            continue
+        mine = list(parent.get(key) or [])
+        held = {(r.get("circle"), r.get("since_turn"))
+                for r in mine if isinstance(r, dict)}
+        mine.extend(r for r in rows if isinstance(r, dict)
+                    and (r.get("circle"), r.get("since_turn")) not in held)
+        parent[key] = mine
+    wset_for_frame(chat_id, CIRCLES_KEY, parent, parent_frame_id)
 
 
 #: The party ledgers a sibling merge unions: what each side intends, owes,
@@ -2243,7 +2311,15 @@ def open_couple(chat_id, a_id, b_id, *, turn_idx):
         # bubbles module's (silence is not refusal, hanging up is, a contested
         # channel is no channel) and it is the whole predicate this feature
         # rests on.
-        fused = merge_frame_scenes(scene_a, scene_b)
+        # B's copy of the rooms B's bodies stand in, A's elsewhere (the
+        # sibling rule; F2, 2026-11-01): with the default rule the home party
+        # played the call in the away frame's stale copy of its own rooms.
+        rooms_of_b = {str(room_of(scene_b, n)) for n in names["b"]
+                      if room_of(scene_b, n)}
+        rooms_of_a = {str(room_of(scene_a, n)) for n in names["a"]
+                      if room_of(scene_a, n)}
+        fused = merge_frame_scenes(scene_a, scene_b,
+                                   child_rooms=rooms_of_b - rooms_of_a)
         # A REFUSED CHANNEL IS A DEVICE, NOT A NOTHING. `fuse_comms` answers
         # which channels the two frames can be HELD to -- silence on one side
         # is not refusal, hanging up is, and a channel whose two copies

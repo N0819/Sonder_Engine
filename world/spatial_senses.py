@@ -495,6 +495,18 @@ def can_perceive_onset(scene: dict, from_room, to_room) -> bool:
         return True
     if hear_level(rel, "normal") != "none":
         return True
+    # ROOMS AWAY, THE FAR FIELD ANSWERS, as it does for every voice a view
+    # delivers (`spatial_sound_field.stamp_sound_relation`): the room-level
+    # relation stamps no far loss, so beyond the next room only a shout
+    # passed, and a cast member two open doorways off -- who is handed the
+    # player's normal line `full` -- was never asked what they do (audit
+    # world_spatial_sound F7, 2026-11-01). The tie goes to letting them
+    # answer, as this docstring always said.
+    from world.spatial_sound_field import _stamp_far_path
+    far = _stamp_far_path(scene, dict(rel), to_room, from_room)
+    if far.get("far_loss_db") is not None \
+            and hear_level(far, "normal") != "none":
+        return True
     # A live channel is a channel: someone on the other end of an open
     # intercom can hear the beat, whatever the wall between the rooms is.
     return comms_between(scene, from_room, to_room) is not None
@@ -1221,16 +1233,35 @@ _SOUND_LADDER = ("open", "open_door", "bars", "closed_door", "window", "wall")
 DOOR_REACH_BARRIERS = ("closed_door", "membrane")
 
 
+#: The material class each rung of `_SOUND_LADDER` already PRICES, as a step
+#: of `_MATERIAL_SOUND_STEPS`: a window is a pane (dense, -1), bars are metal
+#: (-1), a wall is masonry (-1); an opening or a door is the ordinary default
+#: (0). A material naming what its barrier already IS shifts nothing.
+_LADDER_OWN_STEP = {"bars": -1, "window": -1, "wall": -1}
+
+
 def _material_shifted_barrier(barrier, material):
     """The barrier to LISTEN through, after accounting for what it is made of.
 
     Only the acoustic question is shifted. Sight and passage still read the
     real barrier, so a paper screen you cannot see through and cannot walk
     through is still exactly that -- it is only easy to hear through.
+
+    A MATERIAL THAT NAMES WHAT THE BARRIER ALREADY IS SHIFTS NOTHING
+    (`_LADDER_OWN_STEP`). The glass step exists for a door made of glass
+    (`closed_door` -> `window`); on a window it counted the pane twice and
+    walked it to `wall`. Measured (audit world_spatial_sound F4, 2026-11-01,
+    chat 172's six `material: glass` windows): a loud voice that fragments
+    through a bare window was `none` through a glass one, the at-the-pane rows
+    were unreachable, the garden was not laid on the bedroom's acoustic grid,
+    and the far field charged a wall's 45 dB for a pane's 28. Iron bars sat
+    on the shut-door rung by the same double count.
     """
     step = _MATERIAL_SOUND_STEPS.get(
         str(material or "").strip().casefold().replace(" ", "_"))
     if not step or barrier not in _SOUND_LADDER:
+        return barrier
+    if step == _LADDER_OWN_STEP.get(barrier, 0):
         return barrier
     index = _SOUND_LADDER.index(barrier)
     return _SOUND_LADDER[max(0, min(index - step, len(_SOUND_LADDER) - 1))]
@@ -2103,10 +2134,16 @@ def _overlook_between(scene: dict, a, b) -> bool:
 def _under_the_sky(scene: dict, a, b) -> bool:
     """Is neither room enclosed -- two places under the sky, a roofed porch
     included, with air and not a floor between them?"""
-    rooms = (scene or {}).get("rooms") or {}
+    # THE ONE READING OF EXPOSURE (`weather.room_exposure`: a holder's
+    # interior is enclosed, then the declared word, then the keyword
+    # fallback). The raw field read here was a second reading: 118 live rooms
+    # with no declared exposure that the weather calls open or sheltered read
+    # as enclosed, and 3 declared `indoor`/`interior` read as under the sky,
+    # which the sight cap answers "full" (audit world_spatial_sound F11,
+    # 2026-11-01).
+    from world.weather import room_exposure
     for rid in (a, b):
-        exposure = str((rooms.get(rid) or {}).get("exposure") or "enclosed").strip().casefold()
-        if exposure == "enclosed":
+        if room_exposure(scene, rid) == "enclosed":
             return False
     return True
 
@@ -2269,12 +2306,18 @@ def _bearing_through(scene: dict, observer: str, o_room, next_room, scope):
 # never see this value; it exists only downstream of sense_adjusted, and only
 # for a perceiver whose card explicitly says extraordinary.
 HEARING_LEVELS = ("none", "trace", "fragment", "full")
-SCENT_LEVELS = ("none", "muffled", "full")
+#: The scent GRADE ladder `sense_adjusted` shifts. Named apart from
+#: `spatial_scent_field.SCENT_LEVELS` (the strength ladder trace..overpowering)
+#: since 2026-11-01: the facade imported both under one name, the second
+#: shadowed the first, and `tests/test_senses_gate.py` iterated the strength
+#: words as this ladder -- so the scent third of its byte-identity check
+#: asserted nothing (audit world_spatial_structure_light F13).
+SCENT_GRADE_LEVELS = ("none", "muffled", "full")
 
 _SENSE_LADDERS = {
     "hearing": HEARING_LEVELS,
     "sight": SIGHT_LEVELS,
-    "scent": SCENT_LEVELS,
+    "scent": SCENT_GRADE_LEVELS,
 }
 
 _SENSE_CHANNEL_ALIASES = {
@@ -2331,10 +2374,15 @@ def _sense_channel(value) -> Optional[str]:
     ones. An unrecognised word still resolves to None: a fiction may invent a
     sense the engine does not model, and inventing one must cost nothing.
     """
+    from language_runtime import fold_words
     raw = str(value or "").strip().casefold()
     if raw in _SENSE_CHANNEL_ALIASES:
         return _SENSE_CHANNEL_ALIASES[raw]
-    for token in re.split(r"[^a-z]+", raw):
+    # `fold_words`: the ASCII token class for ASCII input, NFKC (a full-width
+    # ｈｅａｒｉｎｇ is the word) and every script's letters kept, so a protocol
+    # word written inside other text still reads (audit world_spatial_sound
+    # F9; the closed vocabulary itself belongs on the cards -- see the log).
+    for token in fold_words(raw):
         if token in _SENSE_CHANNEL_ALIASES:
             return _SENSE_CHANNEL_ALIASES[token]
     return None
@@ -2402,8 +2450,8 @@ def sense_acuity_offset(senses, channel) -> Optional[int]:
     entry = sense_entry(senses, channel)
     if entry is None:
         return 0
-    tokens = {t for t in re.split(
-        r"[^a-z]+", str(entry.get("acuity") or "").casefold()) if t}
+    from language_runtime import fold_words
+    tokens = set(fold_words(entry.get("acuity") or ""))
     if not tokens:
         return 0
     if tokens & _ACUITY_ABSENT and not tokens & (_ACUITY_PLUS_TWO | _ACUITY_PLUS_ONE):
@@ -2426,8 +2474,8 @@ def sense_range_class(senses, channel) -> str:
     entry = sense_entry(senses, channel)
     if entry is None:
         return "ordinary"
-    tokens = {t for t in re.split(
-        r"[^a-z]+", str(entry.get("range") or "").casefold()) if t}
+    from language_runtime import fold_words
+    tokens = set(fold_words(entry.get("range") or ""))
     if tokens & _RANGE_EXTENDED:
         return "extended"
     if tokens & _RANGE_REDUCED:

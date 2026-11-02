@@ -3,6 +3,7 @@
 structural repair, and merge_scene_with_diff."""
 
 import copy
+import json
 import re
 from typing import Optional
 
@@ -55,7 +56,8 @@ from world.spatial_geometry import (apply_pose_diff, derive_scene_stations,
                               release_moved_body_supports)
 from world.spatial_identity import (_ci_get, _entity_named, room_of,
                               ROOM_NAME_DERIVED, canonical_subject_map,
-                              derived_room_name, is_derived_room_name,
+                              _unique_entity_keyed, derived_room_name,
+                              is_derived_room_name, normalize_room_parents,
                               normalize_scene_subjects,
                               same_subject)
 from world.spatial_senses import apply_comms_ops, normalize_scene_comms
@@ -967,7 +969,7 @@ def _dedup_duplicate_entity_keys(entities, incoming_entities=None):
     return entities
 
 
-def _shield_standing_bearings(prior_rooms, incoming_rooms):
+def _shield_standing_bearings(prior_rooms, incoming_rooms, add_warning=None):
     """Refuse a ONE-SIDED re-bearing of a doorway both sides already agree on.
 
     A doorway whose two declared sides carry opposite-consistent bearings is
@@ -1044,6 +1046,12 @@ def _shield_standing_bearings(prior_rooms, incoming_rooms):
                     if recip != opposite_bearing(new_dir):
                         edge = {k: v for k, v in edge.items() if k != "dir"}
                         touched = True
+                        if add_warning:
+                            add_warning(
+                                "kept the bearing of %s -> %s at %r: it was "
+                                "re-declared %r from one side only, and the "
+                                "two sides already agree" % (
+                                    room_id, to_id, fwd, new_dir))
                 elif not standing:
                     # ...AND THE SAME HARM FROM A SIBLING, WHICH COSTS MORE.
                     # `normalize_scene_bearings` resolves a same-bearing
@@ -1071,6 +1079,11 @@ def _shield_standing_bearings(prior_rooms, incoming_rooms):
                             None, new_dir):
                         edge = {k: v for k, v in edge.items() if k != "dir"}
                         touched = True
+                        if add_warning:
+                            add_warning(
+                                "left the bearing of %s -> %s unset: %r is the "
+                                "settled bearing of the way to %s" % (
+                                    room_id, to_id, new_dir, held))
             edges.append(edge)
         out[room_id] = {**room, "adjacent": edges} if touched else room
     return out
@@ -1769,6 +1782,153 @@ def _onto_standing_spellings(merged, ledger, incoming):
     return out
 
 
+def _onto_standing_positions(merged, incoming):
+    """This beat's `positions` writes, each keyed by the spelling the ledger
+    already stands that body under -- `_onto_standing_spellings` for an alias
+    or an id the subject fold would move, and the same for a CASE VARIANT of
+    a standing key, which no fold reaches: `{HINAMI: yard}` beside a standing
+    `Hinami` lands on `Hinami`. A key that names nobody standing is left
+    exactly as written. Case and spacing only, never a looser fold: two
+    beings whose names differ by more than that stay two."""
+    table = merged.get("positions")
+    if not isinstance(incoming, dict) or not incoming \
+            or not isinstance(table, dict) or not table:
+        return incoming
+    remapped = _onto_standing_spellings(merged, "positions", incoming)
+    standing = {}
+    for key in table:
+        standing.setdefault(str(key).strip().casefold(), key)
+    out = {}
+    for name, room in remapped.items():
+        if name not in table:
+            name = standing.get(str(name or "").strip().casefold(), name)
+        out[name] = room
+    return out
+
+
+def _removal_key(merged, raw, say=None):
+    """The entity key a `remove_entities` entry names, or None.
+
+    The key itself, else the ONE entity its name, alias or case names
+    (`_unique_entity_keyed`: names beat aliases, a tie is a miss). A miss
+    removes nothing and is said, because a removal that silently did not
+    happen leaves the thing in every view the beat thinks it took it from.
+    """
+    text = str(raw or "").strip()
+    entities = merged.get("entities") or {}
+    if not text:
+        return None
+    if text in entities:
+        return text
+    eid, entity = _unique_entity_keyed(merged, text)
+    if eid is not None and entity:
+        return eid
+    if say:
+        from world.spatial_identity import _entities_named
+        primary, aliased = _entities_named(merged, text)
+        if len(primary) > 1 or (not primary and len(aliased) > 1):
+            say("removed nothing for %r: it names more than one entity "
+                "(%s); remove one by its id" % (text, ", ".join(
+                    sorted(str(eid) for eid, _e in (primary or aliased)))))
+        else:
+            say("removed nothing for %r: no entity in the scene answers to "
+                "it" % text)
+    return None
+
+
+#: The subject-keyed rows that STAND a thing somewhere or bind it to another
+#: being, which go when the thing leaves the scene: its scale, and the
+#: following rows naming it as follower or as followed.
+_REMOVED_WITH_THE_SUBJECT = ("scales",)
+
+
+def _drop_subject_rows(merged, folded_names):
+    """Drop every `contained` record whose subject OR holder is one of
+    `folded_names`, the removed thing's scale, and every following row in
+    which it follows or is followed. Mutates."""
+    def named(value):
+        return str(value or "").strip().casefold() in folded_names
+
+    contained = merged.get("contained")
+    if isinstance(contained, dict):
+        for key in [k for k, rec in contained.items()
+                    if named(k) or (isinstance(rec, dict) and named(rec.get("in")))]:
+            contained.pop(key, None)
+    for ledger in _REMOVED_WITH_THE_SUBJECT:
+        table = merged.get(ledger)
+        if isinstance(table, dict):
+            for key in [k for k in table if named(k)]:
+                table.pop(key, None)
+    following = merged.get("following")
+    if isinstance(following, dict):
+        for key in [k for k, rec in following.items()
+                    if named(k) or (isinstance(rec, dict) and named(rec.get("target")))]:
+            following.pop(key, None)
+
+
+def _retire_room(merged, room_id):
+    """Take a room out of the scene WITH every way into it: the room, every
+    edge any room declares to it, the passage records naming it, and the
+    substances deposited on it. The removal half of `remove_adjacent`'s
+    "a doorway is one object with two ends", applied to every doorway the
+    room had. Mutates."""
+    rid = str(room_id)
+    merged["rooms"].pop(room_id, None)
+    for room in merged["rooms"].values():
+        if isinstance(room, dict) and isinstance(room.get("adjacent"), list):
+            kept = [edge for edge in room["adjacent"]
+                    if not (isinstance(edge, dict) and str(edge.get("to")) == rid)]
+            if len(kept) != len(room["adjacent"]):
+                room["adjacent"] = kept
+    passages = merged.get("passages")
+    if isinstance(passages, dict):
+        for pid in [pid for pid, rec in passages.items()
+                    if isinstance(rec, dict)
+                    and rid in {str(r) for r in (rec.get("rooms") or ())}]:
+            passages.pop(pid, None)
+    merged["substances"] = [
+        record for record in (merged.get("substances") or [])
+        if not isinstance(record, dict)
+        or str(record.get("target") or "") != rid
+    ]
+
+
+def _retire_interiors_of(merged, entity_id, folded_names, say=None):
+    """Retire the rooms whose `parent_entity` names a removed entity, unless
+    something stands in one: then it is kept, and said."""
+    rooms = merged.get("rooms") or {}
+    owned = [rid for rid, room in rooms.items()
+             if isinstance(room, dict)
+             and str(room.get("parent_entity") or "").strip().casefold()
+             in folded_names | {str(entity_id).strip().casefold()}]
+    for rid in owned:
+        inside = sorted(str(k) for k, v in merged["positions"].items()
+                        if str(v) == str(rid))
+        if inside:
+            if say:
+                say("kept %r, the inside of the removed %r: %s still "
+                    "stand%s in it" % (rid, entity_id, ", ".join(inside),
+                                       "s" if len(inside) == 1 else ""))
+            continue
+        _retire_room(merged, rid)
+
+
+def _report_positions_nowhere(merged, incoming_positions, say):
+    """Say which of this beat's `positions` writes stand a body in a room the
+    scene does not hold, after every derivation has had its say."""
+    rooms = merged.get("rooms") or {}
+    positions = merged.get("positions") or {}
+    for name in (incoming_positions or {}):
+        where = positions.get(name)
+        if not isinstance(where, str) or not where.strip():
+            continue
+        if where in rooms or _ci_get(rooms, where) is not None:
+            continue
+        say("placed %s in %r, a room this scene does not hold: %s stands "
+            "nowhere until a beat builds that room or moves them" % (
+                name, where, name))
+
+
 def _station_moved_off_its_pin(current, incoming) -> bool:
     """Does this incoming station name an anchor that is not the one the
     standing `cell` was written with?
@@ -1831,6 +1991,7 @@ def merge_scene_with_diff(
     causal_guard=None,
     age_contacts=True,
     _in_program=False,
+    _owned=False,
 ) -> dict:
     """`carriers` is ``{spelling: room}`` for the bodies another ledger
     stands in the scene's rooms this beat (`charter_runtime.charter_carriers`),
@@ -1912,7 +2073,14 @@ def merge_scene_with_diff(
     # before/after comparisons order-dependent and could contaminate rollback
     # preparation.  Scene merges are correctness boundaries, so pay the small
     # cost of a real copy here.
-    merged = copy.deepcopy(scene)
+    # `_owned=True` is a caller saying both arguments are FRESH COPIES it
+    # holds and will not read again, so the two deep copies below would buy
+    # nothing: the merge spent 29% of an empty merge in `copy.deepcopy` on
+    # chat 172's scene, and a caller that copies first (`agents.
+    # director_movement`'s route preview) paid four copies for one merge
+    # (audit world_spatial_truth E1, 2026-11-01). The default keeps the
+    # correctness argument below intact for everyone else.
+    merged = scene if _owned else copy.deepcopy(scene)
     # AND OF THE DIFF, for the same reason the other way round: a room or a
     # thing new to this merge is stood into `merged` as the diff's own record,
     # so every repair made to it below -- the orphan pass's exit, a name, a
@@ -1922,7 +2090,7 @@ def merge_scene_with_diff(
     # planned stubs an exit to the inn through the shared lists, and the
     # commit merged them onto the launched town -- the common room opened onto
     # sixteen places, three of them galleries underground.
-    diff = copy.deepcopy(diff)
+    diff = diff if _owned else copy.deepcopy(diff)
 
     merged["rooms"] = dict(merged.get("rooms") or {})
     merged["entities"] = dict(merged.get("entities") or {})
@@ -1930,12 +2098,19 @@ def merge_scene_with_diff(
 
     _prior_rooms = (merged["rooms"]
                     if isinstance(merged.get("rooms"), dict) else {})
+    # WHAT THE MERGE REFUSES OR CANNOT LAND, IT SAYS -- through the report the
+    # commit already routes to the Director (`crossing_report`). The three
+    # edge shields built their refusal sentence and their only live caller
+    # passed nothing to receive it, so a beat that sealed a doorway from one
+    # side, or re-bore one, was refused with no word anywhere (audit
+    # world_spatial_truth F19 / Q1, 2026-11-01).
+    _say = crossing_report.append if isinstance(crossing_report, list) else None
     incoming_rooms = _shield_standing_bearings(
-        _prior_rooms, diff.get("rooms") or {})
+        _prior_rooms, diff.get("rooms") or {}, _say)
     incoming_rooms = _shield_standing_passage(
-        _prior_rooms, incoming_rooms)
+        _prior_rooms, incoming_rooms, _say)
     incoming_rooms = _shield_minted_edges(
-        _prior_rooms, incoming_rooms)
+        _prior_rooms, incoming_rooms, _say)
     incoming_rooms = _mirror_symmetric_barriers(
         _prior_rooms, incoming_rooms)
     incoming_rooms = _name_nameless_new_rooms(_prior_rooms, incoming_rooms)
@@ -2033,6 +2208,14 @@ def merge_scene_with_diff(
     for _bad in [k for k in merged["entities"] if k in NON_ENTITY_FIELD_KEYS]:
         merged["entities"].pop(_bad, None)
 
+    # A ROOM NAMES ITS HOLDER BY THE HOLDER'S KEY (`holder_key`), whatever
+    # spelling the beat reached for -- after this beat's entities have
+    # landed, so a holder minted in the same beat resolves, and before
+    # anything reads the interior index. Audit world_spatial_truth F1
+    # (2026-11-01): `parent_entity: "Mirelle"` for `mirelle_01` kept an
+    # authored `open` way into a body and showed its occupant to the room.
+    normalize_room_parents(merged)
+
     # Momentary state expires unless this diff re-asserted it WITH A CHANGED
     # VALUE -- the one deliberate exception to key-wise state merging; see
     # `_TRANSIENT_ENTITY_STATE_KEYS` for the read-back loop it closes. The
@@ -2059,6 +2242,15 @@ def merge_scene_with_diff(
         merged.pop("expired_entity_state", None)
 
     if isinstance(incoming_positions, dict):
+        # THE FRESH WRITE WINS, ON THE SPELLING THE LEDGER ALREADY STANDS --
+        # the rule `stations` and `poses` already have (`_onto_standing_
+        # spellings`). A blind update under an alias was discarded by the
+        # subject fold, which keeps the record already under the canonical
+        # spelling, and a case variant stood one body in two rooms. Measured
+        # (audit world_spatial_truth F9, 2026-11-01): `{Mel: kitchen}` for
+        # Mellisande came back `{Mellisande: hall}`; `{HINAMI: yard}` came
+        # back `{Hinami: hall, HINAMI: yard}`.
+        incoming_positions = _onto_standing_positions(merged, incoming_positions)
         merged["positions"].update(incoming_positions)
     # The same refusal for the position ledger: a field name is not a body,
     # so it cannot stand in a room. After the update so an incoming key is
@@ -2141,7 +2333,14 @@ def merge_scene_with_diff(
                         and {str(r) for r in (rec.get("rooms") or ())} == ends]:
                 passages.pop(pid, None)
 
-    for entity_id in diff.get("remove_entities") or []:
+    for raw_id in diff.get("remove_entities") or []:
+        # BY ANY SPELLING THAT NAMES ONE ENTITY. A removal by display name was
+        # a silent no-op (audit world_spatial_truth F21, 2026-11-01:
+        # "brass lamp" for `lamp_7` removed nothing); an ambiguous or unknown
+        # one still removes nothing, and now says so.
+        entity_id = _removal_key(merged, raw_id, _say)
+        if entity_id is None:
+            continue
         entity = merged["entities"].pop(entity_id, None)
 
         if not entity:
@@ -2182,18 +2381,38 @@ def merge_scene_with_diff(
             }
             if not merged["room_since"]:
                 merged.pop("room_since", None)
+        # NOTHING STANDS THE REMOVED THING ANYWHERE ANY MORE (audit
+        # world_spatial_truth F3, 2026-11-01). Its carriage record re-derived
+        # its position every later merge -- a consumed coin stood in the hall,
+        # "held", for ever -- and a record naming it as the HOLDER released
+        # nothing it carried. Both go: what it carried is released where it
+        # last stood, which is where its holder was. Its scale and its
+        # following rows go with it, and anyone following it stops.
+        _drop_subject_rows(merged, folded_names)
+        # ...AND ITS INSIDE GOES WITH IT, when nobody is in there (F4): an
+        # interior is a fact about its holder, and a shattered box's console
+        # room stood on the beach, walkable through a frozen doorway. An
+        # occupied one is kept and the beat is told -- the commit's own guard
+        # refuses that removal before it gets here.
+        _retire_interiors_of(merged, entity_id, folded_names, _say)
 
-    occupied_rooms = set(merged["positions"].values())
+    occupied_rooms = {str(v) for v in merged["positions"].values() if v}
 
     for room_id in diff.get("remove_rooms") or []:
         if room_id in occupied_rooms:
+            # Refused, as before, and now SAID (audit world_spatial_truth F11):
+            # a room something still stands in is not removed by a list entry.
+            if _say:
+                held = sorted(str(k) for k, v in merged["positions"].items()
+                              if str(v) == str(room_id))
+                _say("kept the room %r: it was named for removal, but %s "
+                     "still stand%s in it" % (room_id, ", ".join(held),
+                                              "s" if len(held) == 1 else ""))
             continue
-        merged["rooms"].pop(room_id, None)
-        merged["substances"] = [
-            record for record in (merged.get("substances") or [])
-            if not isinstance(record, dict)
-            or str(record.get("target") or "") != str(room_id)
-        ]
+        # A REMOVED ROOM TAKES ITS DOORWAYS WITH IT (F11): every edge into it
+        # stood, so `spatial_rel(hall, cellar)` still read `open_door / near`
+        # and `effective_anchors` kept minting a `door:cellar` for it.
+        _retire_room(merged, room_id)
 
     # A room that names a parent entity IS that entity's interior, in both of
     # the places the engine writes that fact down. Runs first of the three,
@@ -2342,6 +2561,23 @@ def merge_scene_with_diff(
             if not label:
                 continue
             record = _clean_containment(raw, label) if raw else None
+            if record is None and raw not in (None, {}, "", []):
+                # A WRITE THAT DOES NOT CLEAN IS NOT A RELEASE. Only an
+                # explicit empty value is (`encoder/containment.txt`); a
+                # record restating only its mode, naming its holder under
+                # another key, arriving as a list or naming the subject as
+                # its own holder said nothing the ledger can read, and the
+                # standing record stands. Audit world_spatial_truth F5
+                # (2026-11-01): each of those shapes walked a jarred body
+                # free, with no report -- silence and defaults are never
+                # erasure anywhere else in this merge.
+                if isinstance(inventory_report, list):
+                    inventory_report.append(
+                        "containment for %r was not read -- it names no "
+                        "holder as `in` (written %s); the standing record "
+                        "is kept, and only an empty value releases" % (
+                            label, json.dumps(raw, ensure_ascii=False, default=str)[:120]))
+                continue
             # One word per fact, at ingest (`canonical_enclosure_mode`): a
             # body `inside` another body is in its interior, a place.
             record = canonical_enclosure_mode(merged, record)
@@ -2518,6 +2754,12 @@ def merge_scene_with_diff(
     # ...and a position that names an ENTITY rather than a room is repaired
     # after that, so a real containment record always wins over the guess.
     repair_entity_positions(merged)
+    # A POSITION THIS BEAT WROTE INTO A ROOM THE SCENE DOES NOT HOLD is
+    # reported, never repaired (audit world_spatial_truth F20, 2026-11-01):
+    # the body stands nowhere -- `separated / far` from everyone -- and only
+    # the Director knows whether the room was meant to be built.
+    if _say:
+        _report_positions_nowhere(merged, incoming_positions, _say)
     # A bodiless voice is not standing anywhere; a position on one is a
     # category error that no author can currently delete by hand.
     prune_bodiless_positions(merged)

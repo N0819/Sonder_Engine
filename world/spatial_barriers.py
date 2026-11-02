@@ -371,7 +371,10 @@ def normalize_barrier(value: str | None, *, unresolved: set | None = None) -> st
     if direct is not None:
         return direct
 
-    key = re.sub(r"[^a-z0-9]+", "_", raw).strip("_")
+    # `fold_key`: punctuation to one separator exactly as the ASCII class
+    # did, and a full-width ｗａｌｌ (NFKC) read as the word it is.
+    from language_runtime import fold_key
+    key = fold_key(raw, "_")
     if not key:
         # Punctuation with no word in it: something was written and nothing
         # can be read from it, which is the unread case and not the silent one.
@@ -429,8 +432,8 @@ def barrier_fastening(value) -> str:
     """
     if normalize_barrier(value) != "closed_door":
         return ""
-    key = re.sub(r"[^a-z0-9]+", "_",
-                 str(value or "").strip().casefold()).strip("_")
+    from language_runtime import fold_key
+    key = fold_key(str(value or "").strip(), "_")
     tokens = key.split("_") if key else []
     for qualifier in _BARRIER_FAST_QUALIFIERS:
         if qualifier in tokens:
@@ -491,8 +494,25 @@ def normalize_scene_barriers(scene: dict) -> dict:
         for edge in adjacency:
             if not isinstance(edge, dict):
                 continue
-            edge["barrier"] = _barrier_against_its_own_name(
-                normalize_barrier(edge.get("barrier")), edge.get("name"))
+            written = edge.get("barrier")
+            folded = normalize_barrier(written)
+            # A SEAL IS REMEMBERED. `welded_door`, `bricked_up`, `boarded_door`
+            # and `sealed` fold to `wall` and the written word is not kept, so
+            # on the next merge the name floor below could not tell a sealed
+            # door from a bare unread `wall` and reopened it as a shut door
+            # any hand opens -- "blast doors" welded shut were `closed_door`
+            # after one merge (audit world_spatial_structure_light F4,
+            # 2026-11-01), against `_BARRIER_SEAL_QUALIFIERS`' own rule that a
+            # qualifier must not promote one back to a door it can be opened
+            # through. The flag rides the edge while it stays a wall (a
+            # re-echoed plain `wall` keeps it) and goes the moment the edge is
+            # anything else.
+            if folded == "wall" and _written_as_sealed(written):
+                edge["sealed"] = True
+            elif folded != "wall":
+                edge.pop("sealed", None)
+            edge["barrier"] = folded if edge.get("sealed") \
+                else _barrier_against_its_own_name(folded, edge.get("name"))
             named = passage_direction(edge)
             if named and named not in (str(room_id), str(edge.get("to"))):
                 edge.pop("passage_from", None)
@@ -509,6 +529,14 @@ _OPENING_WORDS = re.compile(
     r"\b(?:door|doors|doorway|doorways|archway|arch|hatch|gate|gateway|"
     r"entrance|entry|exit|opening|threshold|stairs|staircase|stairway|"
     r"ladder|portal)\b", re.IGNORECASE)
+
+
+def _written_as_sealed(value) -> bool:
+    """Was this barrier WRITTEN with a seal qualifier (`_BARRIER_SEAL_
+    QUALIFIERS`: sealed, bolted, welded, bricked, boarded, solid)?"""
+    from language_runtime import fold_key
+    tokens = fold_key(str(value or ""), "_").split("_")
+    return any(qualifier in tokens for qualifier in _BARRIER_SEAL_QUALIFIERS)
 
 
 def _barrier_against_its_own_name(barrier, name):
@@ -982,7 +1010,16 @@ def effective_adjacent(scene: dict, room_id) -> list:
                        if k not in ("to", "dir", "vertical")}
             derived["to"] = other_id
             derived["implicit"] = True
-            bearing = opposite_bearing(normalize_bearing(edge.get("dir")))
+            # A doorway is the same opening seen from the opposite wall, so its
+            # bearing reverses; a STAIR is one shaft whose end sits on the same
+            # wall of each floor (`spatial_orientation.normalize_scene_bearings`
+            # rules it for a stair declared from both sides), so it does not.
+            # Reversed, a stair declared upstairs only put its foot on the
+            # opposite wall of the hall (audit world_spatial_movement_sight
+            # F11, 2026-11-01).
+            far_bearing = normalize_bearing(edge.get("dir"))
+            bearing = far_bearing if (far_bearing and edge.get("vertical")) \
+                else opposite_bearing(far_bearing)
             if bearing:
                 derived["dir"] = bearing
             vertical = opposite_vertical(

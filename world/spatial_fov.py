@@ -155,11 +155,35 @@ ROOM_CORNERS = ("ne", "se", "sw", "nw")
 #: Eye height, and equally the top of the body, by the body's own posture.
 #: The vocabulary is `world/comfort`'s -- the one place the engine already
 #: reads a posture token -- with `crouching` added because it is the posture
-#: this layer exists for. Unknown -> standing: the tallest eye sees most and
-#: the tallest body is most visible, which is the direction that subtracts
-#: least.
+#: this layer exists for. NOTHING WRITTEN -> standing: the tallest eye sees
+#: most. A posture WRITTEN and unreadable is `UNREAD_POSTURE` since
+#: 2026-11-01, and as the TARGET of a line it stands at
+#: `UNREAD_POSTURE_TOP`, not at standing (`target_rank`, below).
 _EYE_RANK = {"standing": 2.0, "sitting": 1.5, "kneeling": 1.5,
              "crouching": 1.0, "lying": 0.5}
+
+#: The engine's own posture classes: the closed vocabulary sight reads a
+#: body's height by. A pose may state one outright as `posture_class`
+#: beside its free `posture` text, and that is read first.
+POSTURE_CLASSES = tuple(_EYE_RANK)
+
+#: What `posture_class` answers for a posture that IS written and that none
+#: of the engine's classes can read -- "reclining", "curled on her side",
+#: 横たわっている. It used to read `standing`, the tallest and most visible
+#: body: 3,074 of 15,689 posture writes (19.6%) were unclassified, at least
+#: 505 of them plainly low, so a body the fiction laid down behind a
+#: waist-high counter was SEEN over it (audit world_spatial_movement_sight
+#: F1, 2026-11-01).
+UNREAD_POSTURE = "unread"
+
+#: How tall an UNREAD posture stands as the TARGET of a line of sight -- the
+#: one decision the lane ruling names: never assume standing for "is this body
+#: seen over the sill". The lowest class, so a fixture between hides it.
+#: OWNER-VISIBLE, and a trade: a written posture the classes cannot read
+#: that is really upright ("leaning on the bar") is now hidden behind a
+#: waist-high fixture until the pose states its `posture_class`. The
+#: observer's own eye keeps the standing default.
+UNREAD_POSTURE_TOP = "lying"
 _POSTURE_TOKENS = {
     "standing": "standing", "stands": "standing", "upright": "standing",
     "sitting": "sitting", "seated": "sitting", "sits": "sitting",
@@ -318,15 +342,15 @@ def room_has_geometry(scene: dict, room_id) -> bool:
 
 
 def _tokens(text):
-    import re
-    return [t for t in re.split(r"[^a-z]+", str(text or "").casefold()) if t]
+    from language_runtime import fold_words
+    return fold_words(text)
 
 
 def posture_word_class(text):
     """standing | sitting | kneeling | crouching | lying for a posture as
-    written, or None when no word of it is one this layer knows -- the
-    question `posture_class` cannot answer, because it reads an unknown
-    posture as standing (the direction that subtracts least from sight)."""
+    written, or None when no word of it is one this layer knows -- the text
+    alone, where `posture_class` reads a body's whole pose record and answers
+    `UNREAD_POSTURE` for a written posture it cannot read."""
     for token in _tokens(text):
         if token in _POSTURE_TOKENS:
             return _POSTURE_TOKENS[token]
@@ -335,22 +359,51 @@ def posture_word_class(text):
 
 def posture_class(scene: dict, name: str) -> str:
     """standing | sitting | kneeling | crouching | lying, from the body's
-    own pose record, then its entity state -- exact tokens, never prose."""
+    own pose record, then its entity state -- the pose's stated
+    `posture_class` first (the engine's own closed vocabulary), then exact
+    tokens, never prose.
+
+    A posture that is WRITTEN and that nothing here can read answers
+    `UNREAD_POSTURE` rather than `standing`; every reader keyed by class
+    (`EYE_M.get(...)`, `_EYE_RANK.get(...)`) still falls back to standing for
+    it, and `target_rank` takes it at `UNREAD_POSTURE_TOP`. Nothing written at
+    all is `standing`, as before."""
     poses = (scene or {}).get("poses") or {}
     pose = _ci_get(poses, name) if isinstance(poses, dict) else None
     fields = []
+    written = False
     if isinstance(pose, dict):
+        stated = str(pose.get("posture_class") or "").strip().casefold()
+        if stated in _EYE_RANK:
+            return stated
         fields.append(pose.get("posture"))
+        written = written or bool(str(pose.get("posture") or "").strip())
     entities = (scene or {}).get("entities") or {}
     ent = _ci_get(entities, name) if isinstance(entities, dict) else None
     if isinstance(ent, dict):
         state = ent.get("state") if isinstance(ent.get("state"), dict) else {}
         fields.extend([state.get("posture"), state.get("position")])
+        # `position` is as often WHERE as HOW ("by the window"), so only a
+        # written `posture` makes an unreadable answer unread.
+        written = written or bool(str(state.get("posture") or "").strip())
     for field in fields:
         for token in _tokens(field):
             if token in _POSTURE_TOKENS:
                 return _POSTURE_TOKENS[token]
-    return "standing"
+    return UNREAD_POSTURE if written else "standing"
+
+
+def target_rank(scene: dict, name: str) -> float:
+    """How tall `name` stands as the TARGET of a line of sight: `eye_rank`,
+    except that an unread posture is taken at `UNREAD_POSTURE_TOP` rather
+    than standing (F1)."""
+    if posture_class(scene, name) == UNREAD_POSTURE:
+        rank = _EYE_RANK[UNREAD_POSTURE_TOP]
+        from world.site_plan import CLEAR_ALTITUDE_M, body_altitude_m
+        if body_altitude_m(scene, name) >= CLEAR_ALTITUDE_M:
+            rank = max(rank, _HEIGHT_RANK["full"] + 0.5)
+        return rank
+    return eye_rank(scene, name)
 
 
 def eye_rank(scene: dict, name: str) -> float:
@@ -1931,10 +1984,24 @@ def _hold_doorways(scene, field):
     meets the body, and a walk through it finds it filled
     (`spatial_walk`). Read from cells, so a body with no cell is in no
     doorway."""
+    from world.spatial_identity import scene_names_body
     positions = (scene or {}).get("positions") or {}
     for name, room_id in positions.items():
         room_id = str(room_id)
         if room_id not in field.offsets:
+            continue
+        # A BODY, by the one predicate the walk's `held_cells` asks: a key
+        # dropped on the threshold, or a lantern set down in it, fills no
+        # doorway. Measured (audit world_spatial_movement_sight F8,
+        # 2026-11-01): a `brass key` pinned on a doorway cell hid the next
+        # room at standing height -- `posture_class` of a thing is
+        # `standing` -- while the walk stepped straight past it.
+        # Tiers 2-3 of the one predicate (`ledgers=False`): this runs inside
+        # the memoised field build, whose read set does not stamp the body
+        # ledgers (`scene_memo.SCENE_READS`) -- an entity record of a thing's
+        # kind is not a body, a placed subject the scene records nothing of
+        # is one.
+        if not scene_names_body(scene, name, ledgers=False):
             continue
         cell = body_cell(scene, name)
         if cell is None:
@@ -1946,7 +2013,8 @@ def _hold_doorways(scene, field):
         if tuple(cell) not in doors:
             continue
         placed = field.cell_of(room_id, tuple(cell))
-        rank = _EYE_RANK.get(posture_class(scene, name), 2.0)
+        # Its own height, flight included (`eye_rank`).
+        rank = eye_rank(scene, name)
         if rank > field.held.get(placed, (-1.0, None))[0]:
             field.held[placed] = (rank, str(name))
 
@@ -2350,12 +2418,21 @@ def _unbeared_doorways(scene, room_id) -> set:
     from world.spatial_geometry import door_anchor_id
     from world.spatial_orientation import normalize_bearing
 
+    from world.spatial_barriers import effective_adjacent
+
     rooms = (scene or {}).get("rooms") or {}
     room = rooms.get(room_id)
     if not isinstance(room, dict):
         return set()
     out = set()
-    for edge in room.get("adjacent") or []:
+    # EVERY doorway the room has, the far-declared ones included
+    # (`effective_adjacent`): a doorway only the far room declared still gets
+    # a hash-placed anchor here, and reading this room's own list alone left
+    # it out of the carve-out -- facing away from it culled it with basis
+    # `cone` and handed it a hash `side` (audit world_spatial_movement_sight
+    # F9, 2026-11-01; 31.3% of room pairs are one-sided). UNBUILT_PERCEPTION
+    # 1.147's own rule: "on either side of the edge".
+    for edge in effective_adjacent(scene, room_id):
         if not isinstance(edge, dict) or not edge.get("to"):
             continue
         other = str(edge["to"])
@@ -2555,7 +2632,7 @@ def body_visibility(scene: dict, observer: str, target: str) -> dict:
     origin = field.cell_of(o_room, o_cell)
     goal = field.cell_of(t_room, t_cell)
     eye = eye_rank(scene, observer)
-    top = eye_rank(scene, target)
+    top = target_rank(scene, target)
     facing = effective_facing(scene, observer)
     sector = _cone_sector(facing, origin, goal) if facing else None
     if origin == goal:
@@ -2622,7 +2699,16 @@ def body_visibility(scene: dict, observer: str, target: str) -> dict:
                            for c in (placed.get(aid) or {}).get("cells") or ()}
         passable = {cell: (None if rest is not None and encloses(rest[1]) else rest)
                     for cell, rest in passable.items()}
-    seen = _visible_set(field, origin, eye, top, passable)
+    # THE CAST DEPENDS ON THE OBSERVER'S CELL, THE TWO HEIGHTS AND WHAT THE
+    # BODIES LIE ON -- not on the pair -- so a read pass casts it once per
+    # distinct question (`scene_memo`). Unmemoised it ran per call: the
+    # Director's digest asks n^2 pairs, and 56 pairs in a 64x64 room took
+    # 409 ms, 96% of it here (audit world_spatial_movement_sight E1,
+    # 2026-11-01). The answer is a set read only by membership.
+    seen = scene_memo(
+        scene, ("visible_set", o_room, tuple(origin), eye, top,
+                frozenset(passable.items())),
+        lambda: _visible_set(field, origin, eye, top, passable))
     blocker, tallest, tallest_id = _occluders_on(field, origin, goal, eye, top,
                                                  passable=passable)
     visible = touching or (goal in seen and blocker is None)
