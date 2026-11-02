@@ -21,9 +21,13 @@ ambience source's, set through `/api/research`.
 
 from __future__ import annotations
 
+import codecs
 import html
+import ipaddress
 import re
+import socket
 from html.parser import HTMLParser
+from urllib.parse import urljoin, urlsplit
 
 from core.db import get_setting
 
@@ -45,6 +49,12 @@ FETCH_BYTES_CAP = 400_000
 #: What a fetched page identifies itself as. Honest, and enough for a
 #: server that refuses anonymous clients to refuse us by name.
 USER_AGENT = "SonderEngine-WritersRoom/1.0 (research; local interactive fiction)"
+
+#: Redirects one page may take before the room does without it. Each hop is
+#: followed by hand so its address can be checked (`_refuse_private`);
+#: requests' own default is 30. Named per the owner's ask-before-limiting
+#: rule.
+FETCH_REDIRECTS_MAX = 5
 
 #: Installed by a test (an object with `.search(query, k)` and `.fetch(url)`).
 #: When set, no adapter and no key is consulted. Never set in production code.
@@ -162,30 +172,176 @@ def html_to_text(raw):
     return " ".join(parser.title.split()), " ".join(text.split())
 
 
-def _fetch_html(url):
-    """GET one page under the byte cap and return its text."""
-    import requests
+# ---------------------------------------------------------------------------
+# Only public pages
+# ---------------------------------------------------------------------------
+#
+# `fetch_page` is "Read one page the search returned", and nothing held it to
+# that: the address was checked for its scheme alone, and requests followed
+# any redirect. So under a granted research mandate the Room's model -- or
+# text injected into a page or snippet it read -- could ask for
+# `http://127.0.0.1:8181/` (the owner's own embedding host), a LAN address,
+# or on a cloud VM `http://169.254.169.254/`, or a public page that 302s
+# there, and the body came back into a third-party model's context and could
+# be filed as `web_reference` lore (review 2026-11-01, llm_providers_quality
+# F4). A search engine returns public pages; the room reads nothing else.
+
+def _resolve(host):
+    """Every address `host` resolves to. The seam a test replaces."""
+    return [info[4][0] for info in socket.getaddrinfo(
+        host, None, type=socket.SOCK_STREAM)]
+
+
+def _public_address(text):
+    """Is `text` an IP address on the public internet?"""
     try:
-        resp = _session().get(url, timeout=RESEARCH_TIMEOUT, stream=True,
-                              headers={"User-Agent": USER_AGENT})
-    except requests.exceptions.RequestException as exc:
-        raise ResearchError("the page could not be reached: %s" % exc)
-    if resp.status_code >= 400:
-        raise ResearchError("the page answered %d" % resp.status_code)
-    ctype = str(resp.headers.get("content-type") or "").casefold()
-    if "html" not in ctype and "text" not in ctype:
-        raise ResearchError("the page is not text (%s)" % (ctype or "unknown type"))
-    body = b""
-    for chunk in resp.iter_content(chunk_size=16_384):
-        body += chunk
-        if len(body) >= FETCH_BYTES_CAP:
+        ip = ipaddress.ip_address(str(text).split("%", 1)[0])
+    except ValueError:
+        return False
+    if ip.version == 6 and ip.ipv4_mapped is not None:
+        ip = ip.ipv4_mapped
+    return ip.is_global and not ip.is_multicast
+
+
+def _refuse_private(url):
+    """Raise unless every address `url`'s host resolves to is public:
+    loopback, private, link-local (cloud metadata), shared and reserved
+    ranges are this machine or its network, never a page."""
+    parts = urlsplit(url)
+    if parts.scheme.casefold() not in ("http", "https"):
+        raise ResearchError("only an http or https page can be fetched")
+    host = parts.hostname or ""
+    if not host:
+        raise ResearchError("the page's address names no host")
+    try:
+        ipaddress.ip_address(host.split("%", 1)[0])
+        addresses = [host]
+    except ValueError:
+        try:
+            addresses = _resolve(host)
+        except OSError as exc:
+            raise ResearchError("the page's host could not be found: %s" % exc)
+    # EVERY address, not any: a name that resolves to one public and one
+    # private address may be connected to the private one.
+    if not addresses or not all(_public_address(a) for a in addresses):
+        raise ResearchError(
+            "the page is not on a public address (%s); the room reads public "
+            "pages, never this machine or its network" % host)
+
+
+def _peer_address(resp):
+    """The address the response actually came from, where the transport
+    shows it -- the check after the connection, against a name that
+    resolved one way for `_refuse_private` and another for the socket.
+    Best-effort: None where it cannot be read."""
+    raw = getattr(resp, "raw", None)
+    for conn in (getattr(raw, "_connection", None), getattr(raw, "connection", None)):
+        sock = getattr(conn, "sock", None)
+        if sock is None:
+            continue
+        try:
+            return sock.getpeername()[0]
+        except (OSError, TypeError, IndexError, AttributeError):
+            continue
+    return None
+
+
+# ---------------------------------------------------------------------------
+# A page's own charset
+# ---------------------------------------------------------------------------
+#
+# requests gives a `text/*` reply that names no charset the HTTP default,
+# ISO-8859-1, so the `"utf-8"` fallback that stood here was never reached: a
+# Japanese UTF-8 page that declares its charset only in `<meta charset>`
+# arrived as `æ¥æ¬èªã®ãã¼ã`, cached for thirty days and fileable as lore
+# (review 2026-11-01, llm_providers_quality F9). The header's charset is
+# used only when the header NAMES one; then the page's own declaration;
+# then UTF-8.
+
+_CHARSET = re.compile(r"""charset\s*=\s*["']?([A-Za-z0-9._:-]+)""", re.I)
+_META_CHARSET = re.compile(
+    r"""<meta[^>]+charset\s*=\s*["']?([A-Za-z0-9._:-]+)""", re.I)
+
+
+def _page_charset(ctype, body):
+    named = _CHARSET.search(str(ctype or ""))
+    if named:
+        return named.group(1)
+    if body.startswith(codecs.BOM_UTF8):
+        return "utf-8-sig"
+    if body.startswith((codecs.BOM_UTF16_LE, codecs.BOM_UTF16_BE)):
+        return "utf-16"
+    declared = _META_CHARSET.search(body[:4096].decode("ascii", errors="ignore"))
+    return declared.group(1) if declared else None
+
+
+def _decode_page(body, ctype):
+    charset = _page_charset(ctype, body)
+    if charset:
+        try:
+            return body.decode(charset, errors="replace")
+        except LookupError:
+            pass
+    try:
+        # Incremental, so a page cut at `FETCH_BYTES_CAP` mid-character is
+        # still read as the UTF-8 it is rather than as Windows-1252.
+        return codecs.getincrementaldecoder("utf-8")(errors="strict").decode(
+            body, final=False)
+    except UnicodeDecodeError:
+        return body.decode("cp1252", errors="replace")
+
+
+def _fetch_html(url):
+    """GET one public page under the byte cap and return its text."""
+    import requests
+    for _hop in range(FETCH_REDIRECTS_MAX + 1):
+        _refuse_private(url)
+        try:
+            resp = _session().get(url, timeout=RESEARCH_TIMEOUT, stream=True,
+                                  allow_redirects=False,
+                                  headers={"User-Agent": USER_AGENT})
+        except requests.exceptions.RequestException as exc:
+            raise ResearchError("the page could not be reached: %s" % exc)
+        if not getattr(resp, "is_redirect", False):
             break
-    raw = body.decode(resp.encoding or "utf-8", errors="replace")
+        target = str(resp.headers.get("location") or "")
+        _close(resp)
+        url = urljoin(url, target)
+    else:
+        raise ResearchError("the page redirected more than %d times"
+                            % FETCH_REDIRECTS_MAX)
+    try:
+        peer = _peer_address(resp)
+        if peer is not None and not _public_address(peer):
+            raise ResearchError(
+                "the page answered from an address that is not public (%s)" % peer)
+        if resp.status_code >= 400:
+            raise ResearchError("the page answered %d" % resp.status_code)
+        ctype = str(resp.headers.get("content-type") or "").casefold()
+        if "html" not in ctype and "text" not in ctype:
+            raise ResearchError("the page is not text (%s)" % (ctype or "unknown type"))
+        body = b""
+        for chunk in resp.iter_content(chunk_size=16_384):
+            body += chunk
+            if len(body) >= FETCH_BYTES_CAP:
+                break
+    finally:
+        # Closed on every way out: a streamed response left open held its
+        # connection until garbage collection, after the byte cap included.
+        _close(resp)
+    raw = _decode_page(body, ctype)
     if "html" in ctype:
         title, text = html_to_text(raw)
     else:
         title, text = "", " ".join(raw.split())
     return {"url": url, "title": title, "text": text}
+
+
+def _close(resp):
+    try:
+        resp.close()
+    except Exception:
+        pass
 
 
 # ---------------------------------------------------------------------------

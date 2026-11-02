@@ -265,6 +265,20 @@ def _plain(value):
     against "whisper" or "loud" saw neither -- all 42 charter voice lines of
     one playerless run fell to normal volume, a whisper among them
     (Aldermill round 5, 2026-09-23)."""
+    # THE COMMON CASE FIRST, BY EXACT TYPE: ~34% of a large validation was
+    # this walk's three `isinstance` checks on every leaf (review 2026-11-01,
+    # llm_schemas_prompts E2: 3.1 -> 2.2 ms on a 163 KB resolve). The same
+    # output by construction -- a `(str, Enum)` member's type is its enum,
+    # never `str`, and every other type takes the old checks in the old
+    # order; `model_dump(mode="json")` would NOT be the same (NaN to null,
+    # tuples to lists, non-string keys to strings).
+    kind = type(value)
+    if kind is dict:
+        return {k: _plain(v) for k, v in value.items()}
+    if kind is list:
+        return [_plain(v) for v in value]
+    if kind in _PLAIN_LEAVES:
+        return value
     if isinstance(value, Enum):
         return value.value
     if isinstance(value, dict):
@@ -272,6 +286,10 @@ def _plain(value):
     if isinstance(value, list):
         return [_plain(v) for v in value]
     return value
+
+
+#: The types `_plain` hands back as they are without asking anything else.
+_PLAIN_LEAVES = frozenset({str, int, float, bool, type(None)})
 
 
 if _PYDANTIC_V2:
@@ -404,6 +422,16 @@ def normalize_action_stage(value: Any) -> Any:
     token = _ACTION_STAGE_ALIASES.get(token, token)
     return token if token in {m.value for m in ActionStage} else value
 
+# TWO SPELLINGS OF VOCABULARIES THE ENGINE READS ELSEWHERE. No engine code
+# validates against these enums: the live spellings are
+# `story.scene.PLAYER_AUTHORITY_MODES` (enforced by
+# `agents/common_authority.apply_player_authority`) and
+# `story.scene.OFFSCREEN_LIFE_LADDER`. They are kept because tests hold the two
+# spellings to each other -- `tests/test_player_authority_mode.py`
+# (`test_the_enum_and_the_config_name_the_same_rungs`) and
+# `tests/test_offscreen_resolution.py` (the importance field is not this
+# ladder) -- found when deleting them as unreferenced (tooling_gate F5, review
+# 2026-11-01). Whether to keep two spellings at all is the owner's call.
 class PlayerAuthorityMode(str, Enum):
     actor_only = "actor_only"
     explicit_outcomes = "explicit_outcomes"
@@ -415,7 +443,7 @@ class BehaviorController(str, Enum):
     reactive = "reactive"
     stochastic = "stochastic"
     character_agent = "character_agent"
-  
+
 _VOLUME_ALIASES = {
     "": "normal",
     # The ear rung's own spellings, and nothing that could also mean a
@@ -428,15 +456,28 @@ _VOLUME_ALIASES = {
     "ear_whisper": "ear",
     "quiet": "mutter",
     "quietly": "mutter",
-    "soft": "mutter",
-    "softly": "mutter",
+    # HOW A VOICE SOUNDS IS NOT HOW FAR IT CARRIES. The encoder's card says
+    # so in as many words (`encoder/core.txt`): volume "is how far the
+    # speaker means the words to carry, never how they sound: a soft,
+    # breathy, shaky, murmured or moaned line ... carries as any voice does,
+    # at normal unless something says how far it was meant to go". This
+    # table folded `soft`/`softly` to mutter and `excited`/`enthusiastic` to
+    # loud -- a sound read as a reach -- and the card was followed by every
+    # reader but this one (review 2026-11-01, llm_schemas_prompts F2). The
+    # card's own words are listed so they read as the card says, unwarned.
+    "soft": "normal",
+    "softly": "normal",
+    "breathy": "normal",
+    "shaky": "normal",
+    "murmured": "normal",
+    "moaned": "normal",
     "conversational": "normal",
     "conversation": "normal",
     "moderate": "normal",
     "medium": "normal",
     "ordinary": "normal",
-    "enthusiastic": "loud",
-    "excited": "loud",
+    "enthusiastic": "normal",
+    "excited": "normal",
     "raised": "loud",
     "raised voice": "loud",
     "yell": "shout",
@@ -457,18 +498,24 @@ def normalize_speech_volume(value: Any) -> str:
     volume = str(value or "normal").strip().casefold()
     volume = _VOLUME_ALIASES.get(volume, volume)
 
-    if volume not in {
-        "ear",
-        "whisper",
-        "mutter",
-        "normal",
-        "loud",
-        "shout",
-        "pitched",
-    }:
+    if volume not in _VOLUMES:
+        # READ AS NORMAL, AND SAID. The default is unchanged -- which way an
+        # unknown word should fall is the owner's (UNBUILT_CHARACTERS §6.19,
+        # "the quiet fallback") -- but it was silent: raw captures held
+        # `muttered`, `low` x8, "pitched low, only for Hinami" x2 and
+        # `projected` x3 (2026-09-08..24), each graded as an ordinary voice,
+        # a line kept low heard by the whole room with nothing on the step to
+        # say so (review 2026-11-01, llm_schemas_prompts F2).
+        _note_drop(
+            f"speech volume {str(value)[:80]!r} is not one of "
+            f"{'|'.join(_VOLUMES)}; read as normal")
         return "normal"
 
     return volume
+
+
+#: The closed set a speech volume takes, in the order the card prints it.
+_VOLUMES = ("ear", "whisper", "mutter", "normal", "loud", "shout", "pitched")
 
 
 #: WHAT A VOICE CARRIES WITHOUT ITS WORDS (DESIGN_SOUND_FIELD § 15, lane A,
@@ -669,6 +716,28 @@ def _subject_field_of(model):
         # which the isinstance check below rejects along with everything else.
         slot = getattr(slot, "default", None)
     return slot if isinstance(slot, str) and slot else None
+
+
+#: `(model class, field name) -> _Declared` (None for an undeclared key).
+#: A field's shape is fixed once its class exists, and reading it
+#: (`get_args`/`get_origin` through Optional and containers) was ~35% of a
+#: large validation, recomputed for every field of every validation (review
+#: 2026-11-01, llm_schemas_prompts E1).
+_DECLARED_CACHE: dict = {}
+
+
+def _declared_for(model_cls, name):
+    """`_declared` for `model_cls`'s field `name`, read once; None when the
+    class declares no such field."""
+    key = (model_cls, name)
+    try:
+        return _DECLARED_CACHE[key]
+    except KeyError:
+        pass
+    field = _fields(model_cls).get(name)
+    declared = None if field is None else _declared(field)
+    _DECLARED_CACHE[key] = declared
+    return declared
 
 
 def _declared(field):
@@ -892,8 +961,8 @@ def _first_empty_prose_field(fields):
     said yet", which is exactly the hole a key fills, while a non-empty
     default is a value the author already chose. Optional prose is excluded
     for the same reason from the other side: where None is a legitimate
-    value, absence already means something, and `BookOp.temp_id` -- a
-    scratch handle, declared before the `name` the key actually is -- would
+    value, absence already means something, and a scratch handle declared
+    before the `name` the key actually is (the retired `BookOp.temp_id`) would
     otherwise swallow every key in a map of books.
     """
     for name, field in fields.items():
@@ -1203,11 +1272,11 @@ class LenientModel(BaseModel):
         @field_validator("*", mode="before")
         @classmethod
         def _coerce_structured_into_str(cls, value, info):
-            field = _fields(cls).get(info.field_name)
-            if field is None:
+            declared = _declared_for(cls, info.field_name)
+            if declared is None:
                 return value    # extra="allow" keys are not ours to reshape
             return _lenient_coerce(
-                value, _declared(field),
+                value, declared,
                 f"{cls.__name__}.{info.field_name}")
     else:
         @validator("from_event", pre=True, allow_reuse=True,
@@ -1566,17 +1635,22 @@ class DirectorInterpret(LenientModel):
     # Social effects of asserted input, committed once with later resolve
     # effects. Metadata, never scene state or a license to settle an attempt.
     obligations: list[dict] = Field(default_factory=list)
-    # The ruling channel, mirroring DirectorResolve. `director_interpret` fans
-    # out to the same five specialists (director.py's `_run_specialists`), so a
-    # hand reading only the player's declaration was left to infer what the
-    # Director made of it -- the exact gap the channel was built to close,
-    # on half the Director's specialist work.
+    # RETIRED WITH THE CAUSAL DIRECTOR (2026-09-27). The ruling channel, built
+    # for the five specialist hands `director_interpret` used to fan out to.
+    # Under the prose contract there are no hands to rule for: the Director
+    # writes prose, the encoder writes events, and `director._run_specialists`
+    # only splits the encoder's transforms by channel owner. No card asks for
+    # it; it was empty on 431 of 431 interpret/resolve variants since the
+    # cutover (review 2026-11-01, llm_schemas_prompts F11/F12), and the
+    # readers that remain (`director_fanout._normalized_ledger_notes`) read it
+    # empty. Declared so a stored pre-cutover variant still validates.
     ledger_notes: dict[str, str] = Field(default_factory=dict)
-    # THE OTHER HALF OF THE RULING, mirroring DirectorResolve for the same
-    # reason `ledger_notes` above does. `ledger_notes` says WHICH HAND a beat
-    # concerns; `changes_asserted` says WHAT CHANGED, in categories the engine
-    # routes (`director_scopes._CATEGORY_CHANNELS`). Only the second can be
-    # dispatched on deterministically, and interpret had only the first.
+    # RETIRED WITH THE CAUSAL DIRECTOR (2026-09-27), like `ledger_notes`
+    # above: no card asks for it and it was empty on every interpret/resolve
+    # variant since the cutover. What it was, kept as the record: the other
+    # half of the ruling, mirroring DirectorResolve. `ledger_notes` said WHICH
+    # HAND a beat concerned; `changes_asserted` said WHAT CHANGED, in
+    # categories the engine routed (`director_scopes._CATEGORY_CHANNELS`).
     #
     # Measured 2026-09-09 over 416 captured rulings: `changes_asserted` was
     # absent from 69.2% of them and from 100% of 184 interpret outputs, because
@@ -2029,7 +2103,9 @@ def _positive_float_or_none(value):
 # `kind` strings in the author's corpus), and the deterministic clamps
 # belong commit-side where model output becomes durable, per the
 # provisional-until-commit invariant. `CausalRegime`, `FictionFrame` and
-# `SpeechElement` are kept because tests use them as fixtures.
+# `SpeechElement` are the one stated exception to the rule above: nothing in
+# the engine validates against them, and they are kept only because tests
+# build them as fixtures -- so they state no shape the engine enforces.
 
 # ---- Conditions and Scheduling ----
 
@@ -2069,21 +2145,9 @@ class DestructionEffect(LenientModel):
     # mechanics.news_latency_seconds).
     news: list[dict] = Field(default_factory=list)
 
-class Engagement(LenientModel):
-    engagement_id: str
-    world_id: str
-    location_id: str
-    scale: str
-    side_ids: list[str] = Field(default_factory=list)
-    participant_ids: list[str] = Field(default_factory=list)
-    phase: str = "contact"
-    objectives: dict[str, list[dict]] = Field(default_factory=dict)
-    environment: dict[str, Any] = Field(default_factory=dict)
-    initiative_state: dict[str, Any] = Field(default_factory=dict)
-    command_state: dict[str, Any] = Field(default_factory=dict)
-    unresolved_effects: list[dict] = Field(default_factory=list)
-    started_at_seconds: float = 0.0
-    state: dict[str, Any] = Field(default_factory=dict)
+# `Engagement` (a combat engagement's shape) stood here, validated against by
+# nothing and named nowhere but by the English word in two comments; deleted
+# by the rule above (review 2026-11-01, tooling_gate F5).
 
 # ---- Reactions and Perception ----
 
@@ -2183,11 +2247,13 @@ class PoseEntry(LenientModel):
     against. Extra keys are ignored rather than refused, as everywhere else
     here -- `_clean_pose` keeps these six regardless.
     """
-    # WHICH CHUNK THIS RECORD RESOLVES -- the `event_id` of the entry in this
-    # hand's `changes_asserted` slice that it was asked to settle, or 0 when
-    # the record was restated for no numbered work item (a standing record
-    # refreshed on its own account, which is legitimate and common on
-    # record-shaped channels).
+    # WHICH CHUNK THIS RECORD RESOLVED, under the causal Director's specialist
+    # hands (deleted 2026-09-27): the `event_id` of the entry in the hand's
+    # `changes_asserted` slice it was asked to settle, or 0 for a record
+    # restated for no numbered work item. No slice is handed out under the
+    # prose contract and the encoder writes no `from_event`, so on every
+    # record written since it is 0 (registered: UNBUILT_PIPELINE §1.1 item 1).
+    # What follows is why it was built, kept as the record.
     #
     # Provenance ON THE RECORD, not beside it. `phase_sources` already carries
     # the same information as a separate map and is emitted on 25% of
@@ -2996,15 +3062,16 @@ class DirectorResolve(LenientModel):
     # handed to a specialist -- it exists so an honestly interior beat
     # stops reading like a beat that lost its changes (schemas.OmittedThought).
     thoughts_omitted: list[OmittedThought] = Field(default_factory=list)
-    # THE RULING, in the bookkeeper's own terms. Specialists exist to take
-    # the ledger work off the Director, not to adjudicate: they receive the
-    # finished prose and must each re-read it to decide what their channels
-    # now say, so five hands can reach five readings and nothing reconciles
-    # them. This is the Director keeping the authority the split was never
-    # meant to hand over -- one short natural-language ruling per specialist
+    # RETIRED WITH THE CAUSAL DIRECTOR (2026-09-27): written for the five
+    # specialist hands, which were deleted with it. No card asks for it and
+    # it was empty on every resolve variant since the cutover (review
+    # 2026-11-01, llm_schemas_prompts F11/F12); declared so a stored
+    # pre-cutover variant still validates. What it was: the ruling in the
+    # bookkeeper's own terms -- the specialists received the finished prose
+    # and each re-read it, so the Director gave one short ruling per hand
     # whose channels the beat touched, in that channel's terms.
     #
-    # ABSENCE IS THE SIGNAL. A specialist with no note has no ruling to
+    # ABSENCE WAS THE SIGNAL. A specialist with no note has no ruling to
     # record, and a bookkeeper handed no entry writes none -- which is what
     # a `poses` contract like "a touched pose is a COMPLETE replacement
     # snapshot" otherwise turns into a restatement of the last paragraph.
@@ -3703,6 +3770,27 @@ def _canonical_mind_hypothesis(value):
     })
 
 
+def _rows(what, value):
+    """A list field's rows: a list as it is, ONE object as a list of one --
+    the shape `_lenient_coerce` gives every other list field -- and anything
+    else none, said. `remember_lines` and `memory_disputes` returned `[]` for
+    a single object, silently, where `association_updates` beside them
+    wrapped it (review 2026-11-01, llm_schemas_prompts F11: `remember_lines:
+    {"quote": "Meet me at dawn", ...}` -> `[]`, no note)."""
+    if isinstance(value, (list, tuple)):
+        return list(value)
+    if isinstance(value, dict):
+        return [value]
+    if value not in (None, "", [], {}):
+        _note_drop(f"{what}: {type(value).__name__} where a list of objects "
+                   "belongs; read as none")
+    return []
+
+
+#: The axes a relationship update's single `axis`/`delta` pair may name.
+_RELATIONSHIP_AXES = ("trust", "warmth", "fear", "respect", "suspicion")
+
+
 def _canonical_relationship_update(value):
     out = _canonical_character_row(value, {
         "target_entity": ("target", "target_name", "subject"),
@@ -3710,10 +3798,15 @@ def _canonical_relationship_update(value):
     if not isinstance(out, dict):
         return out
     axis = str(out.get("axis") or "").strip().casefold()
-    if axis in {"trust", "warmth", "fear", "respect", "suspicion"}:
+    if axis in _RELATIONSHIP_AXES:
         key = f"{axis}_delta"
         if key not in out and out.get("delta") is not None:
             out[key] = out.get("delta")
+    elif axis and out.get("delta") is not None:
+        # An axis outside the set moved nothing, silently: `{axis:
+        # "affection", delta: 0.1}` validated as an all-zero update (F11).
+        _note_drop(f"relationship update axis {axis[:40]!r} is not one of "
+                   f"{'|'.join(_RELATIONSHIP_AXES)}; its delta moves nothing")
     return out
 
 
@@ -4364,8 +4457,9 @@ class CharacterOutput(LenientModel):
     # Validated by affect.apply_project_ops, which has always been complete.
     #
     # THIS FIELD DID NOT EXIST, and the whole tier died on that. The character
-    # prompt asks for `project_ops` by name in three places and prints its
-    # shape in the required JSON; commit.py reads
+    # prompt of the time asked for `project_ops` by name in three places and
+    # printed its shape in the required JSON (since the bare contract,
+    # `character_bare.compile_bare` writes the ops); commit.py reads
     # `own_result.get("project_ops")`; affect.py implements adopt/displace/
     # satisfy with a cap, a legibility floor and a required reason for giving
     # one up. Pydantic dropped every op in between, silently, because the model
@@ -4444,19 +4538,19 @@ class CharacterOutput(LenientModel):
 
     _coerce_remember_lines = validator(
         "remember_lines", pre=True, allow_reuse=True)(
-        lambda cls, v: _kept("remember_lines", v, [
-            item for item in v
+        lambda cls, v: (lambda rows: _kept("remember_lines", rows, [
+            item for item in rows
             if isinstance(item, dict) and str(item.get("quote") or "").strip()
-        ]) if isinstance(v, (list, tuple)) else [])
+        ]))(_rows("remember_lines", v)))
     _coerce_disputes = validator(
         "memory_disputes", pre=True, allow_reuse=True)(
-        lambda cls, v: _kept("memory_disputes", v, [
-            item for item in v
+        lambda cls, v: (lambda rows: _kept("memory_disputes", rows, [
+            item for item in rows
             if isinstance(item, dict) and (
                 str(item.get("memory_ref") or "").strip() or
                 str(item.get("gist") or "").strip())
             and str(item.get("now_reads") or "").strip()
-        ]) if isinstance(v, (list, tuple)) else [])
+        ]))(_rows("memory_disputes", v)))
 
     # `cue` is required and an entry without one names nothing, so it cannot be
     # applied -- but dropping the entry is right where failing the entire
@@ -4495,23 +4589,12 @@ class ScenePatch(LenientModel):
         lambda cls, v: _coerce_station_table(v)
     )
 
-class BookOp(LenientModel):
-    """A live, per-turn proposal to create ONE new child lorebook,
-    mirroring importers.py's book_ops shape (the existing manual
-    reinterpret-lorebook flow) but usable during ordinary play. temp_id
-    is this proposal's own scratch handle -- LoreOp.book_id may reference
-    it directly so an entry can be filed into a book proposed the SAME
-    commit, before it has a real database id yet."""
-    op: str = "create"
-    temp_id: Optional[str] = None
-    name: str = ""
-    book_type: str = "general"
-    summary: str = ""
-    parent_id: Optional[Union[int, str]] = None  # an existing book's int id, or another op's temp_id
-    inheritance_mode: str = "inherit"
-    scope_world_id: Optional[str] = None
-    scope_location_id: Optional[str] = None
-    anchor_entity_id: Optional[str] = None
+# `BookOp` (a per-turn proposal of one new child lorebook, whose `temp_id`
+# a same-turn `LoreOp.book_id` could name) stood here. No engine code
+# validated against it or named it once the mapping model went (2026-09-04):
+# `persist/commit_mapping` routes book ops as plain dicts. Deleted with the
+# unreferenced enums above (review 2026-11-01; reachability read off code by
+# `tests/test_schemas.py`).
 
 def _one_or_many_locations(value):
     """One named place where a lore entry is known, or several.
@@ -4535,7 +4618,7 @@ def _one_or_many_locations(value):
 class LoreOp(LenientModel):
     op: str = "create"
     id: Optional[int] = None
-    book_id: Optional[Union[int, str]] = None  # an existing book's int id, or a same-turn BookOp's temp_id
+    book_id: Optional[Union[int, str]] = None  # an existing book's int id, or a same-turn book op's temp_id
     keys: str = ""
     content: str = ""
     category: str = "other"
@@ -4568,8 +4651,9 @@ class LoreOp(LenientModel):
 # mapping model: lore routing is `agents/mapping.compile_world_context`, a
 # deterministic step with no model output to validate, and the filing of a
 # beat's rooms and facts is a structured write from the Director's committed
-# diff (persist/commit_mapping). `ScenePatch`, `BookOp` and `LoreOp` above
-# survive as the shapes the scene-patch fold and the lorebook writer read.
+# diff (persist/commit_mapping). `ScenePatch` and `LoreOp` above survive
+# (`LoreOp` as a test fixture, `tests/test_schemas.py`'s `kept`); `BookOp`
+# went on 2026-11-01, validated against by nothing.
 
 # ---- Greeting interpretation (ingest-time, per docs/design/GREETING_IMPORT_DESIGN.md) ----
 
@@ -6185,7 +6269,11 @@ OUTPUT_EXAMPLES = {
                  "observable": "hands the red tin to Ivo", "speech": False,
                  "targets": ["red tin", "Ivo"], "seconds": 2, "movement": None,
                  "commitment": "asserted", "item_names": ["red tin"],
-                 "sources": ["s3"],
+                 # NO `sources`: `UnifiedEvent` has no such field, so the
+                 # model was taught to write what validation then dropped,
+                 # and `director_repair` credits a recovered event with its
+                 # job's own sentences anyway (review 2026-11-01,
+                 # llm_schemas_prompts F5/F6; the `held_by` class).
                  "transforms": [{"item": "red tin", "patch": {"inventory_ops": [
                      {"op": "transfer", "object_id": "red_tin", "from_id": "Mara",
                       "to_id": "Ivo", "relation": "held"}]}}]}]},
@@ -6498,9 +6586,13 @@ def semantic_output_errors(
     output: dict,
     *,
     source_payload: dict | None = None,
-    notes: list | None = None,
 ) -> list[str]:
-    """Everything that makes an answer UNUSABLE. Anything less goes to `notes`.
+    """Everything that makes an answer UNUSABLE.
+
+    (A second channel, `notes`, carried what was less than fatal; nothing has
+    written to it since the causal Director's ledger checks went with it on
+    2026-09-27, and it was removed with no caller (review 2026-11-01,
+    llm_schemas_prompts F9).)
 
     A FATAL CHECK DESTROYS A BEAT, which is the most expensive thing this
     engine can lose, so one has to earn the right. The rule, learned the
@@ -6675,10 +6767,14 @@ def _name_what_was_discarded(step_key, raw, error):
 
 # Steps whose diff is an ENCODING of an adjudication rather than the
 # adjudication itself. The prose, the dialogue and the summary are the beat;
-# the diff is how the beat is written into world state, and the engine already
-# treats it as separable -- `resolve_reconcile`/`resolve_repair` exist to
-# detect changes asserted in prose but missing from the diff and merge a
-# correction additively.
+# the diff is how the beat is written into world state, and the engine treats
+# it as separable. Which steps that is today: `director_interpret`,
+# `director_resolve` and the dormant `resolve_repair` -- none of which the
+# prose contract validates strictly (its encoder's events are checked and
+# repaired by `agents/director_repair.py`), so this prune serves stored
+# pre-cutover variants and the dormant repairs (review 2026-11-01,
+# llm_schemas_prompts F12; `resolve_reconcile`/`resolve_repair` are gated off
+# on every beat with rows, UNBUILT_PIPELINE §1.1 item 3).
 #
 # DERIVED FROM THE MODELS, not listed (A29, review 2026-09-07): the roots are
 # every StateDiff-typed field a step declares, so `director_interpret` --
@@ -6707,13 +6803,14 @@ def _prunable_diff_fields(errors, roots=("state_diff",)):
     return fields or None
 
 
-# A specialist's whole output IS channels, so its analogue of the
-# state_diff prune above is one level shallower: when every validation error
-# is rooted under one of its channel fields (or `notes`), drop those fields
-# and keep the rest. Absent is already "no change asserted" for each of
-# them, and the resolve-side reconciliation seam catches anything the drop
-# lost -- the same contract the state_diff prune documents. DROPPED, NEVER
-# INVENTED.
+# A channel owner's patch is all channels, so its analogue of the state_diff
+# prune above is one level shallower: when every validation error is rooted
+# under one of its channel fields (or `notes`), drop those fields and keep the
+# rest. Absent is already "no change asserted" for each of them. DROPPED,
+# NEVER INVENTED. Read by `validated_specialist_patch_channels` for a patch's
+# outer channels; the owners (`SPECIALIST_CHANNELS`, the five keys of
+# `director_scopes.SPECIALISTS`) are an owners table since the specialist
+# hands were deleted (2026-09-27), not steps that answer.
 def _prunable_specialist_fields(step_key, errors):
     allowed = set(SPECIALIST_CHANNELS.get(step_key) or ()) | {"notes"}
     fields = set()
@@ -6902,11 +6999,13 @@ def validate_llm_output_strict(
             message = error.get("msg", "invalid value")
             errors.append(f"{location}: {message}")
 
-        # ONE BAD FIELD USED TO COST THE WHOLE BEAT. Live 2026-08-08: a
-        # complete, correct 4,000-token resolve -- resolved_event, summary,
-        # dialogue all intact -- was discarded because `state_diff.time`
-        # arrived as a scalar, and the repair attempt was handed the same
-        # broken example that caused it and could not converge.
+        # ONE BAD FIELD USED TO COST THE WHOLE BEAT. Live 2026-08-08, under
+        # the causal Director: a complete, correct 4,000-token resolve --
+        # resolved_event, summary, dialogue all intact -- was discarded
+        # because `state_diff.time` arrived as a scalar, and the repair
+        # attempt was handed the same broken example that caused it and could
+        # not converge. (The resolve is no longer validated strictly; the
+        # steps this prune reaches today are `_diff_prunable_roots`'.)
         #
         # `_coerce_optional_time` fixed that one field. This is the general
         # form, and it is the same shape as the lorebook import's
@@ -6981,16 +7080,13 @@ def validate_llm_output_strict(
             errors=errors,
         )
 
-    # Two channels, deliberately. What makes an answer unusable fails the
-    # call; everything the engine can repair, order, or already reports
-    # elsewhere is a NOTE, so it reaches the warning log instead of
-    # destroying the beat it was found in.
-    semantic_notes = []
+    # What makes an answer unusable fails the call. (Its second channel, the
+    # notes for what the engine could repair or already reports, had no
+    # writer left and went with the causal Director's checks, F9.)
     semantic_errors = semantic_output_errors(
         step_key,
         output,
         source_payload=source_payload,
-        notes=semantic_notes,
     )
     semantic_errors = [
         _name_what_was_discarded(step_key, raw, error)
@@ -7001,5 +7097,5 @@ def validate_llm_output_strict(
         valid=not semantic_errors,
         output=output,
         errors=semantic_errors,
-        warnings=list(repairs) + semantic_notes,
+        warnings=list(repairs),
     )

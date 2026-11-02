@@ -36,7 +36,10 @@ def _scene():
 
 def test_the_sixth_word_is_a_volume():
     assert normalize_speech_volume("pitched") == "pitched"
-    assert normalize_speech_volume("soft") == "mutter"
+    # How a voice SOUNDS is not how far it carries (`encoder/core.txt`): a
+    # soft line carries at normal. The alias table folded it to mutter until
+    # 2026-11-01 (review, llm_schemas_prompts F2).
+    assert normalize_speech_volume("soft") == "normal"
 
 
 def test_the_word_a_level_stands_for():

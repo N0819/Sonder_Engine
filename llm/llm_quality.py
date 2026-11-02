@@ -499,6 +499,11 @@ def _read_answer(step_key, raw, payload=None):
                 + ("; left out %s, which the answer's top level has no field "
                    "for -- a list item may have closed early"
                    % ", ".join(repr(k) for k in left[:4]) if left else "")]
+            # A member the mend moved DEEPER than the top level is said too
+            # (`_mended`, F3): the report's own note, which names the paths.
+            notes = notes + [w for w in (found[1].warnings or [])
+                             if str(w).startswith(MEND_LOSS)
+                             and not left]
         else:
             notes = notes + ["no local mend reads it whole, so the object "
                              "stands as it closed and the rest is left out"]
@@ -826,6 +831,15 @@ def _step_json_schema(step_key: str):
     return schema
 
 
+def _resolved_model(role):
+    """The model `role` resolves to now (its row, else `default`), or ""."""
+    try:
+        from llm import providers
+        return str(providers.resolve_role(role)[1] or "")
+    except Exception:
+        return ""
+
+
 def note_provider_exchange(*, role, system, payload, response, ok,
                            started, error="", read_notes=()):
     """Record ONE provider call for the debug capture: what was actually sent
@@ -867,11 +881,13 @@ def note_provider_exchange(*, role, system, payload, response, ok,
         from llm.providers import last_reasoning
         note_step_exchange({
             "role": role,
-            # The model of record for this exchange. The `llm_calls` ledger
-            # already carries requested/served per call; this is only so an
-            # exported turn reads without a join.
-            "requested": str((providers.agent_models().get(role) or {})
-                             .get("model") or ""),
+            # The model of record for this exchange: the one the call was
+            # SENT to (`providers.request_model`). It was the role's own row
+            # in `agent_models`, which is "" for every role following
+            # `default` and the primary's model on a fallback candidate's
+            # answer (review 2026-11-01, llm_providers_quality F15). Where
+            # nothing reached the wire, the model the role resolves to.
+            "requested": providers.request_model() or _resolved_model(role),
             "system": system,
             "payload": payload,
             # What CAME BACK, verbatim, on every rung. The accepted rung used
@@ -907,11 +923,12 @@ def _mended(step_key, raw, payload):
     designed-failure run (2026-09-28, chat 154's departure) the fence made
     every candidate unparseable, so two swapped closers went to a 6-7 s
     model rebuild each."""
-    from llm.json_mend import mend_candidates
+    from llm import json_mend
 
     first = None
+    lossy = None
     for text, region in _mend_texts(raw):
-        for value, edits in mend_candidates(text):
+        for value, edits in json_mend.mend_candidates(text):
             edits = ([region] if region else []) + list(edits)
             # A COPY is validated: validation moves things inside the dict it
             # is given (a sibling swallowed into `entities` is lifted out), so
@@ -921,10 +938,64 @@ def _mended(step_key, raw, payload):
             report = validate_llm_output_strict(step_key, copy.deepcopy(value),
                                                 source_payload=payload)
             if report.valid:
-                return value, report, edits
+                # A MEND THAT VALIDATES MAY STILL HAVE MOVED A MEMBER. The
+                # lenient schema ignores a key it has no field for, so a
+                # closer in the wrong place can carry a member into another
+                # object and validate: over every single bracket slip of the
+                # 16 `OUTPUT_EXAMPLES`, 10 mended into a DIFFERENT object
+                # that validates -- a `scene_life` entry's `action` inside its
+                # `speech`, an opening's room hoisted to the root (review
+                # 2026-11-01, llm_schemas_prompts F3). One that loses nothing
+                # is taken at once; otherwise the one that loses least, with
+                # what it lost said aloud on its report.
+                lost = _mend_lost(value, report.output)
+                if not lost:
+                    return value, report, edits
+                if lossy is None or len(lost) < len(lossy[3]):
+                    lossy = (value, report, edits, lost)
+                continue
             if first is None:
                 first = (value, report, edits)
+    if lossy is not None:
+        value, report, edits, lost = lossy
+        report.warnings = list(report.warnings or []) + [_mend_loss_note(lost)]
+        return value, report, edits
     return first
+
+
+#: How a mend's loss is said (`_mended`), and how `_read_answer` finds it.
+MEND_LOSS = "the mend validated only by dropping what the answer wrote at"
+
+
+def _mend_loss_note(lost):
+    shown = ", ".join(lost[:8]) + (f" and {len(lost) - 8} more" if len(lost) > 8 else "")
+    return (f"{MEND_LOSS} {shown} -- a closer in the wrong place may have "
+            "moved it into an object that has no field for it")
+
+
+def _key_paths(value, prefix=""):
+    """Every key path in `value` that carries something (None is nothing)."""
+    out = set()
+    if isinstance(value, dict):
+        for key, item in value.items():
+            if item is None:
+                continue
+            path = f"{prefix}.{key}" if prefix else str(key)
+            out.add(path)
+            out |= _key_paths(item, path)
+    elif isinstance(value, list):
+        for index, item in enumerate(value):
+            out |= _key_paths(item, f"{prefix}.{index}" if prefix else str(index))
+    return out
+
+
+def _mend_lost(value, output):
+    """The outermost key paths of a mended `value` its validated `output`
+    no longer carries, sorted."""
+    gone = _key_paths(value) - _key_paths(output)
+    return sorted(path for path in gone
+                  if not any(path.startswith(other + ".") for other in gone
+                             if other != path))
 
 
 def _bare_prose_answer(step_key, raw):
@@ -1177,6 +1248,16 @@ def complete_validated_json(
 
     provider_errored = False
     last_provider_error = None
+    # THE PRIMARY ROUTE'S OWN OUTAGE, apart from the last error of any
+    # rung. The fresh ask at the foot of the ladder goes to the primary
+    # (`_same_request`, candidate 0), so only the primary refusing says it
+    # would fail; a backup candidate's outage says nothing about it. Gated
+    # on `last_provider_error` it cost the beat D5 keeps whenever a host had
+    # configured a backup that was down (review 2026-11-01,
+    # llm_providers_quality F3, scripted: a 503 on the backup ->
+    # "all providers failed" although the primary answered twice).
+    # `last_provider_error` still names the last one for the final message.
+    primary_provider_error = None
     # AN ANSWER THAT RAN AWAY IS NO OUTAGE (O27, chat 167 turn 4630). The
     # stream guard kills a runaway as `DegenerateOutput`, an LLMError, and
     # filed as the provider's failure it barred the one fresh ask a
@@ -1363,7 +1444,7 @@ def complete_validated_json(
             runaway = exc
             note_step_warning(f"{step_key}: the answer ran away ({exc.reason})")
         else:
-            last_provider_error = exc
+            last_provider_error = primary_provider_error = exc
         note_provider_exchange(
             role=role, system=_sent_system, payload=_sent, response="",
             ok=False, started=_capture_t0, error=str(exc))
@@ -1561,7 +1642,7 @@ def complete_validated_json(
                 if isinstance(exc, DegenerateOutput):
                     runaway = exc
                 else:
-                    last_provider_error = exc
+                    last_provider_error = primary_provider_error = exc
                 note_provider_exchange(
                     role=role, system=_asked_system, payload=_asked_payload,
                     response="", ok=False, started=_wall0, error=str(exc))
@@ -1662,7 +1743,7 @@ def complete_validated_json(
             if isinstance(exc, DegenerateOutput):
                 runaway = exc
             else:
-                last_provider_error = exc
+                last_provider_error = primary_provider_error = exc
             note_provider_exchange(
                 role=role, system=_asked_system, payload=_asked_payload,
                 response="", ok=False, started=_wall0, error=str(exc))
@@ -1730,7 +1811,13 @@ def complete_validated_json(
                     f"a targeted field patch on the repair model "
                     f"({time.monotonic() - _t0:.1f}s) -- no rebuild")
                 return _accepted(_patched_report, "field_patch")
-            previous_parsed = _patched
+            # THE OBJECT AND ITS ERRORS ARE ONE PAIR. The patched object went
+            # on to the rebuild with the UNPATCHED object's errors, so the
+            # rebuild was told a field the patch had fixed was wrong, and
+            # nothing about what the patch left (review 2026-11-01,
+            # llm_providers_quality F11); `_unshrunk` then pruned the fixed
+            # field from the kept answer by those stale paths.
+            previous_parsed, report = _patched, _patched_report
 
     # What the rebuild and the fallbacks are repairing, kept for the check
     # that they did not repair it by deleting it (`_unshrunk`).
@@ -1786,7 +1873,7 @@ def complete_validated_json(
             if isinstance(exc, DegenerateOutput):
                 runaway = exc
             else:
-                last_provider_error = exc
+                last_provider_error = primary_provider_error = exc
             note_provider_exchange(
                 role=role, system=_repair_system, payload=repair_payload,
                 response="", ok=False, started=_wall0, error=str(exc))
@@ -1967,7 +2054,7 @@ def complete_validated_json(
     # unmendable first answer's rebuild was cut, or a malformed rebuild's
     # last fallback (scripted on the D5 landing's second round).
     if (((malformed_seen and not provider_errored) or runaway is not None)
-            and not _original_cut and last_provider_error is None):
+            and not _original_cut and primary_provider_error is None):
         if runaway is not None and not malformed_seen:
             _fresh_why = f"the answer ran away ({runaway.reason})"
         elif not any_parsed:
@@ -1998,7 +2085,7 @@ def complete_validated_json(
                 if isinstance(exc, DegenerateOutput):
                     runaway = exc
                 else:
-                    last_provider_error = exc
+                    last_provider_error = primary_provider_error = exc
                 note_provider_exchange(
                     role=role, system=_asked_system, payload=_asked_payload, response="",
                     ok=False, started=_wall0, error=str(exc))

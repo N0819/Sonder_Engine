@@ -211,9 +211,23 @@ def _note_request_shape(body):
             "response_format": rf_type,
             "reasoning_effort": str(effort or ""),
             "max_tokens": max_tokens,
+            # The model the body was sent to: the capture's model of record
+            # (`request_model`), kept out of `request_shape`'s four keys.
+            "model": str(body.get("model") or ""),
         })
     except Exception:
         pass
+
+
+def request_model():
+    """The model the last completion on this context was SENT to, or "".
+
+    The debug capture used to name the role's configured model instead
+    (`agent_models()[role]`): "" for every role that follows `default`, and
+    the primary's model for a fallback candidate's answer (review
+    2026-11-01, llm_providers_quality F15)."""
+    shape = last_request_shape.get() or {}
+    return str(shape.get("model") or "")
 
 
 def request_shape():
@@ -320,11 +334,41 @@ REQUEST_TIMEOUT = (30, PROVIDER_FIRST_TOKEN_SECONDS)
 # no cross-thread contention.
 _thread_local = threading.local()
 
+#: Idle connections kept open per host, shared by every thread's session.
+#: Not a ceiling on concurrency: the pool does not block, so a burst past it
+#: opens extra connections and closes them after use (urllib3 then logs
+#: "Connection pool is full"). Sized above the engine's widest fan-out to
+#: one host. Named per the owner's ask-before-limiting rule (review
+#: 2026-11-01, Efficiency 2): requests' own default is 10 per session.
+HTTP_POOL_MAXSIZE = 32
+_SHARED_ADAPTER = []
+_SHARED_ADAPTER_LOCK = threading.Lock()
+
+
+def _shared_adapter():
+    """THE CONNECTIONS ARE SHARED, THE SESSIONS ARE NOT. A session per
+    thread, as above -- but the pipeline makes a new thread per step and new
+    pools per call (`director_prose`, `director_repair`, `background`,
+    `decisions`, `memory_links`), so a session per thread meant a fresh
+    TCP+TLS handshake for most calls: 0.295 s fresh against 0.248 s kept
+    alive on OpenRouter, ~0.05 s a request (`llm/decisions.py`, the owner's
+    measurement). urllib3's pools are thread-safe; one adapter holding them
+    is mounted on every thread's session."""
+    with _SHARED_ADAPTER_LOCK:
+        if not _SHARED_ADAPTER:
+            from requests.adapters import HTTPAdapter
+            _SHARED_ADAPTER.append(HTTPAdapter(pool_maxsize=HTTP_POOL_MAXSIZE))
+        return _SHARED_ADAPTER[0]
+
+
 def _session():
     s = getattr(_thread_local, "session", None)
     if s is None:
         import requests
         s = requests.Session()
+        adapter = _shared_adapter()
+        s.mount("https://", adapter)
+        s.mount("http://", adapter)
         _thread_local.session = s
     return s
 HTTPX_TIMEOUT = httpx.Timeout(
@@ -468,14 +512,40 @@ def _request_timeout(streaming=True):
     return REQUEST_TIMEOUT
 
 
+def _stream_deadlines(patience=None, read_override=None):
+    """`(first token, between tokens)`: how long a streamed read may say
+    nothing before its first token and after it, in seconds -- ONE pair,
+    read by the socket and the activity clock alike.
+
+    `patience` is `patient_stream`'s value and `read_override` is
+    `request_timeout`'s; either one raises BOTH deadlines, and neither ever
+    lowers one below the owner's split (2026-09-23: thirty seconds before the
+    first token, ten between). Each knob used to reach one deadline only:
+    `request_timeout` the socket, `patient_stream` the clock -- so under
+    `request_timeout(600)` a slow local model's first token at 45 s was
+    killed by the clock the moment it arrived, and under `patient_stream(180)`
+    a host thinking with no keepalive lost its socket at 30 s (review
+    2026-11-01, llm_providers_quality F7)."""
+    asked = [float(v) for v in (patience, read_override) if v is not None]
+    # The first-token floor is the socket's own (`_request_timeout`, whose
+    # read half is `PROVIDER_FIRST_TOKEN_SECONDS`), so the seam a caller or a
+    # test already turns for a stream's read deadline still turns it.
+    return (max([float(_request_timeout()[1])] + asked),
+            max([float(PROVIDER_SILENCE_SECONDS)] + asked))
+
+
+def _stream_socket_timeout(first):
+    """The `(connect, read)` a streamed request is sent with: the read
+    deadline is the first-token one until `_narrow_read_deadline`."""
+    return (_request_timeout()[0], first)
+
+
 def _between_tokens_limit():
     """How long a stream that has BEGUN may go quiet: the watchdog's limit,
     or longer where the caller asked for patience (`patient_stream`) or a
     longer read (`request_timeout`) -- never shorter than either."""
-    patience = silence_limit_override.get()
-    limit = PROVIDER_SILENCE_SECONDS if patience is None else float(patience)
-    override = read_timeout_override.get()
-    return limit if override is None else max(limit, override)
+    return _stream_deadlines(silence_limit_override.get(),
+                             read_timeout_override.get())[1]
 
 
 def _narrow_read_deadline(response, seconds):
@@ -603,6 +673,67 @@ _LOOP_MIN_PERIOD = 24
 #: again; the 80-repeat bar is the short rule's own, so a refrain of that
 #: length said three times is still prose.
 _SHORT_LOOP_RE = re.compile(r"(.{2,%d})\1{80,}" % (_LOOP_MIN_PERIOD - 1), re.S)
+#: The same rule's two numbers, for `_short_loop`: a phrase of 2 to 23
+#: characters, said 81 times back to back (once, and `{80,}` more).
+_SHORT_LOOP_MIN_PERIOD = 2
+_SHORT_LOOP_REPEATS = 81
+
+
+def _periodic_run(text, start, end, i, p):
+    """`(x, y)`: the maximal stretch of `text[start:end]` with period `p`
+    that contains `text[i:i + 2p]` (which the caller found repeating).
+    Two binary searches over slice equality, each a C-level compare."""
+    lo, hi = i + 2 * p, end
+    while lo < hi:
+        mid = (lo + hi + 1) // 2
+        if text[i:mid - p] == text[i + p:mid]:
+            lo = mid
+        else:
+            hi = mid - 1
+    y = lo
+    lo, hi = start, i
+    while lo < hi:
+        mid = (lo + hi) // 2
+        if text[mid:y - p] == text[mid + p:y]:
+            hi = mid
+        else:
+            lo = mid + 1
+    return lo, y
+
+
+def _short_loop(text, start, end):
+    """Does `text[start:end]` hold a phrase of 2-23 characters said at least
+    81 times back to back? Exactly the verdict of `_SHORT_LOOP_RE.search`
+    over that window, without the regex.
+
+    THE REGEX WAS MOST OF THE GUARD. Measured (review 2026-11-01,
+    llm_providers_quality, Efficiency 1): 2.41 s of 700 strides against
+    0.12 / 0.06 / 0.10 / 0.01 s for the other four rules, with the GIL held,
+    on every streamed call -- `(.{2,23})` tries 22 lengths at every position
+    of the 4 KB tail. The same rule by periodicity: 81 copies of a p-long
+    phrase are a stretch of 81p characters with period p, so samples every
+    79p characters must land one at least 2p inside it, where the next p
+    characters repeat the p before them; a sample that does is grown to its
+    whole periodic run by slice comparison and measured. Held to the regex's
+    verdicts by `tests/test_the_short_loop_rule_reads_as_the_regex_did.py`,
+    which keeps the regex as the specification; ~70x faster on prose."""
+    for p in range(_SHORT_LOOP_MIN_PERIOD, _LOOP_MIN_PERIOD):
+        need = _SHORT_LOOP_REPEATS * p
+        if end - start < need:
+            break
+        step = (_SHORT_LOOP_REPEATS - 2) * p
+        i, last = start, end - 2 * p
+        while i <= last:
+            if text[i:i + p] == text[i + p:i + 2 * p]:
+                x, y = _periodic_run(text, start, end, i, p)
+                if y - x >= need:
+                    return True
+                # Nothing that starts inside this run can be a longer one of
+                # the same period: carry on past it.
+                i = max(i + step, y - 2 * p + 1)
+                continue
+            i += step
+    return False
 #: A short phrase must repeat three times; a long one twice. Two consecutive
 #: identical sentences is something a writer does -- a stammer, a refrain, a
 #: character insisting -- so a short cycle has to prove itself. Two identical
@@ -710,7 +841,7 @@ class OutputGuard:
                 "single-character repetition"
             )
 
-        if _SHORT_LOOP_RE.search(tail):
+        if _short_loop(self.text, len(self.text) - len(tail), len(self.text)):
             raise DegenerateOutput(
                 "repeating output fragment"
             )
@@ -772,6 +903,20 @@ def guard_response(text):
     return text
 
 
+# THE TRACE HAS ITS OWN GUARD. `OutputGuard` was fed only the content sink
+# below; reasoning deltas went to the trace and to the activity clock, which
+# counts them as healthy activity -- so a thinking model locked into
+# "Wait, let me reconsider..." was never judged and billed reasoning to
+# `max_tokens` (review 2026-11-01, llm_providers_quality F12). Each stream
+# reader (`_sse_openai`, `_sse_anthropic`, the CLI) now feeds its reasoning to
+# a second `OutputGuard`, the same battery, kept apart from the answer's so a
+# trace and an answer that each repeat a little are never judged as one
+# stream repeating a lot. Measured before it was armed, per the owner's rule
+# for any guard on valid output: the battery over every stored trace in the
+# owner's database fired on 0 of 3,036 per-call traces (`llm_capture`) and on
+# 5 of 7,174 step traces -- two distinct texts, each a 6-7k-character block
+# said twice back to back and running to the 20,000-character storage cap:
+# loops, not thought.
 def _guarded_sink(sink):
     guard = OutputGuard()
 
@@ -2496,12 +2641,22 @@ def agent_models():
 # gets judged").
 ROLE_FALLBACKS = {}
 
+#: Roles an unset row leaves UNSET rather than following `default`. An
+#: embeddings model is a different KIND of model from the chat model `default`
+#: names, and unset means the local hash (`cheap_embed`), as the panel says in
+#: three places (`static/js/settings.js`). The resolver followed `default` for
+#: it like any role, so a host who left the row unset paid one failing
+#: `/embeddings` request per retrieval query and commit batch, each degrading
+#: to crc32 under a warning that blamed a "configured" provider (review
+#: 2026-11-01, llm_providers_quality F6).
+NEVER_FOLLOWS_DEFAULT = frozenset({"embeddings"})
+
 
 def resolve_role_candidates(role):
     models = agent_models()
-    primary = (models.get(role)
-               or models.get(ROLE_FALLBACKS.get(role, ""))
-               or models.get("default"))
+    primary = models.get(role) or models.get(ROLE_FALLBACKS.get(role, ""))
+    if not primary and role not in NEVER_FOLLOWS_DEFAULT:
+        primary = models.get("default")
 
     if (
         not primary
@@ -2854,6 +3009,17 @@ _SCHEMA_SUSPEND_SETTING = "providers_schema_suspended"
 # in one call does not belong in it.
 _NO_JSON_SCHEMA_SETTING = "providers_no_json_schema"
 
+# WHEN each rejection happened, keyed as `_NO_JSON_SCHEMA` is: what the row
+# above holds, `{"<provider>\u0000<model>": epoch}`. The row used to be a
+# bare list, rehydrated at every load as a NEW 24-hour suspension and never
+# pruned -- so on `make run` (a restart per edit) or any nightly restart a
+# model once refused its grammar never had it back; and a 400 on a second
+# model rewrote the row from this process's own set, silently dropping the
+# first (review 2026-11-01, llm_providers_quality F8). Each entry now lapses
+# `_SCHEMA_SUSPEND_SECONDS` after the rejection itself, is pruned at the load
+# that finds it lapsed, and is removed the first time its grammar answers.
+_SCHEMA_REJECTED_AT: dict = {}
+
 
 def _schema_blacklist_key(prov, model):
     return "%s\u0000%s" % _json_object_key(prov, model)
@@ -2863,24 +3029,46 @@ def _load_schema_blacklist():
     """Rehydrate what earlier runs learned. Failure here is not an error."""
     try:
         import json as _json
-        stored = _json.loads(get_setting(_NO_JSON_SCHEMA_SETTING) or "[]")
+        stored = _json.loads(get_setting(_NO_JSON_SCHEMA_SETTING) or "{}")
     except Exception:
         return
-    if not isinstance(stored, list):
-        return
-    # ENTRIES WRITTEN BEFORE SUSPENSIONS EXISTED REHYDRATE AS SUSPENSIONS,
-    # not as permanent rejections. The old row recorded both verdicts under
-    # one key and cannot say which this was, and the two errors are not
-    # symmetrical: a stall kept forever costs every call the model makes,
-    # while a rejection re-tested costs one 400 per window on a cache this
-    # module already documents as safe to lose.
+    # REJECTIONS REHYDRATE AS SUSPENSIONS that lapse a window after the 400
+    # itself (`_SCHEMA_REJECTED_AT`), not as permanent rejections. The two
+    # errors are not symmetrical: a verdict kept forever costs every call the
+    # model makes, while a rejection re-tested costs one 400 per window on a
+    # cache this module already documents as safe to lose.
+    #
+    # A row written before the timestamps existed is a bare list that cannot
+    # say when: its entries are stamped with THIS load's time, once, and
+    # written back, so the window no longer restarts with every process.
     now = time.time()
+    if isinstance(stored, list):
+        entries = {entry: None for entry in stored}
+    elif isinstance(stored, dict):
+        entries = dict(stored)
+    else:
+        return
+    rewrite = False
     with _NO_JSON_SCHEMA_LOCK:
-        for entry in stored:
-            if isinstance(entry, str) and "\u0000" in entry:
-                _SCHEMA_SUSPENDED.setdefault(
-                    tuple(entry.split("\u0000", 1)),
-                    now + _SCHEMA_SUSPEND_SECONDS)
+        for entry, at in entries.items():
+            if not (isinstance(entry, str) and "\u0000" in entry):
+                continue
+            if at is None:
+                at, rewrite = now, True
+            try:
+                at = float(at)
+            except (TypeError, ValueError):
+                rewrite = True
+                continue
+            until = at + _SCHEMA_SUSPEND_SECONDS
+            if until <= now:
+                rewrite = True     # lapsed: pruned from the row, not loaded
+                continue
+            key = tuple(entry.split("\u0000", 1))
+            _SCHEMA_REJECTED_AT[key] = max(at, _SCHEMA_REJECTED_AT.get(key, at))
+            _SCHEMA_SUSPENDED[key] = max(until, _SCHEMA_SUSPENDED.get(key, until))
+    if rewrite:
+        _persist_schema_blacklist()
     try:
         held = _json.loads(get_setting(_SCHEMA_SUSPEND_SETTING) or "{}")
     except Exception:
@@ -2900,10 +3088,13 @@ def _load_schema_blacklist():
 
 
 def _persist_schema_blacklist():
+    """Write every standing rejection with WHEN it happened: the ones this
+    process saw and the ones it loaded, so a new 400 never drops an old one."""
     try:
         import json as _json
         with _NO_JSON_SCHEMA_LOCK:
-            rows = ["%s\u0000%s" % k for k in sorted(_NO_JSON_SCHEMA)]
+            rows = {"%s\u0000%s" % k: at
+                    for k, at in sorted(_SCHEMA_REJECTED_AT.items())}
         set_setting(_NO_JSON_SCHEMA_SETTING, _json.dumps(rows))
     except Exception:
         # A cache that cannot be written is still a cache that works for this
@@ -2950,16 +3141,22 @@ def _persist_schema_suspensions():
         pass
 
 
+def _ensure_schema_blacklist_loaded():
+    if not getattr(_json_schema_supported, "_loaded", False):
+        _json_schema_supported._loaded = True
+        _load_schema_blacklist()
+
+
 def _json_schema_supported(prov, model) -> bool:
     """False while this provider+model is known not to answer a json_schema.
 
     Two verdicts, and they differ in how long they last. A REJECTION (a 400
-    naming the grammar) is permanent: the provider has described itself. A
-    STALL is a suspension that expires -- see `_SCHEMA_SUSPEND_SECONDS`.
+    naming the grammar) is permanent in the process that saw it -- the
+    provider has described itself -- and is re-tested after a restart once
+    `_SCHEMA_SUSPEND_SECONDS` have passed since the 400 (`_SCHEMA_REJECTED_AT`).
+    A STALL is a suspension that expires -- see `_SCHEMA_SUSPEND_SECONDS`.
     """
-    if not getattr(_json_schema_supported, "_loaded", False):
-        _json_schema_supported._loaded = True
-        _load_schema_blacklist()
+    _ensure_schema_blacklist_loaded()
     # A GEMINI MODEL GETS json_object, NEVER A GRAMMAR (owner's ruling,
     # 2026-09-14). Measured on the scratch play of that day, every role on
     # OpenRouter `google/gemini-3.8-flash`: 15 of 65 specialist replies were
@@ -2980,15 +3177,33 @@ def _json_schema_supported(prov, model) -> bool:
 
 def _note_json_schema_rejected(prov, model):
     """Record that response_format=json_schema is unusable here. Said once."""
+    # Loaded first, so the row this writes keeps what earlier runs wrote.
+    _ensure_schema_blacklist_loaded()
     key = _json_object_key(prov, model)
     with _NO_JSON_SCHEMA_LOCK:
         if key in _NO_JSON_SCHEMA:
             return
         _NO_JSON_SCHEMA.add(key)
+        _SCHEMA_REJECTED_AT[key] = time.time()
     _logger.info(
         "providers: %s rejects response_format=json_schema for %s; falling "
         "back to json_object from now on",
         _prov_field(prov, "name") or "provider", model)
+    _persist_schema_blacklist()
+
+
+def _note_json_schema_answered(prov, model):
+    """A grammar this provider+model ANSWERED is no longer refused: its
+    written rejection, if any, goes. A dict lookup on every grammar call;
+    a write only when there was something to remove."""
+    key = _json_object_key(prov, model)
+    with _NO_JSON_SCHEMA_LOCK:
+        if key not in _SCHEMA_REJECTED_AT:
+            return
+        _SCHEMA_REJECTED_AT.pop(key, None)
+    _logger.info(
+        "providers: %s answered a json_schema for %s again; its recorded "
+        "rejection is cleared", _prov_field(prov, "name") or "provider", model)
     _persist_schema_blacklist()
 
 
@@ -3501,6 +3716,8 @@ def _sse_openai(url, headers, body, sink, role=None, model=None, turn=None):
     # hot loop is the same shape as the guard's own re-scan, and the sink a
     # response streams into cannot legitimately change mid-response.
     _think_sink = reasoning_sink.get()
+    # THE TRACE IS GUARDED TOO, by its own guard (see `_guarded_sink`).
+    _think_guard = OutputGuard()
     usage = None
     served = ""
     # The tier a role asked for, and the one the provider says served it
@@ -3508,14 +3725,17 @@ def _sse_openai(url, headers, body, sink, role=None, model=None, turn=None):
     tier_asked, tier = str(body.get("service_tier") or ""), ""
     t0 = time.time()
     _check_cancel()
+    # ONE PAIR OF DEADLINES for the socket and the clock (`_stream_deadlines`):
+    # whichever knob a caller turned reaches both.
+    first, between = _stream_deadlines(silence_limit_override.get(),
+                                       read_timeout_override.get())
     with _session().post(url, headers=headers, json=body, stream=True,
-                         timeout=_request_timeout()) as r, _abortable(r):
+                         timeout=_stream_socket_timeout(first)) as r, _abortable(r):
         if r.status_code >= 400:
             raise LLMError(f"HTTP {r.status_code}: {r.text[:300]}", r.status_code, r.status_code in DEFAULT_RETRY.retryable_status)
-        clock = _ActivityClock(limit=silence_limit_override.get())
+        clock = _ActivityClock(limit=between, first=first)
         # The socket waits the first-token allowance; once the stream has
         # begun it waits no longer than the clock would (see REQUEST_TIMEOUT).
-        between = min(_request_timeout()[1], _between_tokens_limit())
         for raw in r.iter_lines():
             _check_cancel()
             clock.tick()
@@ -3570,6 +3790,7 @@ def _sse_openai(url, headers, body, sink, role=None, model=None, turn=None):
             _r = _delta_reasoning(_delta)
             if _r:
                 reasoning += _r
+                _think_guard.feed(_r)
                 if _think_sink:
                     _think_sink(_r)
             d = _delta.get("content")
@@ -3603,6 +3824,12 @@ def _sse_anthropic(base, headers, body, sink, role=None, model=None):
     body["stream"] = True
     _note_request_shape(body)
     text = ""
+    # The route's own thinking, kept as `_sse_openai` keeps it: never on the
+    # player-facing sink, and written to `last_reasoning` -- None when none
+    # arrived -- so no reader takes an earlier call's trace for this one's.
+    reasoning = ""
+    _think_sink = reasoning_sink.get()
+    _think_guard = OutputGuard()
     # Anthropic splits usage across two events: input and cache counts arrive
     # on message_start, the final output count on message_delta. Neither alone
     # is the whole picture, so both are folded together.
@@ -3610,14 +3837,15 @@ def _sse_anthropic(base, headers, body, sink, role=None, model=None):
     served = ""
     t0 = time.time()
     _check_cancel()
+    first, between = _stream_deadlines(silence_limit_override.get(),
+                                       read_timeout_override.get())
     with _session().post(base + "/v1/messages", headers=headers, json=body,
-                         stream=True, timeout=_request_timeout()) as r, \
+                         stream=True, timeout=_stream_socket_timeout(first)) as r, \
             _abortable(r):
         if r.status_code >= 400:
             raise LLMError(f"HTTP {r.status_code}: {r.text[:300]}", r.status_code, r.status_code in DEFAULT_RETRY.retryable_status)
         # No activity clock on this reader: the socket is its only watchdog,
         # so it takes the same first-token / between-token split.
-        between = min(_request_timeout()[1], _between_tokens_limit())
         for raw in r.iter_lines():
             _check_cancel()
             if not raw:
@@ -3664,9 +3892,16 @@ def _sse_anthropic(base, headers, body, sink, role=None, model=None):
                 if d:
                     text += d
                     sink(d)
+                thought = j.get("delta", {}).get("thinking")
+                if thought:
+                    reasoning += thought
+                    _think_guard.feed(thought)
+                    if _think_sink:
+                        _think_sink(thought)
     if role:
         _log_usage(role, model, t0, usage, served=served,
                    kind="stream")
+    last_reasoning.set(reasoning or None)
     return text
 
 # ---- Claude Code CLI ----
@@ -3826,6 +4061,9 @@ def _claude_cli_complete(prov, model, system, user, sink, role=None,
                          json_schema=None, effort_override=None):
     """One completion through `claude -p`; see the section comment above."""
     name = _prov_field(prov, "name") or CLAUDE_CLI_KIND
+    # A call reached here directly (not through `_chat_complete_once`, which
+    # cleared it) starts with no trace either (F1, review 2026-11-01).
+    last_reasoning.set(None)
     binary = _claude_cli_binary(prov)
     effort = _claude_cli_effort(role, effort_override)
     argv = _claude_cli_command(binary, model, system, effort=effort,
@@ -3835,15 +4073,18 @@ def _claude_cli_complete(prov, model, system, user, sink, role=None,
         "response_format": {"type": "json_schema"} if json_schema else None,
         "reasoning_effort": effort,
         "max_tokens": None,
+        "model": model,
     })
     _think_sink = reasoning_sink.get()
+    _think_guard = OutputGuard()
     # The same deadlines a streamed HTTP read gets, overrides included: the
     # CLI emits a line per event and nothing else, so silence here is the
     # same silence. The first-token one holds until the first content delta
     # -- the init and message_start events arrive before the model has read
     # its prompt -- and the between-token one after it.
-    deadline = _request_timeout()[1]
-    between = min(deadline, _between_tokens_limit())
+    deadline, between = _stream_deadlines(silence_limit_override.get(),
+                                          read_timeout_override.get())
+    deadline = _stream_socket_timeout(deadline)[1]
     begun = False
     text, json_text, reasoning = "", "", ""
     usage, served, result = None, "", None
@@ -3914,6 +4155,7 @@ def _claude_cli_complete(prov, model, system, user, sink, role=None,
                     piece = delta.get("thinking")
                     if piece:
                         reasoning += piece
+                        _think_guard.feed(piece)
                         if _think_sink:
                             _think_sink(piece)
     finally:
@@ -3936,11 +4178,12 @@ def _claude_cli_complete(prov, model, system, user, sink, role=None,
         served = next(iter(result.get("modelUsage") or {}), "")
     if role:
         _log_usage(role, model, t0, usage, served=served, kind="stream")
-    if reasoning:
-        try:
-            last_reasoning.set(reasoning)
-        except Exception:
-            pass
+    # Written whether or not thinking streamed: None is this call's honest
+    # answer, and the earlier call's trace is not (F1, review 2026-11-01).
+    try:
+        last_reasoning.set(reasoning or None)
+    except Exception:
+        pass
     structured = result.get("structured_output")
     if structured is not None:
         return json.dumps(structured, ensure_ascii=False)
@@ -4276,9 +4519,10 @@ def _log_usage(role, model, t0, usage, served=None, kind="chat", tier=None):
     """
     from core.logging_utils import log_llm_call
     counts = _normalize_usage(usage)
+    reasoning = _reasoning_tokens(usage)
     try:
         last_output_spend.set({"output": counts["output"],
-                               "reasoning": _reasoning_tokens(usage)})
+                               "reasoning": reasoning})
     except Exception:
         pass
     _note_served_model(role, model, served)
@@ -4297,6 +4541,10 @@ def _log_usage(role, model, t0, usage, served=None, kind="chat", tier=None):
     # cannot tell a write from a read (`_normalize_usage`). Absent otherwise.
     if counts["cache_write"]:
         entry["written"] = counts["cache_write"]
+    # The part of `out` that was thinking, where the provider says (F14).
+    # Absent where it is silent: unmeasured is not zero.
+    if reasoning is not None:
+        entry["reasoning"] = reasoning
     if tier:
         asked, got = tier
         entry["tier_asked"] = str(asked)
@@ -4352,9 +4600,18 @@ def _chat_complete_once(
     # than as the previous call's answer. The request shape is cleared for
     # the same reason: a call that dies resolving its role sent nothing, and
     # so is the spend: a call that never reports usage spent nothing known.
+    #
+    # AND SO IS THE TRACE, which is the one of the four a MIND reads as its
+    # own (`agents/character.py`: the decision read-back and the kept
+    # thought). It alone was left standing, and only `_sse_openai` wrote it,
+    # so in the interaction loop -- minds one after another on ONE context --
+    # mind B on a native Anthropic route was handed mind A's private thinking
+    # as B's own (review 2026-11-01, llm_providers_quality F1, reproduced).
+    # Every transport below now writes it, None when no thinking arrived.
     _capture_finish_reason(None)
     last_request_shape.set(None)
     last_output_spend.set(None)
+    last_reasoning.set(None)
 
     prov, model, cfg = resolved or resolve_role(role)
     # A TOOL ROUND NEVER REACHES A BACKEND THAT WOULD DROP IT: the two
@@ -4454,9 +4711,15 @@ def _chat_complete_once(
         _log_usage(role, model, _t0, parsed.get("usage"),
                    served=parsed.get("model"))
         _capture_finish_reason(parsed.get("stop_reason"))
+        blocks = [block for block in parsed.get("content", [])
+                  if isinstance(block, dict)]
+        # This call's own thinking, or None: never the previous call's.
+        last_reasoning.set("".join(
+            str(block.get("thinking") or "") for block in blocks
+            if block.get("type") == "thinking") or None)
         return guard_response("".join(
             block.get("text", "")
-            for block in parsed.get("content", [])
+            for block in blocks
         ))
 
     body = {
@@ -4506,6 +4769,8 @@ def _chat_complete_once(
             out = _sse_with_reasoning_fallback(
                 url, headers, body, guarded, prov, role, model,
                 **({"turn": turn} if turn is not None else {}))
+            if (body.get("response_format") or {}).get("type") == "json_schema":
+                _note_json_schema_answered(prov, model)
         except (LLMError,) + _RETRYABLE_NETWORK as exc:
             # A TOOLS-BEARING BODY NEVER CLIMBS THE FORMAT LADDER. A 400 here
             # may be the tools, and the ladder would read it as the grammar's
@@ -4952,6 +5217,7 @@ async def _chat_complete_async_once(
     _capture_finish_reason(None)
     last_request_shape.set(None)
     last_output_spend.set(None)
+    last_reasoning.set(None)   # as the sync path, F1 (review 2026-11-01)
     prov, model, cfg = resolved or resolve_role(role)
     json_mode, json_schema = _role_json_mode(role, json_mode, json_schema, response_format)
     t, merged = _merge_samplers(cfg, sampler, temperature)
@@ -5650,30 +5916,58 @@ _EMBED_STATS = {"callers": 0, "groups": 0, "texts_in": 0, "texts_sent": 0}
 
 
 class _EmbedWaiter:
-    __slots__ = ("texts", "done", "result")
+    """One queued caller, carrying ITS OWN turn-scoped context.
+
+    A group used to be served on the LEADER's context -- the leader's cancel
+    event, the leader's ledger sink -- so a player aborting chat A closed the
+    request chat B's commit was queued behind, B's retry saw A's event set,
+    and B's memories were written with crc32 vectors although B never
+    aborted; on the success path B's round trip was booked to A's step
+    (review 2026-11-01, llm_providers_quality F2, reproduced: "A
+    fallback=True ... B fallback=True ... generation aborted by user"). So a
+    caller keeps a copy of its context (its run's `cancel_event`, its step's
+    `call_ledger_sink`), callers group only behind the same run, and each
+    group is served on its own callers' context.
+    """
+    __slots__ = ("texts", "done", "result", "context", "cancel", "lead")
 
     def __init__(self, texts):
         self.texts = texts
         self.done = threading.Event()
         self.result = None
+        self.context = contextvars.copy_context()
+        self.cancel = self.context.get(cancel_event)
+        # Set when an aborted leader hands its leadership to this caller.
+        self.lead = False
 
 
 def _take_embed_group_locked():
-    """The queued callers one request may serve. Caller holds the lock."""
-    group, n_texts, n_chars = [], 0, 0
-    while _COALESCE_QUEUE:
-        waiter = _COALESCE_QUEUE[0]
+    """The queued callers one request may serve: the first queued caller and
+    every later caller OF THE SAME RUN (one cancel event, or none), in queue
+    order, up to the caps. Callers of other runs stay queued for their own
+    request. Caller holds the lock."""
+    if not _COALESCE_QUEUE:
+        return []
+    run = _COALESCE_QUEUE[0].cancel
+    group, rest, n_texts, n_chars, full = [], [], 0, 0, False
+    for waiter in _COALESCE_QUEUE:
+        if waiter.cancel is not run:
+            rest.append(waiter)
+            continue
         texts = len(waiter.texts)
         chars = sum(len(t) for t in waiter.texts)
         # `group and` -- a single caller bigger than the cap still goes, alone,
-        # because refusing it would strand it forever.
-        if group and (n_texts + texts > _COALESCE_MAX_TEXTS
-                      or n_chars + chars > _COALESCE_MAX_CHARS):
-            break
-        _COALESCE_QUEUE.pop(0)
+        # because refusing it would strand it forever. Once one caller of the
+        # run does not fit, none behind it jumps the queue past it.
+        if full or (group and (n_texts + texts > _COALESCE_MAX_TEXTS
+                               or n_chars + chars > _COALESCE_MAX_CHARS)):
+            full = True
+            rest.append(waiter)
+            continue
         group.append(waiter)
         n_texts += texts
         n_chars += chars
+    _COALESCE_QUEUE[:] = rest
     return group
 
 
@@ -5702,15 +5996,57 @@ def _report_embed_coalescing(callers, texts_sent):
         stats["texts_in"], stats["texts_sent"])
 
 
+def _embed_for_group(order, config, collect):
+    """The group's request, run INSIDE its callers' context (see
+    `_EmbedWaiter`): under their run's cancel event, with the round trip's
+    ledger entries collected here to be shared out by `_book_embed_shares`
+    rather than booked whole to whichever caller's step is current."""
+    token = call_ledger_sink.set(collect)
+    try:
+        return _embed_with_retry(order, config)
+    finally:
+        call_ledger_sink.reset(token)
+
+
+def _book_embed_shares(group, entries):
+    """Each caller's part of what its group's request cost, on ITS OWN ledger.
+
+    One caller gets the entry as it was. Callers who shared a request each
+    get it with their own text count and their share of the input tokens --
+    the shares add up to the provider's bill, remainder to the first -- and
+    `shared_by`, the number of callers the round trip served."""
+    if not entries:
+        return
+    if len(group) == 1:
+        for entry in entries:
+            group[0].context.run(record_llm_call, entry)
+        return
+    counts = [len(waiter.texts) for waiter in group]
+    total = sum(counts) or 1
+    for entry in entries:
+        tokens = _int(entry.get("in"))
+        shares = [tokens * count // total for count in counts]
+        shares[0] += tokens - sum(shares)
+        for waiter, count, share in zip(group, counts, shares):
+            waiter.context.run(record_llm_call, {
+                **entry, "in": share, "texts": count,
+                "shared_by": len(group)})
+
+
 def _serve_embed_group(group, config):
-    """One request for the whole group, each caller handed back its own."""
+    """One request for the whole group, each caller handed back its own.
+
+    Every caller of a group belongs to one run (`_take_embed_group_locked`),
+    so the request is made on the first caller's context: an abort of that
+    run closes it, and an abort of any other run cannot."""
     order, position = [], {}
     for waiter in group:
         for text in waiter.texts:
             if text not in position:
                 position[text] = len(order)
                 order.append(text)
-    got = _embed_with_retry(order, config)
+    entries = []
+    got = group[0].context.run(_embed_for_group, order, config, entries.append)
     _EMBED_STATS["groups"] += 1
     _EMBED_STATS["texts_sent"] += len(order)
     _report_embed_coalescing(len(group), len(order))
@@ -5723,7 +6059,13 @@ def _serve_embed_group(group, config):
             vectors=[got.vectors[position[t]] for t in waiter.texts],
             model_key=got.model_key, dimensions=got.dimensions,
             fallback=got.fallback, error=got.error)
+    _book_embed_shares(group, entries)
+    for waiter in group:
         waiter.done.set()
+
+
+def _run_aborted(waiter) -> bool:
+    return waiter.cancel is not None and waiter.cancel.is_set()
 
 
 def _coalesced_embed(texts, config) -> EmbeddingBatch:
@@ -5739,36 +6081,55 @@ def _coalesced_embed(texts, config) -> EmbeddingBatch:
     if not leader:
         waiter.done.wait(_COALESCE_WAIT_CEILING)
         with _COALESCE_LOCK:
-            if waiter in _COALESCE_QUEUE:
+            # Handed the leadership by a leader whose own run was aborted:
+            # this caller is still queued, and now serves the queue itself.
+            leader = waiter.lead and waiter.result is None
+            if not leader and waiter in _COALESCE_QUEUE:
                 _COALESCE_QUEUE.remove(waiter)
-        # WOKEN IS NOT THE SAME AS SERVED. The drain below wakes whoever is
-        # still queued without a result to give them, and the ceiling expires
-        # with no wake at all -- so the only thing that settles this caller is
-        # whether it is holding vectors, never whether its event fired.
-        return waiter.result if waiter.result is not None \
-            else _embed_with_retry(texts, config)
+        if not leader:
+            # WOKEN IS NOT THE SAME AS SERVED. The drain below wakes whoever
+            # is still queued without a result to give them, and the ceiling
+            # expires with no wake at all -- so the only thing that settles
+            # this caller is whether it is holding vectors, never whether its
+            # event fired.
+            return waiter.result if waiter.result is not None \
+                else _embed_with_retry(texts, config)
+    successor = None
     try:
         while True:
             with _COALESCE_LOCK:
+                # AN ABORTED LEADER GOES HOME. Its own answer is in hand and
+                # its run is over; the callers still queued belong to other
+                # runs, and serving them would hold the aborted turn's thread
+                # for their round trips. The next in line leads instead --
+                # leadership passes without ever being dropped.
+                if (waiter.result is not None and _run_aborted(waiter)
+                        and _COALESCE_QUEUE):
+                    successor = _COALESCE_QUEUE[0]
+                    successor.lead = True
+                    break
                 group = _take_embed_group_locked()
                 if not group:
                     break
             _serve_embed_group(group, config)
     finally:
-        # LEADERSHIP IS HELD UNTIL THE DRAIN, not dropped when the queue first
-        # reads empty: releasing it earlier leaves a window in which a caller
-        # arriving before this block runs elects itself leader, and is then
-        # drained by the outgoing one -- so its own request is woken, empty,
-        # by a leader that never served it.
-        with _COALESCE_LOCK:
-            _COALESCE_INFLIGHT = False
-            # Never leave a queued caller without a leader: whoever is still
-            # waiting is woken to serve itself rather than sleep to the
-            # ceiling. Only reachable if `_serve_embed_group` raised, which it
-            # is not supposed to be able to do.
-            stranded, _COALESCE_QUEUE[:] = list(_COALESCE_QUEUE), []
-        for other in stranded:
-            other.done.set()
+        if successor is not None:
+            successor.done.set()
+        else:
+            # LEADERSHIP IS HELD UNTIL THE DRAIN, not dropped when the queue
+            # first reads empty: releasing it earlier leaves a window in which
+            # a caller arriving before this block runs elects itself leader,
+            # and is then drained by the outgoing one -- so its own request is
+            # woken, empty, by a leader that never served it.
+            with _COALESCE_LOCK:
+                _COALESCE_INFLIGHT = False
+                # Never leave a queued caller without a leader: whoever is
+                # still waiting is woken to serve itself rather than sleep to
+                # the ceiling. Only reachable if `_serve_embed_group` raised,
+                # which it is not supposed to be able to do.
+                stranded, _COALESCE_QUEUE[:] = list(_COALESCE_QUEUE), []
+            for other in stranded:
+                other.done.set()
     # A leader can be drained by nothing but itself, yet its own group is
     # served by the same code every other caller depends on: hold the same
     # floor rather than trust that.

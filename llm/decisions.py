@@ -155,6 +155,11 @@ def _post(prov, model, state, questions):
         body = resp.json()
     except Exception:
         body = {}
+    # A reply that parses to something other than an object (a JSON list)
+    # is the same failure as no reply: the typed error callers expect, never
+    # an AttributeError from `body.get` (review 2026-11-01).
+    if not isinstance(body, dict):
+        body = {}
     if resp.status_code != 200 or not isinstance(body.get("answers"), dict):
         err = (body.get("error") or {}).get("message") if isinstance(body, dict) else ""
         raise DecisionError(f"jev {resp.status_code}: {err or resp.text[:200]}")
@@ -301,22 +306,56 @@ def decide(state, questions: dict) -> dict:
         return answered
     batches = _batches(items)
     if len(batches) == 1:
-        return {**answered, **_post(prov, model, state, batches[0])}
-    out = dict(answered)
-    with ThreadPoolExecutor(max_workers=len(batches)) as pool:
-        # Each shard runs in a copy of THIS thread's context, taken here: the
-        # call ledger is a ContextVar a worker does not inherit, and every
-        # shard of a large battery recorded into nothing (the bare-card
-        # replay, 2026-09-27: the after-call pass never reached the ledger).
-        futures = [pool.submit(contextvars.copy_context().run, _post, prov, model, state, b)
-                   for b in batches]
-        for future in futures:
-            out.update(future.result())
+        out = {**answered, **_post(prov, model, state, batches[0])}
+    else:
+        out = dict(answered)
+        with ThreadPoolExecutor(max_workers=len(batches)) as pool:
+            # Each shard runs in a copy of THIS thread's context, taken here:
+            # the call ledger is a ContextVar a worker does not inherit, and
+            # every shard of a large battery recorded into nothing (the
+            # bare-card replay, 2026-09-27: the after-call pass never reached
+            # the ledger).
+            futures = [pool.submit(contextvars.copy_context().run, _post, prov, model, state, b)
+                       for b in batches]
+            for future in futures:
+                out.update(future.result())
+    _say_unanswered(questions, out)
     return out
 
 
+def unanswered(questions, answers) -> list:
+    """The keys of `questions` that `answers` holds no answer for, in order.
+
+    AN UNANSWERED QUESTION IS NOT A "NO". `probability(None)` is 0.0, so a key
+    the model left out read as a confident no wherever a caller looked it up
+    -- `director_prose.select_channels`, which FAILS OPEN when the model
+    raises, read a missing channel as untouched, silently (review
+    2026-11-01, llm_schemas_prompts F7). Which way an unanswered question
+    fails is the CALLER's to say: "is this channel touched?" fails open,
+    "does she strike?" must not. This names them so it can."""
+    answers = answers if isinstance(answers, dict) else {}
+    return [key for key in (questions or {})
+            if not isinstance(answers.get(key), dict)]
+
+
+def _say_unanswered(questions, answers):
+    missing = unanswered(questions, answers)
+    if not missing:
+        return
+    try:
+        from core.pipeline_context import note_step_warning
+        note_step_warning(
+            f"decision model: {len(missing)} of {len(questions)} question(s) "
+            f"came back unanswered ({', '.join(map(str, missing[:8]))}"
+            f"{', ...' if len(missing) > 8 else ''}); `probability` reads an "
+            "unanswered key as 0.0, which the model did not say")
+    except Exception:  # noqa: BLE001 -- a diagnostic never costs a decision
+        pass
+
+
 def probability(answer) -> float:
-    """A noul answer's yes-probability, 0.0 for anything unreadable."""
+    """A noul answer's yes-probability, 0.0 for anything unreadable -- an
+    UNANSWERED key included, which is not a no (`unanswered`)."""
     if not isinstance(answer, dict):
         return 0.0
     try:
