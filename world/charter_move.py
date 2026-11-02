@@ -77,6 +77,11 @@ ERRAND_RATE = 0.06
 #: which is when it should.
 WALK_ROOMS_PER_HOUR = 6.0
 
+#: The transient body field holding what an arrived walker has left of the
+#: window it arrived in (`_advance` -> `_dispatch`, cleared by
+#: `forget_window`). Never stored.
+WINDOW_LEFT = "window_credit_left"
+
 #: WHAT AN EDGE IS DECIDES WHAT IT COSTS, and the constant above assumes it
 #: is a street.
 #:
@@ -236,9 +241,18 @@ def _dispatch(body, target, scene, cache, hours, neighbors=None, limit=None):
     if not scene:
         # No graph: the institution is one place and the walk is a step.
         route = [origin, target] if origin != target else [origin]
-    credit = float(current.get("credit") or 0.0) if current \
-        else float(hours) * WALK_ROOMS_PER_HOUR
     body = dict(body)
+    if current:
+        credit = float(current.get("credit") or 0.0)
+    elif WINDOW_LEFT in body:
+        # ARRIVED ALREADY THIS WINDOW: what is left of the window is what
+        # the next walk gets. A fresh window's credit here paid a body that
+        # finished a walk and was re-posted in the same window twice --
+        # measured, one room's credit crossed two rooms (audit
+        # world_charter_behaviours F15).
+        credit = float(body.pop(WINDOW_LEFT) or 0.0)
+    else:
+        credit = float(hours) * WALK_ROOMS_PER_HOUR
     body["walk"] = {"target": target, "route": route, "leg": 0,
                     "credit": credit, "held": False}
     return body
@@ -289,18 +303,31 @@ def _advance(body_key, body, neighbors, travelled, walked, scene=None):
         edges[nxt] = int(edges.get(nxt) or 0) + 1
     body = dict(body)
     was = str(body.get("place") or "")
-    body["place"] = route[leg] if route else was
-    if body["place"] != was:
-        # A within-room station is a fact about ONE room -- an anchor of it,
-        # a cell of its grid -- so a leg into another room leaves it behind,
-        # exactly as `world.spatial.invalidate_moved_body_cells` drops a
-        # scene body's pinned cell on a room change (`charter_place` rule i).
-        body.pop("station", None)
+    # A within-room station is a fact about ONE room -- an anchor of it, a
+    # cell of its grid -- so a leg into another room leaves it behind,
+    # exactly as `world.spatial.invalidate_moved_body_cells` drops a scene
+    # body's pinned cell on a room change (`charter_place` rule i).
+    set_place(body, route[leg] if route else was, walking=True)
     if route and leg == len(route) - 1:
         body.pop("walk", None)
+        # The unspent rest of THIS window, for a walk this body starts
+        # before the window ends (`_dispatch`). Transient: `forget_window`
+        # drops it when the window's movement is done, and
+        # `charter_model.normalize_body` keeps no key it does not know.
+        body[WINDOW_LEFT] = credit
     else:
         body["walk"] = {**rec, "leg": leg, "credit": credit, "held": held}
     return body
+
+
+def forget_window(bodies):
+    """Drop what was left of this window's walking credit from every body
+    (`_advance`, `_dispatch`): the next window pays afresh. Mutates the
+    bodies in place and returns them."""
+    for body in (bodies or {}).values():
+        if isinstance(body, dict):
+            body.pop(WINDOW_LEFT, None)
+    return bodies
 
 
 def continue_walks(bodies, hours, neighbors=None, travelled=None,
@@ -330,6 +357,13 @@ def continue_walks(bodies, hours, neighbors=None, travelled=None,
     for key in sorted(bodies):
         body = bodies[key]
         if not en_route(body) or not body.get("available"):
+            continue
+        if body.get("leased"):
+            # ON SCREEN, THE SCENE MOVES IT -- the rule `walk` already keeps
+            # (owner, 2026-09-14). This skipped only bodies not en route, so
+            # a walk on a leased body was advanced by the next tick and then
+            # snapped back by the next commit's lease, its errand dropped
+            # (audit world_charter_behaviours F14).
             continue
         rec = dict(body["walk"])
         # A held body does not bank rooms: the remainder of an edge carries
@@ -609,6 +643,41 @@ def homecomings(bodies, watch, visits):
 
 # ------------------------------------------------- the scene's own movement
 
+def set_place(body, room, *, walking=False):
+    """Stand ``body`` in ``room``: THE writer of a charter body's ``place``.
+    Mutates and returns the body.
+
+    WHAT A ROOM CHANGE LEAVES BEHIND, said once. A ``station`` is an anchor
+    or a cell of ONE room (`charter_place` rule i), so it goes whenever the
+    room changes. A body put somewhere by fiat -- an author's move, a lair
+    relocated, a body gone missing, a guest departed, a bound body following
+    the scene, a transfer -- did not walk there, so its ``walk`` goes too,
+    and the ``errand`` that rode the walk with it, unless the errand still
+    carries word not yet delivered (`charter_model.normalize_body` keeps that
+    one for the same reason: the message is delivered where walker and
+    addressee meet). ``walking`` is the walker's own step along its route
+    (`_advance`), which keeps both.
+
+    Ten writers each decided this for themselves and disagreed: a Writers'
+    Room `move_body` kept the old room's cell, snapped onto the new room's
+    grid, and a stale errand to the yard (audit world_charter_behaviours F13,
+    measured `{'place': 'cellar', 'station': {'cell': [7, 2]}, 'errand':
+    {'to': 'yard'}}`).
+    """
+    room = str(room or "")
+    if room != str(body.get("place") or ""):
+        body.pop("station", None)
+    body["place"] = room
+    if not walking:
+        body.pop("walk", None)
+        errand = body.get("errand")
+        carrying = isinstance(errand, dict) and errand.get("message") \
+            and errand.get("delivered_at") is None
+        if not carrying:
+            body.pop("errand", None)
+    return body
+
+
 def place_body(registry, charter_key, body_key, room, leased=None):
     """The SCENE moved this body: land it. Returns the registry (mutated).
 
@@ -633,9 +702,8 @@ def place_body(registry, charter_key, body_key, room, leased=None):
     if body is None:
         return registry
     room = str(room or "")
-    if room and room != str(body.get("place") or ""):
-        body["place"] = room
-        body.pop("station", None)
+    if room:
+        set_place(body, room)
     body.pop("walk", None)
     body.pop("errand", None)
     # THE LEASE. ``leased`` a holder's name (`charter_place.lease_holder`),

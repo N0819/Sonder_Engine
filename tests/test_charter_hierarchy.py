@@ -42,7 +42,11 @@ def test_staffed_colocated_reporting_line_briefs_the_superior():
 
     claim = minds["captain"]["report:road"]
     assert told == 1
-    assert claim["heard_from"] == "Iven Marr"
+    # The subordinate's KEY, the vocabulary every reader of `heard_from`
+    # keys by; this pinned the display name, which filed a refuted report's
+    # stance on a subject that is no body (audit world_charter_behaviours F9,
+    # 2026-11-01). The name is rendered where a voice reads the claim.
+    assert claim["heard_from"] == "guard"
     assert claim["provenance"] == "reported"
     assert claim["source_provenance"] == "witnessed_surface"
     assert claim["retellings"] == 1

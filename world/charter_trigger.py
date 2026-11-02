@@ -345,7 +345,19 @@ def _normalize_rule(index, raw):
             row["where"][str(field)] = _text(value)
         else:
             refused.append(f"a change carries no {str(field)!r} to match on")
-    for op_raw in list(raw.get("then") or ())[:TRIGGER_THEN_CAP]:
+    authored_then = list(raw.get("then") or ())
+    if len(authored_then) > TRIGGER_THEN_CAP:
+        # A NOTICE, NOT A REFUSAL: the first `TRIGGER_THEN_CAP` still run.
+        # The rest were cut in silence (audit world_charter_generation_run
+        # F11: a four-op rule kept three and `trigger_warnings` said
+        # nothing), and a refusal would switch the whole rule off.
+        row["cut"] = ("then carries %d consequences; only the first %d run "
+                      "(TRIGGER_THEN_CAP)" % (len(authored_then),
+                                              TRIGGER_THEN_CAP))
+    elif raw.get("cut"):
+        # The stored rule is the cut one; the notice it was cut with stays.
+        row["cut"] = str(raw["cut"])[:240]
+    for op_raw in authored_then[:TRIGGER_THEN_CAP]:
         if not isinstance(op_raw, dict):
             continue
         op = str(op_raw.get("op") or "")
@@ -443,6 +455,21 @@ def normalize_triggers(stored):
     is a compatibility surface and not a tweak -- changing one changes every
     saved charter's behaviour on its next load.
     """
+    return _rulebase(stored)[0]
+
+
+def _rulebase(stored):
+    """``(kept rules, ids cut by TRIGGER_CAP)``.
+
+    THE CAP CUTS AUTHORED ROWS, NEVER A SHIPPED DEFAULT, and it says which.
+    It sorted every rule by id and kept the first `TRIGGER_CAP` in silence,
+    so 32 authored rules `a00`-`a31` evicted `blame_opens_a_quarrel` because
+    it sorts after them (audit world_charter_generation_run F11). A default
+    -- or an authored row that overrides one by id -- keeps its slot; the
+    authored rows past the cap are cut last-by-id first and named by
+    `trigger_warnings`. The kept rules stay in id order, which is the order
+    `fire_triggers` has always read them in.
+    """
     rows = {}
     for index, raw in enumerate(DEFAULT_TRIGGERS):
         row = _normalize_rule(index, raw)
@@ -452,16 +479,31 @@ def normalize_triggers(stored):
             continue
         row = _normalize_rule(index, raw)
         rows[row["id"]] = row
-    return [rows[key] for key in sorted(rows)][:TRIGGER_CAP]
+    defaults = {str(raw.get("id") or "") for raw in DEFAULT_TRIGGERS}
+    order = sorted(k for k in rows if k in defaults) \
+        + sorted(k for k in rows if k not in defaults)
+    kept = set(order[:TRIGGER_CAP])
+    cut = [k for k in order[TRIGGER_CAP:]]
+    return [rows[key] for key in sorted(rows) if key in kept], cut
 
 
 def trigger_warnings(stored):
     """Author-facing notices. Validation belongs in the authoring surface on
     the day the field lands, not afterwards -- a rule that silently does
     nothing is the empty-psychology-field failure `CLAUDE.md` records, which
-    shows up fifty beats later looking like a model problem."""
-    return [f"{row['id']}: {row['refused']}"
-            for row in normalize_triggers(stored) if row.get("refused")]
+    shows up fifty beats later looking like a model problem. A rule or a
+    consequence the caps cut is a rule that silently does nothing too."""
+    kept, cut = _rulebase(stored)
+    out = []
+    for row in kept:
+        if row.get("refused"):
+            out.append(f"{row['id']}: {row['refused']}")
+        if row.get("cut"):
+            out.append(f"{row['id']}: {row['cut']}")
+    for key in cut:
+        out.append(f"{key}: past the {TRIGGER_CAP}-rule cap (TRIGGER_CAP); "
+                   "not loaded")
+    return out
 
 
 # ----------------------------------------------------------------- changes
@@ -862,6 +904,7 @@ def trigger_view(rules, pending_changes=None, last_fired=None):
     return {
         "rules": [{"id": row["id"], "on": row["on"],
                    "consequences": len(row["then"]),
+                   **({"cut": row["cut"]} if row.get("cut") else {}),
                    **({"refused": row["refused"]} if row.get("refused")
                       else {})}
                   for row in rows],

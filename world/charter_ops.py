@@ -255,14 +255,20 @@ def _op_supply_cut(registry, op, *, by, turn_idx, scene=None):
         "delta": -abs(float(op["lots"]))}, by=by, turn_idx=turn_idx)
 
 
-def _transfer(registry, op, *, to_charter, by, turn_idx):
+def _transfer(registry, op, *, to_charter, by, turn_idx, from_charter=None):
     """`charter_runtime.transfer_person` is the one expression of joining,
     leaving and the hermit employed nowhere. Imported at call time: this
-    module is pure and `charter_runtime` is the I/O seam above it."""
+    module is pure and `charter_runtime` is the I/O seam above it.
+
+    ``from_charter`` is the house the op names the body as leaving (a
+    `depart`'s own charter, an `arrive`'s ``from_charter``): a body key is
+    unique within an institution, not across them, and a transfer by a bare
+    key two houses share is refused by `transfer_person` (audit
+    world_charter_core F5)."""
     from .charter_runtime import transfer_person
     from .charter_surgery import record_authored
     body = str(op["body"])
-    was = _employer_of(registry, body)
+    was = str(from_charter) if from_charter else _employer_of(registry, body)
     if to_charter is not None:
         # An institution the registry does not hold is a refusal, not a new
         # institution: `transfer_person` would mint the item, and a town
@@ -277,7 +283,8 @@ def _transfer(registry, op, *, to_charter, by, turn_idx):
         raise ValueError("no such person: %s; a person the world does not "
                          "hold is planned first, never arrived" % body)
     place = op.get("place") or None
-    transfer_person(registry, body, to_charter, place=place)
+    transfer_person(registry, body, to_charter, place=place,
+                    from_charter=str(from_charter) if from_charter else None)
     detail = {"body": body, "from": was or "nowhere",
               "to": str(to_charter) if to_charter is not None else "nowhere"}
     for key in {was, str(to_charter) if to_charter is not None else ""}:
@@ -289,16 +296,21 @@ def _transfer(registry, op, *, to_charter, by, turn_idx):
 
 def _op_arrive(registry, op, *, by, turn_idx, scene=None):
     return _transfer(registry, op, to_charter=op["charter"], by=by,
-                     turn_idx=turn_idx)
+                     turn_idx=turn_idx,
+                     from_charter=_text(op.get("from_charter"), 120) or None)
 
 
 def _op_depart(registry, op, *, by, turn_idx, scene=None):
     to = _text(op.get("to_charter"), 120)
-    if _employer_of(registry, str(op["body"])) != str(op["charter"]):
+    # THE HOUSE THE OP NAMES employs the body, not merely the first house
+    # holding its key (`_employer_of`): a key is unique within one
+    # institution only (audit world_charter_core F5).
+    if str(op["body"]) not in (_charter_state(registry, op["charter"])
+                               .get("bodies") or {}):
         raise ValueError("charter %r does not employ %r"
                          % (op["charter"], op["body"]))
     return _transfer(registry, op, to_charter=to or None, by=by,
-                     turn_idx=turn_idx)
+                     turn_idx=turn_idx, from_charter=str(op["charter"]))
 
 
 _HANDLERS = {
@@ -348,6 +360,24 @@ def _resolve_body_name(registry, op):
         raise ValueError("%r names %d bodies; say which" % (wanted, len(hits)))
 
 
+def _house_of(registry, raw):
+    """The charter an op that names none moves: the registry's only one, or
+    the one its body belongs to (`_resolve_body_name`'s own search, which
+    refuses a name two houses share). "" when neither says -- and then
+    `normalize_charter_op` refuses the op for naming no charter."""
+    raw = raw if isinstance(raw, dict) else {}
+    if _text(raw.get("charter"), 120):
+        return ""
+    items = (registry or {}).get("items") or {}
+    if len(items) == 1:
+        return str(next(iter(items)))
+    if not raw.get("body"):
+        return ""
+    probe = {"body": raw.get("body"), "charter": ""}
+    _resolve_body_name(registry, probe)
+    return str(probe.get("charter") or "")
+
+
 def apply_charter_ops(registry, ops, *, by="writers_room", turn_idx=None,
                       scene=None):
     """Apply one authored EVENT -- an ordered list of ops -- to a registry in
@@ -366,14 +396,24 @@ def apply_charter_ops(registry, ops, *, by="writers_room", turn_idx=None,
                          "carries %d" % (CHARTER_OPS_CAP, len(ops)))
     out = []
     for index, raw in enumerate(ops):
-        op = raw if isinstance(raw, dict) and raw.get("op") in CHARTER_OPS \
-            else normalize_charter_op(raw)
+        kind = _text((raw or {}).get("op"), 60) if isinstance(raw, dict) else ""
         try:
+            # EVERY OP THROUGH THE ONE CHECK, the Director's raw ones too.
+            # This normalized only an op whose kind was NOT already known --
+            # and the Director's `state_diff.charter_ops` arrive raw with a
+            # known kind, so an invented key was ignored, `upkeep_fails`'
+            # to/by exclusivity never held, and a `die` with no condition
+            # failed as a bare `KeyError: 'condition'` (audit
+            # world_charter_behaviours F19). Idempotent on an op the Planner
+            # already normalized.
+            op = normalize_charter_op(
+                raw, default_charter=_house_of(registry, raw))
+            kind = op["op"]
             _resolve_body_name(registry, op)
             result = _HANDLERS[op["op"]](registry, op, by=by,
                                          turn_idx=turn_idx, scene=scene)
         except ValueError as exc:
-            raise ValueError("op %d (%s): %s" % (index, op["op"], exc))
+            raise ValueError("op %d (%s): %s" % (index, kind, exc))
         out.append({"index": index, "op": op["op"], "charter": op["charter"],
                     "result": result})
     return out

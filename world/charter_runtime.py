@@ -173,9 +173,30 @@ def person_id(charter_key, body_key):
     return "%s/%s" % (str(charter_key), str(body_key))
 
 
-def _body_of(pid):
-    """The intra-charter body key inside a person id."""
-    return str(pid).split("/", 1)[-1]
+def _body_of(pid, charter_key=None):
+    """The intra-charter body key inside a person id.
+
+    BY THE CHARTER KEY IT WAS BUILT WITH, where the caller knows it: a
+    charter key may itself carry a "/" (the generator keeps the model's key
+    and the editor saves any), and splitting on the FIRST one re-keyed every
+    body of `north/south ferry` as `south ferry/cook:0001` on the first
+    save/read round trip (audit world_charter_core F6, reproduced)."""
+    pid = str(pid)
+    if charter_key is not None and pid.startswith(str(charter_key) + "/"):
+        return pid[len(str(charter_key)) + 1:]
+    return pid.split("/", 1)[-1]
+
+
+def split_person_id(pid, charter_keys):
+    """``(charter_key, body_key)`` for a person id, by the LONGEST charter
+    key it begins with (`_body_of`'s reason: either half may hold a "/"), or
+    ``("", pid)`` when no charter key prefixes it."""
+    pid = str(pid or "")
+    for key in sorted((str(k) for k in charter_keys or ()), key=len,
+                      reverse=True):
+        if pid.startswith(key + "/"):
+            return key, pid[len(key) + 1:]
+    return "", pid
 
 
 def _split_person_state(state, charter_key="", *, copy_people=True):
@@ -208,7 +229,7 @@ def _split_person_state(state, charter_key="", *, copy_people=True):
     return institution, people
 
 
-def _join_person_state(institution, people, members):
+def _join_person_state(institution, people, members, charter_key=None):
     """Put one back together in the shape `charter_run.step` already takes.
 
     THE WHOLE POINT OF DOING IT THIS WAY. `step` and every function under it
@@ -223,7 +244,7 @@ def _join_person_state(institution, people, members):
         person = people.get(str(pid))
         if not isinstance(person, dict):
             continue
-        body_key = _body_of(pid)
+        body_key = _body_of(pid, charter_key)
         for store, held in person.items():
             if store in PERSON_STORES:
                 state[store][body_key] = copy.deepcopy(held)
@@ -251,7 +272,8 @@ def _stored_shape(registry, *, copy_people=True):
             "items": items, "people": people}
 
 
-def transfer_person(registry, body_key, to_charter, *, place=None):
+def transfer_person(registry, body_key, to_charter, *, place=None,
+                    from_charter=None):
     """Move one person between institutions. Identity is not touched.
 
     THE OPERATION THE OLD SHAPE COULD NOT EXPRESS. A person used to live
@@ -264,30 +286,52 @@ def transfer_person(registry, body_key, to_charter, *, place=None):
 
     ``to_charter`` of None makes them a hermit: employed nowhere, still a
     person. Returns the registry.
+
+    A PERSON IS ADDRESSED BY INSTITUTION AND KEY. ``from_charter`` names the
+    institution they leave ("" for a hermit); without it the body key must
+    name exactly one employed person. It lifted the key out of EVERY
+    institution holding it and kept the last, and two generated charters
+    both mint `cook:0001` (`person_id`): measured, the inn's Ada was erased
+    and the tavern's Bel moved (audit world_charter_core F5). A hermit
+    employed again is lifted out of `people`, where the copy used to stay
+    beside the employed one.
     """
     body_key = str(body_key)
     items = registry.setdefault("items", {})
+    if from_charter is None:
+        employers = sorted(str(key) for key, item in items.items()
+                           if body_key in ((item.get("state") or {})
+                                           .get("bodies") or {}))
+        if len(employers) > 1:
+            raise ValueError(
+                "%r is a body of %s; say which institution they leave"
+                % (body_key, ", ".join(employers)))
+        from_charter = employers[0] if employers else ""
     person = None
-    # Lift them out of wherever they are now.
-    for from_key, item in items.items():
-        state = item.get("state") or {}
-        if body_key not in (state.get("bodies") or {}):
-            continue
-        _institution, held = _split_person_state(state, from_key)
-        person = held.get(person_id(from_key, body_key))
+    from_charter = str(from_charter)
+    # Lift them out of where they are now.
+    item = items.get(from_charter) if from_charter else None
+    state = (item or {}).get("state") or {}
+    if from_charter and body_key not in (state.get("bodies") or {}):
+        raise ValueError("charter %r employs no %r" % (from_charter, body_key))
+    if from_charter:
+        _institution, held = _split_person_state(state, from_charter)
+        person = held.get(person_id(from_charter, body_key))
         registry.setdefault("people", {}).pop(
-            person_id(from_key, body_key), None)
+            person_id(from_charter, body_key), None)
         for store in PERSON_STORES:
             if isinstance(state.get(store), dict):
                 state[store].pop(body_key, None)
         state["members"] = sorted(state.get("bodies") or {})
-    if person is None:
-        person = (registry.get("people") or {}).get(body_key)
+    else:
+        # A hermit, addressed by body alone: lifted OUT, not copied.
+        person = registry.setdefault("people", {}).pop(body_key, None)
     if person is None:
         raise ValueError(f"no such person: {body_key}")
     person = copy.deepcopy(person)
     if place is not None:
-        person.setdefault("bodies", {})["place"] = str(place)
+        from world.charter_move import set_place
+        set_place(person.setdefault("bodies", {}), place)
     if to_charter is None:
         # A hermit is addressed by body alone: no institution is in the name,
         # because none is in their life.
@@ -308,7 +352,8 @@ def charter_view(registry, charter_key):
     item = (registry.get("items") or {}).get(str(charter_key)) or {}
     return _join_person_state(
         item.get("state") or {}, registry.get("people") or {},
-        (item.get("state") or {}).get("members") or ())
+        (item.get("state") or {}).get("members") or (),
+        charter_key=str(charter_key))
 
 
 def absorb_view(registry, charter_key, after):
@@ -360,7 +405,8 @@ def normalize_registry(stored, reservation=None):
         state = raw.get("state") if isinstance(raw.get("state"), dict) else raw
         if incoming_people and not (state.get("bodies") or {}):
             state = _join_person_state(
-                state, incoming_people, state.get("members") or ())
+                state, incoming_people, state.get("members") or (),
+                charter_key=str(key))
         state = normalize_charter(state, reservation)
         state["key"] = str(state.get("key") or key)
         last = raw.get("last_elapsed_seconds")
@@ -961,6 +1007,30 @@ def identity_index(registry):
     return index
 
 
+@contextmanager
+def registry_update(cid, frame_id=None):
+    """A read-modify-write of one frame's registry that loses no other write.
+
+    ``with registry_update(cid, frame_id) as registry:`` reads a private
+    registry, lets the block mutate it, and saves it -- all inside one
+    database transaction, so the write lock `land_snapshot` and
+    `land_presim` take is held across the whole of it and neither can land
+    between the read and the save. Outside a commit `save_registry` is
+    last-writer-wins, and the writers that read, mutate and save with no
+    transaction (the lot job's `deal_berths`, region waves fired after the
+    commit, the editor's post) could revert a landed advance whose scheduled
+    rows then stayed (audit world_charter_core F7). An exception raised in
+    the block saves nothing. Holds the lock for the parse: a big registry's
+    second is paid by any commit waiting on it, which is the trade.
+    """
+    from core.db import transaction
+
+    with transaction():
+        registry = registry_for_update(cid, frame_id)
+        yield registry
+        save_registry(cid, registry, frame_id)
+
+
 def save_registry(cid, stored, frame_id=None):
     """Persist an explicitly authored registry in one temporal frame.
 
@@ -1498,7 +1568,14 @@ def presim_registry(registry, *, horizon_hours=MAX_CATCHUP_HOURS,
     for (index, (key, item)), (state, events) in zip(ordered, results):
         produced.extend(events)
         item["state"] = state
-        item["last_elapsed_seconds"] = 0.0
+        # NOT YET ON THE STORY CLOCK. The prehistory ends at "now", and now
+        # is the instant `land_presim` lands it, which this pure function
+        # does not know. It stamped 0.0 -- true only at turn 0 -- so a town
+        # generated fifty hours into a story re-lived those fifty hours on
+        # its first beat (audit world_charter_core F4, reproduced: +50.02 h
+        # on one 60-second beat). None until landed; `advance_snapshot`
+        # anchors a None at the next beat rather than catching up.
+        item["last_elapsed_seconds"] = None
         item["last_epoch_id"] = "presim"
     return normalize_registry(registry), produced
 
@@ -1633,21 +1710,44 @@ def _merge_generated_rooms_by_name(cid, town, pinned):
     """``{generated_uid: existing_uid}`` for every generated room whose
     name (folded) is the name or an alias of a room this story has PLANNED
     and not yet landed (`room_registry` rows with no ``created_turn_id``).
-    A pinned room is the author's by id and is never merged."""
+    A pinned room is the author's by id and is never merged.
+
+    ONLY INTO ITS OWN BUILDING. A planned room filed under a structure other
+    than the one this town is generated for is another building's room, and
+    a name two buildings share -- Kitchen, Cellar, Yard -- is not one room:
+    a new inn's "Kitchen" became the manor's planned kitchen and the inn's
+    cook worked there (audit world_charter_core F11, reproduced). A planned
+    room no structure claims, or a town generated with none, matches as it
+    always did. Names are compared in the parts their own script writes them
+    in (`language_runtime.fold_words`), so a Japanese name matches by its
+    words in any order as an English one does; the English connectives
+    below are dropped as before, and no other language's are."""
     import json as _json
     from core.db import q
-    import re as _re
+    from language_runtime import fold_words
     stop = {"the", "a", "an", "of", "and", "s"}
 
     def _tokens(text):
-        return frozenset(t for t in _re.split(r"[^a-z0-9]+", str(text or "").casefold())
-                         if t and t not in stop)
+        return frozenset(t for t in fold_words(text) if t not in stop)
 
+    own = ""
+    structure = town.get("structure")
+    if isinstance(structure, dict):
+        own = str(structure.get("key") or "")
+    elif structure:
+        own = str(structure)
     by_form, by_tokens = {}, {}
-    for row in q("SELECT room_uid, name, aliases, created_turn_id FROM "
-                 "room_registry WHERE chat_id=? AND retired_turn_id IS NULL",
-                 (cid,)):
+    for row in q("SELECT room_uid, name, aliases, created_turn_id, payload "
+                 "FROM room_registry WHERE chat_id=? "
+                 "AND retired_turn_id IS NULL", (cid,)):
         if row["created_turn_id"] is not None:
+            continue
+        try:
+            filed = str((_json.loads(row["payload"] or "{}") or {})
+                        .get("structure") or "")
+        except Exception:
+            filed = ""
+        if own and filed and filed != own:
             continue
         try:
             aliases = _json.loads(row["aliases"] or "[]")
@@ -2452,7 +2552,7 @@ def _generate_lived_location(cid, request, chat, frame_id, digest, artifact,
             for key, item in presimmed["items"].items():
                 local = dict(actual)
                 local["residents"] = {
-                    resident_id.split("/", 1)[1]: value
+                    _body_of(resident_id, key): value
                     for resident_id, value in (actual.get("residents") or {}).items()
                     if resident_id.startswith(f"{key}/")}
                 item["state"].setdefault("history", {})["actual"] = local
@@ -2555,21 +2655,41 @@ def skeleton_scene(rooms):
 
 
 def land_presim(cid, frame_id, registry, produced, *, base_turn=0,
-                expected_revision=None, now_seconds=0.0):
-    """Atomically land explicit presimulation with a revision race guard."""
-    from core.db import qtx, transaction, wset_for_frame
+                expected_revision=None, now_seconds=None):
+    """Atomically land explicit presimulation with a revision race guard.
+
+    THE PREHISTORY ENDS AT THE STORY'S NOW. ``now_seconds`` is the story's
+    elapsed seconds at landing -- read from the frame's simulation clock
+    when the caller does not say -- and every institution this presim lived
+    (`presim_registry` leaves them unanchored) is stamped with it, so the
+    first beat after a mid-story landing lives that beat and not the whole
+    story before it (audit world_charter_core F4). Each history row is dated
+    against ITS OWN institution's end clock: the registry-wide maximum
+    backdated a new town's history by however far an older charter had run.
+    """
+    from core.db import qtx, transaction, wget_for_frame, wset_for_frame
 
     if expected_revision and registry_revision(registry_for(cid, frame_id)) \
             != expected_revision:
         return {"advanced": 0, "events": 0, "reason": "registry_changed"}
+    if now_seconds is None:
+        clock = wget_for_frame(cid, "simulation_clock", frame_id,
+                               {"elapsed_seconds": 0.0}) or {}
+        now_seconds = float(clock.get("elapsed_seconds") or 0.0)
+    for item in (registry.get("items") or {}).values():
+        if item.get("last_elapsed_seconds") is None \
+                and item.get("last_epoch_id") == "presim":
+            item["last_elapsed_seconds"] = float(now_seconds)
     rows = []
-    horizon = max((float((item.get("state") or {}).get("clock_hours") or 0.0)
-                   for item in (registry.get("items") or {}).values()),
-                  default=0.0)
+    ends = {str(key): float((item.get("state") or {}).get("clock_hours")
+                            or 0.0)
+            for key, item in (registry.get("items") or {}).items()}
+    horizon = max(ends.values(), default=0.0)
     for event in produced:
         charter_key = str(event.get("charter") or "charter")
         due_at = float(now_seconds) - max(
-            0.0, horizon - float(event.get("at_hours") or 0.0)) * 3600.0
+            0.0, ends.get(charter_key, horizon)
+            - float(event.get("at_hours") or 0.0)) * 3600.0
         # HISTORY, NOT DUE. Every presimulated event is at or before "now"
         # by construction (the line above), so as 'pending' each one came due
         # at the opening commit and fired as though it happened then: 179 to
@@ -2581,7 +2701,7 @@ def land_presim(cid, frame_id, registry, produced, *, base_turn=0,
         # standing there its account (`charter_news.witness`).
         rows.append(_scheduled_row(
             cid, frame_id, base_turn, "presim", charter_key, event, due_at,
-            status="history"))
+            status="history", registry=registry))
     with transaction():
         if expected_revision and registry_revision(registry_for(cid, frame_id)) \
                 != expected_revision:
@@ -2602,6 +2722,19 @@ def land_presim(cid, frame_id, registry, produced, *, base_turn=0,
 
 def registry_warnings(registry, scene=None, *, cid=None, frame_id=None):
     """Author-facing validation; warnings never silently rewrite a Charter."""
+    # THE RULES AS WRITTEN, read before normalization truncates them: a rule
+    # the caps cut is reported here, on the authoring surface, or nowhere
+    # (`charter_trigger._rulebase`; audit world_charter_generation_run F11).
+    raw_items = (registry or {}).get("items") \
+        if isinstance((registry or {}).get("items"), dict) else (
+            registry if isinstance(registry, dict) else {})
+    written_triggers = {}
+    for raw_key, raw in (raw_items or {}).items():
+        raw = raw if isinstance(raw, dict) else {}
+        raw_state = raw.get("state") if isinstance(raw.get("state"), dict) \
+            else raw
+        if isinstance(raw_state.get("triggers"), (list, tuple)):
+            written_triggers[str(raw_key)] = raw_state["triggers"]
     registry = normalize_registry(registry)
     index = identity_index(registry)
     rooms = set((scene or {}).get("rooms") or {})
@@ -2634,7 +2767,8 @@ def registry_warnings(registry, scene=None, *, cid=None, frame_id=None):
         # warning at runtime, and a world that behaves wrongly fifty beats
         # later for a reason that looks like a model problem. Validation
         # belongs in the authoring surface on the day the field lands.
-        for notice in trigger_warnings(state.get("triggers")):
+        for notice in trigger_warnings(
+                written_triggers.get(str(key), state.get("triggers"))):
             warnings.append(f"{key}: {notice}")
         names = index.display(key)
         display_groups = {}
@@ -2652,6 +2786,29 @@ def registry_warnings(registry, scene=None, *, cid=None, frame_id=None):
                     f"{key}: display name {display!r} belongs to multiple "
                     f"bodies {bodies}; scene presence is withheld until "
                     "the author distinguishes them")
+        # A BODY NAMED BY ITS OWN KEY IS NAMED FOR GOOD, and a law that can
+        # mint nothing names nobody -- both in silence until now (audit
+        # world_charter_core F14, reproduced: no law, a law added later and a
+        # family-only law all left `cook:0001` its name). Notices only:
+        # renaming a body is the owner's to rule on (a generated name is
+        # materialised once).
+        keyed = sorted(
+            body_key for body_key, body in state["bodies"].items()
+            if str(body.get("name") or body_key) == str(body_key))
+        if keyed:
+            warnings.append(
+                f"{key}: {len(keyed)} bodies are named by their engine key "
+                f"({', '.join(keyed[:3])}{', ...' if len(keyed) > 3 else ''})"
+                "; a name is minted once, so a naming law added later never "
+                "names them")
+        from world.charter_identity import normalize_naming_profile
+        law = normalize_naming_profile(state.get("naming"))
+        if (law["family"] or law["family_parts"]["starts"]) \
+                and not (law["given"] or law["given_parts"]["starts"]):
+            warnings.append(
+                f"{key}: the naming law has family names and no given "
+                "names; a name is minted from a given name first, so this "
+                "law cannot mint and names nobody")
         # A NEED NOTHING FEEDS IS SERVICED AT FULL SUPPLY IN SILENCE, which
         # is the defect A25 was filed against: all 66 stored needs in
         # bench.db chat 114 carried `fed_by: ""` and every one of them ate
@@ -2843,8 +3000,17 @@ def _event_subject(event):
                or event.get("good") or "institution")
 
 
-def _event_surface(event):
+def _event_surface(event, words=None):
+    """The sentence an event is told in. ``words`` renders the PEOPLE it
+    names (`_bystander_words`): the witnessed surface a cast member stores
+    as its own claim is built in the words anybody in the room could use,
+    never from body keys (`_scheduled_row`). Without it the keys stand, for
+    a reader that is the institution's own (the Director's `what`, a test of
+    the phrase table)."""
     subject = _event_subject(event)
+    toward = str(event.get("subject") or "")
+    if words is not None:
+        subject, toward = words(subject), words(toward) if toward else ""
     kind = str(event.get("kind") or "institution_event")
     # WHOM THE ACT WAS DIRECTED AT, where the event names one. What a
     # bystander in the room perceives is an act between two people, and a
@@ -2852,7 +3018,6 @@ def _event_surface(event):
     # standing in front of them. Nothing from the institution's blame register
     # may join it: this string is what `_scheduled_row` puts on the objective
     # carrier rail for registered characters.
-    toward = str(event.get("subject") or "")
     phrases = {
         "upkeep_out_of_band": f"{subject} fell below its operating floor",
         "upkeep_restored": f"{subject} returned to its operating band",
@@ -2912,8 +3077,80 @@ def _event_frame(payload):
         return None
 
 
+def _bystander_words(registry, charter_key):
+    """What anybody standing in the room could call the people an event of
+    ``charter_key`` names, as a function of the key the event holds them by:
+    a body of this institution, or a person id of another (a predation
+    ``subject``), by its post words (`_post_words`) -- a bystander has met
+    nobody -- and anything that is not a person unchanged.
+
+    The scheduled row's `witnessed` was built from body keys, and
+    `story.carriers` stores it verbatim as the claim of every cast member in
+    the room: "warden:0001 caused harm to cook:0003", or with a registry
+    keyed by name, "ilse gave aid to raul" -- a name learned through no
+    channel (audit world_charter_core F2). The parties ride beside the
+    surface as refs (`_event_parties`) for a reader that renders per
+    observer.
+    """
+    items = (registry or {}).get("items") or {}
+    dealt = {}
+
+    def words_of(key):
+        if key not in dealt:
+            state = ((items.get(key) or {}).get("state") or {})
+            dealt[key] = (state.get("bodies") or {}, _post_words(state, key))
+        return dealt[key]
+
+    def words(value):
+        value = str(value or "")
+        bodies, by_post = words_of(str(charter_key))
+        if value in bodies:
+            return by_post(value)
+        if "/" in value:
+            other, body_key = split_person_id(value, items)
+            if other:
+                other_bodies, other_post = words_of(other)
+                if body_key in other_bodies:
+                    return other_post(body_key)
+        return value
+
+    return words
+
+
+def _event_parties(event, charter_key, registry):
+    """``{"actor": ref, "toward": ref}`` for the people an event names, as
+    ``{"charter", "body"}`` refs: the acting body (``body``, ``actor`` or
+    ``by``) and whom it acted on (``subject``), each only where it resolves
+    to a body the registry holds."""
+    items = (registry or {}).get("items") or {}
+
+    def ref(value):
+        value = str(value or "")
+        bodies = ((items.get(str(charter_key)) or {}).get("state")
+                  or {}).get("bodies") or {}
+        if value in bodies:
+            return {"charter": str(charter_key), "body": value}
+        if "/" in value:
+            other, body_key = split_person_id(value, items)
+            if other and body_key in (((items.get(other) or {}).get("state")
+                                       or {}).get("bodies") or {}):
+                return {"charter": other, "body": body_key}
+        return None
+
+    out = {}
+    for field in ("body", "actor", "by"):
+        found = ref(event.get(field))
+        if found:
+            out["actor"] = found
+            break
+    toward = ref(event.get("subject"))
+    if toward:
+        out["toward"] = toward
+    return out
+
+
 def _scheduled_row(cid, frame_id, base_turn, epoch_id, charter_key, event,
-                   due_at, *, status="pending"):
+                   due_at, *, status="pending", registry=None):
     """One charter event as a `scheduled_events` row, stamped with its ERA.
 
     THE TOWN'S EVENT, NOT THE BUBBLE'S. The charter is one per era
@@ -2936,13 +3173,20 @@ def _scheduled_row(cid, frame_id, base_turn, epoch_id, charter_key, event,
     event_id = stable_event_key(
         "charter", cid, frame_id, charter_key, kind, subject,
         event.get("at_hours"))
-    public = _event_surface(event) if kind in WITNESSABLE else ""
+    # WHAT A BYSTANDER SAW, in words a bystander has (`_bystander_words`);
+    # `what` stays the institution's own account for the Director.
+    public = _event_surface(
+        event, words=_bystander_words(registry, charter_key)
+        if registry is not None else None) if kind in WITNESSABLE else ""
+    parties = _event_parties(event, charter_key, registry) \
+        if registry is not None and kind in WITNESSABLE else {}
     payload = {
         "frame_id": frame_id,
         "what": _event_surface(event),
         "where": location,
         "where_kind": "room",
         "witnessed": public,
+        **({"parties": parties} if parties else {}),
         "origin": {"charter": charter_key, "epoch_id": epoch_id},
         "originator": "",
         "base_turn": int(base_turn),
@@ -3050,7 +3294,11 @@ def deliver_errands(registry):
                 walker_name = index.display(charter_key)[body_key]
             except Exception:
                 walker_name = body_key
-            copy_["heard_from"] = str(walker_name or body_key)
+            # The walker as the addressee's institution keys a teller: its
+            # own body key at home, a person id from another house (audit
+            # world_charter_core F12; `cross_charter_gossip`).
+            copy_["heard_from"] = body_key if to_charter == charter_key \
+                else person_id(charter_key, body_key)
             copy_["provenance"] = "carried_word_delivered"
             copy_["retellings"] = int(claim.get("retellings") or 0) + 1
             copy_["strength"] = min(1.0, float(claim.get("strength") or 1.0))
@@ -3137,15 +3385,13 @@ def sync_minds_to_scene(state, scene, key):
                 key, body_key, str(room),
                 state["bodies"][body_key].get("place"))
             continue
-        if str(room) != str(state["bodies"][body_key].get("place") or ""):
-            # A station names a fixture or a cell of ONE room
-            # (`charter_place` rule i); a bound body's within-room
-            # position is the scene's own `stations` row anyway.
-            state["bodies"][body_key].pop("station", None)
-        state["bodies"][body_key]["place"] = str(room)
-        # A registered character walks under its own movement, so
-        # whatever route Charter had it on is over.
-        state["bodies"][body_key].pop("walk", None)
+        # A station names a fixture or a cell of ONE room (`charter_place`
+        # rule i) -- a bound body's within-room position is the scene's own
+        # `stations` row anyway -- and a registered character walks under its
+        # own movement, so whatever route Charter had it on is over
+        # (`charter_move.set_place`).
+        from world.charter_move import set_place
+        set_place(state["bodies"][body_key], str(room))
 
 
 def anchor_charter_day(state, previous_elapsed, story_day):
@@ -3290,7 +3536,8 @@ def advance_snapshot(registry, *, elapsed_seconds, epoch_id, base_turn,
             stamped = {"charter": key, **copy.deepcopy(event)}
             produced.append(stamped)
             rows.append(_scheduled_row(
-                cid, frame_id, base_turn, epoch_id, key, event, due_at))
+                cid, frame_id, base_turn, epoch_id, key, event, due_at,
+                registry=registry))
     if prepared:
         from world.charter_predation import run_registry
 
@@ -3331,7 +3578,7 @@ def advance_snapshot(registry, *, elapsed_seconds, epoch_id, base_turn,
                     produced.append(stamped)
                     rows.append(_scheduled_row(
                         cid, frame_id, base_turn, epoch_id, key, event,
-                        due_at))
+                        due_at, registry=registry))
     if advanced_any:
         cross_charter_gossip(registry)
         deliver_errands(registry)
@@ -3559,7 +3806,6 @@ def cross_charter_gossip(registry, cap=CROSS_CHARTER_GOSSIP_CAP):
     so a market spreads a story over time instead of teaching every head at
     once.
     """
-    from world.charter_identity import display_name
     from world.charter_mind import cap_minds, hear_claim
     from world.charter_news import known_news, news_keys_in
     from world.charter_talk import RETOLD_RETENTION
@@ -3577,9 +3823,6 @@ def cross_charter_gossip(registry, cap=CROSS_CHARTER_GOSSIP_CAP):
     by_place = {}
     for charter_key, item in sorted(registry["items"].items()):
         state = item["state"]
-        roles = {}
-        for post, body_key in (state.get("watch") or {}).items():
-            roles.setdefault(str(body_key), []).append(str(post))
         placed = {}
         for body_key, body in sorted(state["bodies"].items()):
             if body_key in (state.get("bindings") or {}) \
@@ -3593,12 +3836,8 @@ def cross_charter_gossip(registry, cap=CROSS_CHARTER_GOSSIP_CAP):
             # a thousand people at one fair still create one mouth per Charter.
             turn = int(float(state.get("clock_hours") or 0.0))
             body_key = body_keys[turn % len(body_keys)]
-            body = state["bodies"][body_key]
             by_place.setdefault(place, []).append({
-                "charter": charter_key, "body": body_key,
-                "name": display_name(
-                    body, roles.get(body_key) or (), state.get("naming")),
-            })
+                "charter": charter_key, "body": body_key})
 
     told = 0
     for place in sorted(by_place):
@@ -3626,10 +3865,15 @@ def cross_charter_gossip(registry, cap=CROSS_CHARTER_GOSSIP_CAP):
                 target = registry["items"][listener["charter"]]["state"]
                 for claim in known_news(
                         source.get("minds") or {}, speaker["body"]):
+                    # FROM A PERSON OF ANOTHER INSTITUTION, held as the
+                    # registry addresses them (`person_id`), never by the
+                    # display name a stranger never learned: the readers of
+                    # `heard_from` key by it (audit world_charter_core F12).
                     if hear_claim(
                             target.setdefault("minds", {}), listener["body"],
                             claim, RETOLD_RETENTION, 1.0,
-                            heard_from=speaker["name"]):
+                            heard_from=person_id(speaker["charter"],
+                                                 speaker["body"])):
                         target["minds"] = cap_minds(target["minds"])
                         target["news_keys"] = sorted(
                             news_keys_in(target["minds"]))
@@ -4132,8 +4376,21 @@ def carrier_entries(cid, frame_id=None):
                         if by_post is None:
                             by_post = _post_words(state, charter_key)
                         person = _member_namer(state, body_key, charter_key,
-                                               names, by_post)
+                                               names, by_post,
+                                               registry=registry)
                     claim = dict(claim, about=person(claim["about"]))
+                # THE RAIL'S TELLER IS A DISPLAY NAME (`story.carriers`
+                # writes `told_by: speaker["name"]`, and each reader relabels
+                # it to what its mind knows), so a teller this registry holds
+                # by key goes onto the rail as its display name, and comes
+                # back off it as its key (`save_carrier_state`).
+                teller = str((claim or {}).get("heard_from") or "") \
+                    if isinstance(claim, dict) else ""
+                if teller:
+                    shown_teller = _teller_display(registry, index,
+                                                   charter_key, teller)
+                    if shown_teller != teller:
+                        claim = dict(claim, heard_from=shown_teller)
                 row = report_from_claim(claim, current_location=place,
                                         anchor=anchor)
                 if row is not None:
@@ -4152,6 +4409,47 @@ def carrier_entries(cid, frame_id=None):
                 "state": {"carried_reports": reports},
             })
     return out
+
+
+def _teller_display(registry, index, charter_key, teller):
+    """A `heard_from` key as the carrier rail spells a teller: the display
+    name of the member or the person id it names, else unchanged (a figure's
+    name, an author's own words)."""
+    items = (registry or {}).get("items") or {}
+    teller = str(teller or "")
+    bodies = ((items.get(charter_key) or {}).get("state") or {}).get(
+        "bodies") or {}
+    if teller in bodies:
+        return str(index.display(charter_key)[teller] or teller)
+    if "/" in teller:
+        other, body_key = split_person_id(teller, items)
+        if other and body_key in ((items.get(other) or {}).get("state")
+                                  or {}).get("bodies", {}):
+            return str(index.display(other)[body_key] or teller)
+    return teller
+
+
+def _teller_key(registry, index, charter_key, teller):
+    """The rail's display-name teller as this registry keys it: the member's
+    body key, or the person id of a body of another institution, where the
+    name picks out exactly one; else unchanged (a figure's name -- the key a
+    figure IS -- or an author's words). The inverse of `_teller_display`."""
+    items = (registry or {}).get("items") or {}
+    wanted = str(teller or "").strip().casefold()
+    if not wanted:
+        return teller
+    hits = []
+    for key in sorted(items):
+        shown = index.display(key)
+        for body_key in (((items.get(key) or {}).get("state") or {})
+                         .get("bodies") or {}):
+            if str(shown[body_key] or "").strip().casefold() == wanted \
+                    or str(body_key).casefold() == wanted:
+                hits.append((key, body_key))
+    if len(hits) != 1:
+        return teller
+    key, body_key = hits[0]
+    return body_key if key == charter_key else person_id(key, body_key)
 
 
 def save_carrier_state(cid, entry, carrier_state, frame_id=None):
@@ -4174,10 +4472,16 @@ def save_carrier_state(cid, entry, carrier_state, frame_id=None):
     changed = False
     at_hours = float(state.get("clock_hours") or 0.0)
     anchor = clock_anchor(item)
+    index = None
     for report in (carrier_state or {}).get("carried_reports") or ():
         claim = claim_from_report(report, at_hours, anchor=anchor)
         if claim is None:
             continue
+        if claim.get("heard_from"):
+            if index is None:
+                index = identity_index(registry)
+            claim["heard_from"] = _teller_key(registry, index, charter_key,
+                                              claim["heard_from"])
         current = held.get(claim["body"])
         if current is not None:
             current_firsthand = str(
@@ -4205,9 +4509,10 @@ def save_carrier_state(cid, entry, carrier_state, frame_id=None):
 def clock_anchor(item):
     """The pair `charter_news.charter_hours_of` converts with: this
     charter's hour clock and the simulation second it was last advanced to.
-    `last_elapsed_seconds` is stamped 0.0 when presim lands and moved by
-    `advance_snapshot`, so the two always describe the same instant. None
-    for a charter never landed, and the converters pass numbers through."""
+    `last_elapsed_seconds` is stamped with the story's elapsed seconds when
+    presim lands (`land_presim`) and moved by `advance_snapshot`, so the two
+    always describe the same instant. None for a charter never landed, and
+    the converters pass numbers through."""
     item = item if isinstance(item, dict) else {}
     elapsed = item.get("last_elapsed_seconds")
     state = item.get("state") or {}
@@ -4768,18 +5073,47 @@ def _post_words(state, charter_key):
     return words
 
 
-def _member_namer(state, holder, charter_key, display, post_words=None):
-    """What ONE body calls a member of its own institution, as a function
-    of the member's key: its name where the holder knows them
-    (`_members_known_to`), its post where it does not (`_post_words`), and
-    anything that is not a member with its id spelled as words."""
+def _member_namer(state, holder, charter_key, display, post_words=None,
+                  registry=None, figures=None):
+    """What ONE body calls a person, as a function of the key it holds them
+    by: a member of its own institution by name where the holder knows them
+    (`_members_known_to`) and by post where it does not (`_post_words`); a
+    person of ANOTHER institution, held by person id (`heard_from` across
+    houses, a predation `subject`), by that institution's post words --
+    a stranger, since no claim of this holder is keyed by them; a figure by
+    the label this holder's own claim saw it under; anything else with its
+    id spelled as words. ``registry`` lets a person id resolve; a person id
+    naming a body that institution no longer holds reads as "somebody".
+    ``figures`` is THIS beat's rendering of the figures standing here
+    (`presence_view`'s labels, recognition included) and wins over a stored
+    claim's label, which is how the body saw them when it last did."""
     bodies = state.get("bodies") or {}
     known = _members_known_to(state, holder)
     by_post = post_words or _post_words(state, charter_key)
+    held = (state.get("minds") or {}).get(str(holder)) or {}
+    items = ((registry or {}).get("items") or {}) if registry else {}
+    elsewhere = {}
 
     def person(key):
         key = str(key or "")
         if key not in bodies:
+            if key in (figures or {}):
+                return str(figures[key])
+            claim = held.get(key)
+            if isinstance(claim, dict) and claim.get("kind") == "figure":
+                label = str(((claim.get("surface") or {}).get("label"))
+                            or "").strip()
+                if label:
+                    return label
+            other, body_key = split_person_id(key, items) \
+                if "/" in key and items else ("", key)
+            if other:
+                other_state = ((items.get(other) or {}).get("state") or {})
+                if body_key not in (other_state.get("bodies") or {}):
+                    return "somebody"
+                if other not in elsewhere:
+                    elsewhere[other] = _post_words(other_state, other)
+                return elsewhere[other](body_key)
             return key.replace("_", " ")
         # Subscripted, never `.get`: an identity index deals a name on first
         # ASK (`_DealtMap.__missing__`), and `.get` does not ask -- it
@@ -4795,7 +5129,8 @@ def _member_namer(state, holder, charter_key, display, post_words=None):
 _VOICE_DROPPED_IDS = frozenset({"evidence_id", "source_id", "id", "source"})
 
 
-def _voiced_presence(presence, state, body_key, charter_key, display, rooms):
+def _voiced_presence(presence, state, body_key, charter_key, display, rooms,
+                     registry=None, figures=None):
     """The presence slice as the mind it voices reads it: no engine key.
 
     `_relabel` puts the scene's FIGURES under this observer's labels. The
@@ -4821,7 +5156,8 @@ def _voiced_presence(presence, state, body_key, charter_key, display, rooms):
     from collections import Counter
     from .charter_news import _native_news_phrase
 
-    person = _member_namer(state, body_key, charter_key, display)
+    person = _member_namer(state, body_key, charter_key, display,
+                           registry=registry, figures=figures)
 
     def room(place):
         place = str(place or "")
@@ -4854,6 +5190,14 @@ def _voiced_presence(presence, state, body_key, charter_key, display, rooms):
         for field in ("about", "from"):
             if row.get(field):
                 row[field] = person(row[field])
+        # Whom an overheard line was aimed at: a label already where the
+        # addressee was a figure, a member's key where it was one of this
+        # institution (`charter_observe.evidence_claim`) -- said as THIS
+        # body says it.
+        public = row.get("public_evidence")
+        if isinstance(public, dict) and public.get("target"):
+            row["public_evidence"] = dict(
+                public, target=person(public["target"]))
         if row.get("where"):
             row["where"] = room(row["where"])
         news.append(row)
@@ -5035,8 +5379,17 @@ def charter_carriers(cid, rooms, frame_id=None):
 
 def presence_view(cid, place, name, frame_id=None, figures=None, *,
                   evidence=None, inventory_ops=None, scene=None,
-                  actors=None):
+                  actors=None, refs=None):
     """Only what one Charter body earned, never its institution's register.
+
+    ONE BODY, OR NONE. ``refs`` are the presence record's exact
+    ``charter_refs`` and resolve it outright; without them ``name`` must
+    match exactly one unbound body across the registry, the rule
+    `apply_presence_conduct` and `promotion_bundle` already keep. It matched
+    by display name across EVERY charter and returned up to two, so an inn's
+    and a mill's "Ada Fenn" standing in one square handed one voice both
+    private slices (audit world_charter_core F1, reproduced) -- two people
+    sharing a head.
 
     ``figures`` are the scene-owned people standing here, as ``{key,
     label}`` (or a bare string where the two coincide); see
@@ -5063,7 +5416,10 @@ def presence_view(cid, place, name, frame_id=None, figures=None, *,
     labels = _figure_labels(figures)
     plans = plan_figure_acts(registry, evidence, inventory_ops, scene,
                              actors) if actors and scene is not None else []
-    for charter_key, body_key in _body_refs(registry, name=name):
+    matches = _body_refs(registry, name=name, refs=refs)
+    if len(matches) != 1:
+        return []
+    for charter_key, body_key in matches:
         item = registry["items"][charter_key]
         shared = item["state"]
         # COPY WHAT THIS CALL WRITES, SHARE THE REST (C19, 2026-09-07). The
@@ -5155,7 +5511,7 @@ def presence_view(cid, place, name, frame_id=None, figures=None, *,
             figures={key: value for key, value in state["figures"].items()
                      if str(value.get("place") or "") == str(place or "")})
         state.setdefault("practices", {}).update(opened)
-        presence = (scene_ledger(state, place, events=())
+        presence = (scene_ledger(state, place, events=(), only=body_key)
                     .get("presences", {}).get(body_key))
         if presence is None:
             continue
@@ -5182,7 +5538,8 @@ def presence_view(cid, place, name, frame_id=None, figures=None, *,
             "presence": _voiced_presence(
                 _relabel(copy.deepcopy(presence), labels), state, body_key,
                 charter_key, identity_index(registry).display(charter_key),
-                (scene or {}).get("rooms") or {}),
+                (scene or {}).get("rooms") or {}, registry=registry,
+                figures=labels),
             "action_instances": rows,
             # Where this body sleeps, and whether it is standing there now:
             # the voice's own half of "a room someone sleeps in is theirs"
@@ -5195,7 +5552,7 @@ def presence_view(cid, place, name, frame_id=None, figures=None, *,
                                     noun=member_noun(state, body_key)),
             **({"answers": answers} if answers else {}),
         })
-    return out[:2]
+    return out
 
 
 def _body_refs(registry, *, name=None, refs=None, include_bound=False):
@@ -5322,8 +5679,13 @@ def background_presence_records(cid, *, places=None, names=None,
             # members' own bodies were derived here as background people.
             if body_of_an_authored_mind(state, body_key, body):
                 continue
-            if body.get("departed"):
-                continue  # a guest whose stay ran out stands nowhere
+            # A guest whose stay ran out stands nowhere, and a corpse is
+            # nobody's voice: a dead body kept its `place` and was derived
+            # here as a background presence the stage could voice (audit
+            # world_charter_behaviours F11; `charter_harm.in_a_room`).
+            from world.charter_harm import in_a_room
+            if not in_a_room(body):
+                continue
             display = shown[body_key]
             place = str(body.get("place") or "")
             if place_set and place not in place_set:
@@ -5793,7 +6155,8 @@ def promotion_bundle(cid, name, *, record=None, frame_id=None,
     from world.charter import promotion_handoff
     handoff = promotion_handoff(
         body_key, registry["items"][charter_key]["state"],
-        events=_charter_events(cid, charter_key, frame_id))
+        events=_charter_events(cid, charter_key, frame_id),
+        registry=registry)
     body = registry["items"][charter_key]["state"]["bodies"][body_key]
     state = registry["items"][charter_key]["state"]
     # Every body, because the promoted mind is handed the whole town's
@@ -5838,7 +6201,8 @@ def bind_promoted_character(cid, bundle, *, char_id, name, entity_id="",
     }
     state["bodies"][body_key]["name"] = str(name)
     if place:
-        state["bodies"][body_key]["place"] = str(place)
+        from world.charter_move import set_place
+        set_place(state["bodies"][body_key], str(place))
     # `marks` is here for the same reason the other four are: a Charter-window
     # scoring bias is cognition, and cognition belongs to the registered
     # character from this point. It is deliberately NOT in

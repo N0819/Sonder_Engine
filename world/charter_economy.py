@@ -220,7 +220,16 @@ def ensure_supply_points(economy, rooms=None):
 
 
 def stock_band(economy, holder, good):
-    economy = normalize_economy(economy)
+    return _band(normalize_economy(economy), holder, good)
+
+
+def _band(economy, holder, good):
+    """`stock_band` over an economy already in `normalize_economy`'s shape.
+
+    A window asks for every target's band twice; `stock_band` normalized the
+    WHOLE economy on each ask -- 0.72 s per window with 20 holders x 12 goods
+    against 1.5 ms for one normalization (audit world_charter_behaviours
+    E3)."""
     amount = float((economy["stocks"].get(str(holder)) or {}).get(str(good), 0.0))
     target = (economy["targets"].get(str(holder)) or {}).get(str(good)) or {}
     minimum = float(target.get("minimum") or 0.0)
@@ -240,7 +249,14 @@ def stock_band(economy, holder, good):
 def quote(economy, market, good, *, quantity=1.0,
           relationship_adjustment=0.0):
     """Route/scarcity-sensitive price in author-labelled value units."""
-    economy = normalize_economy(economy)
+    return _quote(normalize_economy(economy), market, good,
+                  quantity=quantity,
+                  relationship_adjustment=relationship_adjustment)
+
+
+def _quote(economy, market, good, *, quantity=1.0,
+           relationship_adjustment=0.0):
+    """`quote` over an economy already normalized (`_band`'s reason)."""
     market = economy["markets"].get(str(market)) or {}
     holder = market.get("holder") or str(market)
     spec = economy["goods"].get(str(good))
@@ -280,7 +296,7 @@ def advance_economy(economy, hours, *, upkeeps=None, at_hours=0.0):
     old_bands = {}
     for holder, held in out["targets"].items():
         for good in held:
-            old_bands[(holder, good)] = stock_band(before, holder, good)
+            old_bands[(holder, good)] = _band(before, holder, good)
     deltas = {}
     for point in out["supply_points"].values():
         reliability = float(point.get("reliability") or 0.0)
@@ -306,7 +322,7 @@ def advance_economy(economy, hours, *, upkeeps=None, at_hours=0.0):
             capacity, float(held.get(good, 0.0)) + delta)), 6)
     events = []
     for (holder, good), old in old_bands.items():
-        new = stock_band(out, holder, good)
+        new = _band(out, holder, good)
         key = f"{holder}:{good}"
         if new != old:
             out["bands"][key] = new

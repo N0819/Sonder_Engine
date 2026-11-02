@@ -143,7 +143,7 @@ def co_present(bodies, speaking=False):
 
     ``speaking`` narrows to the bodies that can actually hold a conversation.
     """
-    from .charter_harm import is_gone
+    from .charter_harm import in_a_room
 
     rooms = {}
     for key in sorted(bodies or {}):
@@ -152,8 +152,9 @@ def co_present(bodies, speaking=False):
             continue
         # A body that is dead or missing (`charter_harm.GONE`) is in no
         # room: it witnesses nothing and is talked to by nobody, whatever
-        # `place` still says about where it fell.
-        if is_gone(body):
+        # `place` still says about where it fell (`charter_harm.in_a_room`,
+        # the one answer every presence reader asks).
+        if not in_a_room(body):
             continue
         place = str(body.get("place") or "")
         if place:
@@ -307,15 +308,19 @@ def report_to_superiors(minds, watch, posts, bodies, *, naming=None,
     staffed by different, available bodies in the same place. Only the
     subordinate's own news may cross; personnel beliefs, needs, feelings and
     the institutional register are structurally excluded.
-    """
-    from .charter_identity import display_name
 
+    THE SUPERIOR HOLDS IT FROM THE SUBORDINATE'S KEY. `heard_from` is the
+    teller as the institution keys people (`charter_mind.hear` writes the
+    same), so the report a superior later finds wrong files its stance on
+    the subordinate and is weighed by the regard held for them. It was the
+    display name: a refuted report minted a stance on "Ann Tull", a subject
+    that is no body and that no reader looks up (audit
+    world_charter_behaviours F9). ``naming`` stays in the signature for its
+    callers; the name is rendered where a voice reads the claim.
+    """
     minds = {holder: {subject: dict(claim)
                       for subject, claim in claims.items()}
              for holder, claims in (minds or {}).items()}
-    roles = {}
-    for post_key, body_key in (watch or {}).items():
-        roles.setdefault(str(body_key), []).append(str(post_key))
     told = 0
     for post_key, post in sorted((posts or {}).items()):
         superior_post = str((post or {}).get("reports_to") or "")
@@ -338,14 +343,12 @@ def report_to_superiors(minds, watch, posts, bodies, *, naming=None,
         candidates.sort(key=lambda claim: (
             -float(claim.get("strength") or 0.0),
             str(claim.get("body") or "")))
-        source_name = display_name(
-            subordinate_body, roles.get(subordinate) or (), naming)
         for claim in candidates:
             formal = dict(claim)
             formal.setdefault("source_provenance", formal.get("provenance"))
             formal["provenance"] = "reported"
             if hear_claim(minds, superior, formal, FORMAL_REPORT_RETENTION,
-                          1.0, heard_from=source_name or subordinate):
+                          1.0, heard_from=subordinate):
                 told += 1
                 break
     return minds, told

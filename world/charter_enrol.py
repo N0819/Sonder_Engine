@@ -424,8 +424,10 @@ def depart_guests(charter, at_hours):
         until = body.get("guest_until")
         if until is None or float(at_hours) < float(until):
             continue
+        from .charter_move import set_place
+
         body["departed"] = True
         body["available"] = False
-        body["place"] = ""
+        set_place(body, "")         # standing nowhere: no cell, no walk
         departed.append(str(body_key))
     return charter, departed

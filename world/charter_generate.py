@@ -1691,10 +1691,15 @@ def resident_service_chronicle(registry, resident_ids):
     row gives the historian evidence of a career without inventing episodes or
     growing storage with time.
     """
+    from .charter_runtime import split_person_id
+
     rows = []
     for resident_id in resident_ids or ():
-        charter_key, divider, body_id = str(resident_id).partition("/")
-        if not divider:
+        # By the charter key it begins with: either half may hold a "/"
+        # (audit world_charter_core F6).
+        charter_key, body_id = split_person_id(
+            resident_id, (registry.get("items") or {}).keys())
+        if not charter_key:
             continue
         item = (registry.get("items") or {}).get(charter_key) or {}
         state = item.get("state") or {}

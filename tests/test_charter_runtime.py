@@ -162,7 +162,10 @@ def test_different_charters_trade_only_news_through_colocated_bodies():
 
     assert cross_charter_gossip(registry) == 1
     heard = registry["items"]["visitors"]["state"]["minds"]["alice"]
-    assert heard["report:gate"]["heard_from"] == "Alice North"
+    # Held from the teller's PERSON ID across institutions, never the display
+    # name a stranger never learned (audit world_charter_core F12,
+    # 2026-11-01); this pinned "Alice North".
+    assert heard["report:gate"]["heard_from"] == "home/alice"
     assert "bob" not in heard
 
 
@@ -343,7 +346,11 @@ def test_the_presence_aperture_excludes_the_register(temp_db):
         "competence", "able", "condition", "strain", "standing_post",
         "temperament",
             "watches_stood", "can_bring_up", "knows_here", "strangers_here",
-            "blamed", "knows_it_is_blamed", "social_judgments",
+            # `blamed` WAS HERE, and the allowlist pinned a leak: it was the
+            # institution's register count, which no head has a channel to
+            # (audit world_charter_behaviours F1, 2026-11-01).
+            # `knows_it_is_blamed` is the channel.
+            "knows_it_is_blamed", "social_judgments",
             "commitments", "institutional", "marks",
             # `own_state` (2026-09-03) widened it the way `marks` did, and
             # for the same reason: how this body is faring is a fact about

@@ -98,32 +98,86 @@ _NEWS_PHRASES = {
 }
 
 
-def _news_phrase(claim):
+def _news_phrase(claim, person=None, room=None):
     if str(claim.get("claim_text") or "").strip():
         return " ".join(str(claim["claim_text"]).split())
     template = _NEWS_PHRASES.get(str(claim.get("event_kind") or ""))
     if template is None:
         template = "{about} at {place}"
-    return template.format(about=claim.get("about") or "something",
-                           place=claim.get("place") or "somewhere")
+    about = claim.get("about") or "something"
+    place = claim.get("place") or "somewhere"
+    return template.format(
+        about=person(about) if person and claim.get("about") else about,
+        place=room(place) if room and claim.get("place") else place)
 
 
-def remembered(charter, body_key, events=(), cap=REMEMBERED_CAP):
+def _words(charter, key, registry=None):
+    """``(person, room, post)``: how THIS body says the people, rooms and
+    posts its memories name -- the readers its voice already uses.
+
+    A person by `charter_runtime._member_namer`: a member it holds a claim
+    about by name, one it does not by post, a figure by the label its own
+    claim saw, a person of another house by that house's post words. A room
+    by its scene name, a post by its title (`charter_runtime._readable_role`).
+    """
+    from .charter_identity import display_name
+    from .charter_runtime import _member_namer, _readable_role
+
+    bodies = charter.get("bodies") or {}
+    roles = {}
+    for post_key, holder in (charter.get("watch") or {}).items():
+        roles.setdefault(str(holder), []).append(str(post_key))
+    display = {str(k): display_name(b, roles.get(str(k)) or (),
+                                    charter.get("naming"))
+               for k, b in bodies.items()}
+    charter_key = str(charter.get("key") or "")
+    person = _member_namer(charter, key, charter_key, display,
+                           registry=registry)
+    scene = charter.get("scene") if isinstance(charter.get("scene"), dict) \
+        else {}
+    rooms = scene.get("rooms") if isinstance(scene.get("rooms"), dict) else {}
+
+    def room(place):
+        place = str(place or "")
+        return str((rooms.get(place) or {}).get("name") or "").strip() \
+            or place.replace("_", " ")
+
+    def post(post_key):
+        post_key = str(post_key or "")
+        return _readable_role(charter.get("naming"), [post_key],
+                              charter_key) if post_key else ""
+
+    return person, room, post
+
+
+def remembered(charter, body_key, events=(), cap=REMEMBERED_CAP, *,
+               registry=None):
     """The memories one body's background life has earned. Selected, capped.
 
     Flat in time by construction: a stretch in which nothing branched, no
     news arrived, nobody accused and nobody new was met adds NOTHING — the
     service aggregate's count rises inside one row's content. Doubling a
     quiet run doubles no part of this list, and a test pins that.
+
+    IN THE MIND'S OWN WORDS, NEVER THE ENGINE'S KEYS (`_words`). Content is
+    what the character keeps as its memory: it was rendered from raw keys
+    -- "heard from gate_watch:0002 that custom failing at taproom", "has
+    stood gate_watch through 12 watches" -- while the same promotion named
+    those people for its relationship graph (audit world_charter_behaviours
+    F10). ``entities`` and the routing fields (`actor`, `other`, `event_key`,
+    `location`) stay KEYS: they are references, which the featured-resident
+    compiler maps to names itself (`charter_history._named_surface`) and the
+    tests pin as the teller's identity. ``registry`` lets a person of another
+    house resolve.
     """
     key = str(body_key)
     charter = charter if isinstance(charter, dict) else {}
     held = (charter.get("minds") or {}).get(key) or {}
     out = []
+    person, room, post_words = _words(charter, key, registry)
 
     def body_name(value):
-        body = (charter.get("bodies") or {}).get(str(value)) or {}
-        return str(body.get("name") or value)
+        return person(value)
 
     # Participant-owned social experience and self-only private routines.
     # These are not the institution's omniscient event log: each row was
@@ -159,8 +213,8 @@ def remembered(charter, body_key, events=(), cap=REMEMBERED_CAP):
             # What the body DID with its time. `stood` counts the windows;
             # this is the one row that says taking the post was an event in
             # a life, which is what a memory is and what a counter is not.
-            post = str(experience.get("post") or "a post")
-            content = f"took {post.replace('_', ' ')}"
+            post = str(experience.get("post") or "")
+            content = f"took {post_words(post) or 'a post'}"
             entities = [key]
             salience = 0.45
         elif experience_kind == "acquaintance":
@@ -175,7 +229,7 @@ def remembered(charter, body_key, events=(), cap=REMEMBERED_CAP):
             during = str(experience.get("during") or "")
             content = f"passed a watch with {body_name(other)}"
             if during:
-                content += f" on {during.replace('_', ' ')}"
+                content += f" on {post_words(during)}"
             entities = [other] if other else []
             salience = 0.58
         elif experience_kind == "stood_through":
@@ -226,7 +280,7 @@ def remembered(charter, body_key, events=(), cap=REMEMBERED_CAP):
         out.append({
             "kind": "episodic", "provenance": "witnessed",
             "salience": salience,
-            "content": f"{phrase}" + (f" at {place}" if place else ""),
+            "content": f"{phrase}" + (f" at {room(place)}" if place else ""),
             "location": place, "entities": [key], "confidence": 1.0,
             "event_key": f"{event['kind']}:{key}"
                          f"@{float(event['at_hours']):.4f}",
@@ -242,11 +296,11 @@ def remembered(charter, body_key, events=(), cap=REMEMBERED_CAP):
         firsthand = claim.get("heard_from") is None and provenance not in {
             "read", "letter", "told"}
         strength = float(claim.get("strength") or 0.0)
-        phrase = _news_phrase(claim)
+        phrase = _news_phrase(claim, person, room)
         if firsthand:
             content = f"saw {phrase}"
         elif claim.get("heard_from"):
-            content = f"heard from {claim['heard_from']} that {phrase}"
+            content = f"heard from {person(claim['heard_from'])} that {phrase}"
         else:
             content = f"learned that {phrase}"
         entities = [str(claim.get("about") or "")]
@@ -277,7 +331,7 @@ def remembered(charter, body_key, events=(), cap=REMEMBERED_CAP):
     for teller in (charter.get("heard_blame") or {}).get(key, ()):
         out.append({
             "kind": "episodic", "provenance": "told", "salience": 0.8,
-            "content": f"{teller} said the fault was {key}'s",
+            "content": f"{person(teller)} said the fault was {person(key)}'s",
             "location": "", "entities": [str(teller)], "confidence": 1.0,
             "event_key": f"accused:{key}:{teller}",
         })
@@ -287,17 +341,19 @@ def remembered(charter, body_key, events=(), cap=REMEMBERED_CAP):
     # for years; their lifecycle and provenance are the memory.
     for commitment in commitment_view(
             charter.get("commitments"), key, cap=16):
+        def party(value):
+            return person(value) if value else "someone"
+
         if key == commitment.get("promisor"):
             relation = "promised"
-            other = commitment.get("beneficiary") or "someone"
+            other = party(commitment.get("beneficiary"))
         elif key == commitment.get("beneficiary"):
             relation = "was promised"
-            other = commitment.get("promisor") or "someone"
+            other = party(commitment.get("promisor"))
         else:
             relation = "learned of a promise between"
-            other = "%s and %s" % (
-                commitment.get("promisor") or "someone",
-                commitment.get("beneficiary") or "someone")
+            other = "%s and %s" % (party(commitment.get("promisor")),
+                                   party(commitment.get("beneficiary")))
         out.append({
             "kind": "semantic", "category": "promise",
             "provenance": "witnessed" if key in {
@@ -338,9 +394,9 @@ def remembered(charter, body_key, events=(), cap=REMEMBERED_CAP):
             standing = " and trusts them"
         else:
             standing = ""
-        content = (f"knows {other}{standing}" if firsthand
-                   else f"knows of {other} from {claim['heard_from']}"
-                        f"{standing}")
+        content = (f"knows {person(other)}{standing}" if firsthand
+                   else f"knows of {person(other)} from "
+                        f"{person(claim['heard_from'])}{standing}")
         out.append({
             "kind": "relationship",
             "provenance": "witnessed" if firsthand else "heard",
@@ -364,7 +420,8 @@ def remembered(charter, body_key, events=(), cap=REMEMBERED_CAP):
         out.append({
             "kind": "semantic", "provenance": "remembered",
             "salience": round(min(0.65, 0.35 + windows / 400.0), 4),
-            "content": f"has stood {post_key} through {windows} watches",
+            "content": f"has stood {post_words(post_key)} through "
+                       f"{windows} watches",
             "location": str((charter.get("posts") or {})
                             .get(post_key, {}).get("place") or ""),
             "entities": [post_key], "confidence": 1.0,
@@ -378,7 +435,7 @@ def remembered(charter, body_key, events=(), cap=REMEMBERED_CAP):
     return out[:max(0, int(cap))]
 
 
-def promotion_handoff(body_key, charter, events=()):
+def promotion_handoff(body_key, charter, events=(), *, registry=None):
     """Everything a promotion call receives: the interior and the past.
 
     The interior half is `charter_feel.felt_handoff` verbatim — hedonic,
@@ -392,7 +449,8 @@ def promotion_handoff(body_key, charter, events=()):
     reading of. No new key on this payload, and no reciprocity anywhere in it.
     """
     payload = felt_handoff(body_key, charter)
-    payload["memories"] = remembered(charter, body_key, events=events)
+    payload["memories"] = remembered(charter, body_key, events=events,
+                                     registry=registry)
     subjects = list((charter.get("bodies") or {})) + list(
         (charter.get("figures") or {}))
     payload["social_judgments"] = judgment_view(

@@ -427,7 +427,27 @@ def address_components(profile):
 
 
 def _tokens(text):
-    return tuple(word for word in str(text or "").casefold().split() if word)
+    """A name's parts, in the order written: its spaced words as they are,
+    and a run of an unspaced script split where its script changes
+    (`language_runtime.fold_words`).
+
+    A whitespace split read 佐藤ヒナミ as ONE part, so no component of a
+    candidate could match its start or end: a minted 佐藤タロウ passed beside
+    her -- two people the story addresses as 佐藤 -- although the same name
+    written 佐藤 ヒナミ reserved 佐藤 (audit story_scene_schema F9). A Latin
+    word keeps its hyphen or apostrophe exactly as before; an all-kanji
+    name is still one part, since splitting it needs a dictionary this
+    engine does not carry.
+    """
+    from language_runtime import UNSPACED_SCRIPT, fold_words
+
+    out = []
+    for word in str(text or "").casefold().split():
+        if UNSPACED_SCRIPT.search(word):
+            out.extend(part for part in fold_words(word) if part)
+        else:
+            out.append(word)
+    return tuple(out)
 
 
 def _title_terms(profile):

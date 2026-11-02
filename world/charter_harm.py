@@ -85,6 +85,26 @@ def is_gone(body):
     return normalize_condition((body or {}).get("condition")) in GONE
 
 
+def in_a_room(body):
+    """Is this body IN a room, as a person -- there to see and hear what
+    happens in it, to be spoken to, to stand in its crowd and to feel the
+    place it stands in?
+
+    THE ONE ANSWER every presentation and reception reader asks. A body that
+    is dead or missing (`GONE`) is in no room whatever its ``place`` still
+    says: a dead body keeps the place it fell in, which is where its corpse
+    is LAID (`charter_place.charter_placements`), and nothing else about it
+    is present. A departed guest stands nowhere (`charter_enrol`). Only
+    `charter_talk.co_present` honoured this, and every other reader decided
+    for itself -- measured (audit world_charter_behaviours F11): a dead
+    `tam` received public speech, filled the yard's crowd, was laid as a
+    standing figure, and a corpse that "heard" a promise joined its
+    `recognized_by`.
+    """
+    body = body if isinstance(body, dict) else {}
+    return not is_gone(body) and not body.get("departed")
+
+
 def capability_of(body, *, posted, weights=None):
     """What one body brings to a contest, from the two facts that are
     objective: whether it is on a post, and whether it is hurt."""
@@ -187,7 +207,8 @@ def apply_harm(charter, victim, *, by, at_hours, outcome="hurt", place=None,
         if outcome == "dead":
             body["berth"] = ""
         else:
-            body["place"] = ""
+            from .charter_move import set_place
+            set_place(body, "")     # gone from every room, and its errand
         watch = dict(charter.get("watch") or {})
         held_posts = sorted(post for post, who in watch.items()
                             if str(who) == victim)
@@ -260,5 +281,5 @@ __all__ = [
     "CONDITIONS", "GONE", "HURT_CAPABILITY", "HURT_HEALTH_LEVEL",
     "HURT_RECOVERY_HOURS", "HURT_RELUCTANCE", "POSTED_CAPABILITY",
     "UNPOSTED_CAPABILITY", "advance_harm", "apply_harm", "capability_of",
-    "head_posts", "is_gone", "normalize_condition",
+    "head_posts", "in_a_room", "is_gone", "normalize_condition",
 ]

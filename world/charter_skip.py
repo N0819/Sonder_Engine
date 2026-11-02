@@ -578,6 +578,76 @@ class _TownRun:
             self.samples.append(sample)
             self.window_rows.append({"start": start, "end": end,
                                      "directive": directive, "ours": ours})
+        self._end_where_the_day_ends()
+
+    def _windows_in(self, from_s, until_s):
+        """The windows that speak for a span of the mind's day: those whose
+        middle falls in it -- the rule `_directive` steers by, so a row is
+        judged on exactly the windows that walked it (`log`)."""
+        return [index for index, window in enumerate(self.window_rows)
+                if window["ours"] and from_s
+                <= max((window["start"] + window["end"]) / 2.0,
+                       self.span_from) < until_s]
+
+    def _where_at(self, at_s):
+        """Where the body stood at an instant: the last sample taken at or
+        before it."""
+        sample = next((row for row in reversed(self.samples or ())
+                       if float(row.get("at", float("-inf"))) <= at_s),
+                      (self.samples or [{}])[0])
+        return str(((sample or {}).get("mind") or {}).get("place") or "")
+
+    def _route_to(self, start, room):
+        """Can a person walk from ``start`` to ``room`` on the town's graph
+        (`charter_space.people_neighbors`)? A body already there can."""
+        from world.charter_space import people_neighbors, walk_route
+
+        if not room or start == room:
+            return True
+        scene = self.states[self.charter_key]["state"].get("scene")
+        if not start or not scene:
+            return True
+        return walk_route(scene, start, room,
+                          limit=max(8, len(scene.get("rooms") or ())),
+                          neighbors=people_neighbors(scene)) is not None
+
+    def _end_where_the_day_ends(self):
+        """THE STRETCH SPEAKING AT THE SPAN'S END PUTS THE BODY THERE, when no
+        window walked it.
+
+        A window takes the stretch speaking at its MIDDLE, so a last stretch
+        shorter than half the last window -- every `at_the_end` stretch
+        (`skip_itinerary.AT_THE_END_SECONDS`) whenever the last window ran
+        over an hour -- held no window, the town never walked the body there,
+        and `far_end` handed back the PENULTIMATE stretch's room while the
+        log's last row named the declared one (audit
+        world_charter_generation_run F2, probed: tavern 0-12.5 h, house_a
+        12.5-13 h, far end `tavern`). The stage's own executor ends at the
+        last row (`skip_itinerary.far_end_of`); this stands the body there by
+        the same right, where a person could walk it, and leaves it where it
+        stood where the way is held -- the row then fails, as a stepped one
+        would. The grid stays the town's: no window is moved for one mind.
+        """
+        from world.charter_move import set_place
+
+        last = self.stretches[-1] if self.stretches else None
+        if last is None or last["until_s"] < self.span_until - \
+                CLOCK_TOLERANCE_SECONDS:
+            return
+        if self._windows_in(last["from_s"], last["until_s"]):
+            return
+        body = self._body()
+        if body is None:
+            return
+        directive = {"room": last["room"], "asleep": last["asleep"],
+                     "away": last["away"]}
+        if last["away"] or not str(body.get("place") or ""):
+            self._arrive_or_leave(directive)
+            return
+        room = str(last["room"] or "")
+        if room and self._route_to(str(body.get("place") or ""), room):
+            state = self.states[self.charter_key]["state"]
+            state["bodies"][self.body_key] = set_place(dict(body), room)
 
     def _directive(self, start, end):
         """What the mind's own day says for this window: the stretch
@@ -702,11 +772,7 @@ class _TownRun:
         labels = _Labels(self.cid, self.registry, self.mind_name, self.states)
         out = []
         for segment in self._rows():
-            windows = [index for index, window in enumerate(self.window_rows)
-                       if window["ours"] and segment["from_s"]
-                       <= max((window["start"] + window["end"]) / 2.0,
-                              self.span_from)
-                       < segment["until_s"]]
+            windows = self._windows_in(segment["from_s"], segment["until_s"])
             stretch = segment["stretch"]
             if stretch is None:
                 out.append(self._silence_row(segment, windows, labels))
@@ -735,32 +801,42 @@ class _TownRun:
                 reason = "shut_way"
             else:
                 reason = "no_route"
-        unrun = not windows or not all(
-            self.samples[index + 1].get("simulated", True)
-            for index in windows)
         if not windows:
             # A stretch shorter than the town's window speaks for no window
-            # of its own: the body was not run through it, so it is the
-            # mind's declaration, unwitnessed -- neither carried out nor
-            # refused here.
-            reached, reason = True, None
-            last_place = stretch["room"] or ""
+            # of its own: the body was not run through it, so its way there
+            # is judged as a walk would be, from where the body stood when
+            # the stretch began (`_route_to`) -- and the last stretch is
+            # stood in when it can be (`_end_where_the_day_ends`).
+            start = self._where_at(stretch["from_s"])
+            if stretch["away"] or not stretch["room"] or not start \
+                    or self._route_to(start, stretch["room"]):
+                reached, reason = True, None
+                last_place = stretch["room"] or ""
+            else:
+                reached = False
+                reason = "shut_way" if _a_way_exists(
+                    self.states[self.charter_key]["state"].get("scene"),
+                    start, stretch["room"]) else "no_route"
+                last_place = start
         room = None if stretch["away"] else (last_place or None)
         if reached:
             reason = None
         if not reached:
             outcome = "failed"
-        elif unrun and not stretch["asleep"]:
-            # The town never ran the body through it: the mind's declaration,
-            # unwitnessed -- the world's to judge.
-            outcome = "not_known"
         else:
+            # NOT WATCHED IS NOT UNKNOWN. A stretch the grid never stepped --
+            # too short for a window, or past the time-skip budget -- went
+            # `not_known` here, and its memory read "set about it, and the
+            # rest was out of Mara's hands" (audit
+            # world_charter_generation_run F5): the class 4d398090 ruled out
+            # for a stretch off the map, one case over. The stage's own
+            # executor marks the same stretch `done`, and so does this one.
             # THE ONE RULE both executors write (`skip_itinerary.
             # stretch_outcome`): a sleep is done; a stretch whose success is
-            # another's response (`with`) or a world off the map nobody
-            # simulates (`away`) is the world's to judge; what it USES never
-            # makes it so -- the keeper's watch with his own lamp is done
-            # (the lighthouse replayed a second time, chat 3 turn 25).
+            # another's response (`with`) is the world's to judge; being away
+            # never makes it so (4d398090), and neither does what it USES --
+            # the keeper's watch with his own lamp is done (the lighthouse
+            # replayed a second time, chat 3 turn 25).
             from world.skip_itinerary import stretch_outcome
             outcome = stretch_outcome(stretch, None, stretch["away"])
         seen = [] if stretch["asleep"] else self._seen(windows, labels)
@@ -903,15 +979,9 @@ class _TownRun:
                     act, "skip_seen_talking_with"), other=labels.of(whom))
             return compositor_text("skip_seen_" + kind)
 
-        def order(ref):
-            # An interaction outranks any presence; then the label, so a
-            # replay lists the room in one order.
-            if ref in interaction:
-                return (0, interaction[ref][0], labels.of(ref))
-            return (1, presence[ref][0], labels.of(ref))
-
         out = []
-        people = sorted(set(presence) | set(interaction), key=order)
+        people = _seen_order(set(presence) | set(interaction), presence,
+                             interaction, labels.of)
         for ref in people[:SEEN_PER_ROW_CAP]:
             who = labels.of(ref)
             if ref in presence:
@@ -1060,6 +1130,22 @@ class _Labels:
             surface, noun = None, ""
         return _unknown_actor_label("", None, None, role=noun,
                                     surface=surface)
+
+
+def _seen_order(refs, presence, interaction, label_of):
+    """The order a row lists the people it saw: an interaction outranks any
+    presence, then rank, then the label -- and then the REF, so two residents
+    sharing a stranger label and a rank are listed, and cut by
+    `SEEN_PER_ROW_CAP`, in one order on every run. Without the ref the tie
+    fell to the hash-salted order of the set it was built from, and a rerun
+    could file a different `seen` list (audit world_charter_generation_run
+    F16)."""
+    def order(ref):
+        if ref in interaction:
+            return (0, interaction[ref][0], label_of(ref), ref)
+        return (1, presence[ref][0], label_of(ref), ref)
+
+    return sorted(refs, key=order)
 
 
 def _a_way_exists(scene, start, end):

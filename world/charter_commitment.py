@@ -205,11 +205,15 @@ def advance_commitments(commitments, events):
     return normalize_commitments(out), changed
 
 
-def commitment_view(commitments, holder, *, parties=(), cap=6):
+def commitment_view(commitments, holder, *, parties=(), cap=6,
+                    normalized=False):
+    """``normalized``: the caller holds `normalize_commitments`' output
+    already (`charter_log.scene_ledger` reads it for every presence)."""
     holder = str(holder)
     party_set = {str(p) for p in parties if str(p)}
     rows = []
-    for record in normalize_commitments(commitments).values():
+    for record in (commitments if normalized
+                   else normalize_commitments(commitments)).values():
         if holder not in record["recognized_by"] \
                 and holder not in {record["promisor"], record["beneficiary"]}:
             continue

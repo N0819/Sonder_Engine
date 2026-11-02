@@ -1195,6 +1195,10 @@ def close_stale(practices, at_hours):
 
     A situation nobody is acting in is over, whatever its participants
     believe. Without this the practice set only grows.
+
+    ``at_hours`` is the instant idleness is measured at: `charter_run.step`
+    passes the window's START, so a practice that acted in the window before
+    lives into this one (audit world_charter_generation_run F6).
     """
     return {
         key: entry for key, entry in (practices or {}).items()

@@ -18,6 +18,7 @@ import copy
 import re
 
 from world.charter_figure import figure_claim
+from world.charter_harm import in_a_room
 from world.charter_identity import display_name, identity_aliases
 from world.charter_mind import cap_minds
 from world.spatial import (EAR_VOLUME, hear_level, room_of, spoken_to,
@@ -165,6 +166,12 @@ def body_receives_evidence(scene, body_key, body, roles, naming, evidence,
                               bool(ear_endpoint))) == "full"
 
     if evidence.get("kind") == "action":
+        # NO EYES, NO ACT SEEN -- the hearing rule above, one sense over: a
+        # creature authored blind acquired a `figure_action` for a knife
+        # drawn in its room (audit world_charter_behaviours F3). Absent
+        # `senses` is an ordinary body, which sees.
+        if isinstance(senses, dict) and not senses.get("sight", True):
+            return False
         if placed:
             return visual_level_between(scene, str(observer), actor) == "full"
         stand_in = f"__charter_observer__:{body_key}"
@@ -200,7 +207,8 @@ def evidence_phrase(evidence, label=None):
     return f"{actor} {surface}"[:320]
 
 
-def evidence_claim(evidence, turn_id, at_hours, place, label=None):
+def evidence_claim(evidence, turn_id, at_hours, place, label=None,
+                   target_label=None):
     """One firsthand claim, retaining only the public licensed structure.
 
     The actor is keyed under ``subject`` by the engine's canonical name, so
@@ -208,6 +216,17 @@ def evidence_claim(evidence, turn_id, at_hours, place, label=None):
     ``about``, ``claim_text`` and the licensed ``actor`` -- carries the
     witnesses' label instead, because those three are copied straight into
     a voiced payload and a name there is a name nobody said.
+
+    THE ADDRESSEE IS RENDERED THE SAME WAY, or not at all. ``target_label``
+    is how the witnesses could know whom the line was aimed at: the label the
+    addressee was SHOWN under in the room (`plan_public_evidence` reads the
+    beat's figure labels), or the charter body key it resolves to (rendered
+    per holder at the voice, `charter_runtime._member_namer`). Absent, the
+    licensed ``target`` -- and any speech act's own ``target`` -- is dropped:
+    the act kinds still carry the line's direction. It was copied verbatim,
+    so a barmaid who overheard the player warn Hinami held ``target:
+    "Hinami"`` and was offered the name next day with Hinami nowhere in the
+    room (audit world_charter_behaviours F2, 2026-11-01).
     """
     source_id = str(evidence.get("source_id") or "")
     if not source_id:
@@ -224,6 +243,19 @@ def evidence_claim(evidence, turn_id, at_hours, place, label=None):
     }
     if "actor" in licensed:
         licensed["actor"] = shown
+    addressee = str(evidence.get("target") or "")
+    shown_target = " ".join(str(target_label or "").split())
+    if "target" in licensed:
+        if shown_target:
+            licensed["target"] = shown_target
+        else:
+            licensed.pop("target")
+    for frame in licensed.get("speech_acts") or ():
+        if isinstance(frame, dict) and "target" in frame:
+            if shown_target and str(frame.get("target") or "") == addressee:
+                frame["target"] = shown_target
+            else:
+                frame.pop("target")
     return {
         "kind": "news", "body": key,
         "event_kind": f"figure_{evidence.get('kind') or 'conduct'}",
@@ -523,8 +555,20 @@ def plan_public_evidence(charter, evidence_rows, scene, turn_id,
                 unplaced.append(actor)
             continue
         shown = str(labels.get(actor) or actor)
+        # Whom the line was aimed at, as a witness here could know it: the
+        # label the addressee stood here under, or the charter body the
+        # address resolves to (`evidence_claim`). Once per row.
+        target = str(evidence.get("target") or "")
+        shown_target = None
+        if target:
+            shown_target = labels.get(target) or comm_endpoint \
+                or ear_endpoint or resolve_target_body(
+                    charter, target, scene=scene)
         for body_key, body in sorted(bodies.items()):
-            if body_key in bindings:
+            # A corpse hears no line and sees no act (`in_a_room`): a dead
+            # `tam` acquired public speech and joined a promise's hearers
+            # (audit world_charter_behaviours F11).
+            if body_key in bindings or not in_a_room(body):
                 continue
             opportunities += 1
             roles = role_map.get(body_key) or ()
@@ -559,7 +603,8 @@ def plan_public_evidence(charter, evidence_rows, scene, turn_id,
                 new = planned[str(body_key)] = set()
                 receiving.append(str(body_key))
             claim = evidence_claim(evidence, turn_id, clock,
-                                   body.get("place") or "", label=shown)
+                                   body.get("place") or "", label=shown,
+                                   target_label=shown_target)
             if claim is None or claim["body"] in held or claim["body"] in new:
                 continue
             inserts.append((str(body_key), claim["body"], claim))

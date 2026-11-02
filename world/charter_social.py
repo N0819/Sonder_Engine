@@ -480,9 +480,14 @@ def judgment_of(judgments, holder, subject):
             .get(str(subject)))
 
 
-def judgment_view(judgments, holder, *, subjects=(), cap=4):
-    """Bounded, explanation-bearing Scene Life/promotion projection."""
-    held = normalize_judgments(judgments).get(str(holder), {})
+def judgment_view(judgments, holder, *, subjects=(), cap=4, normalized=False):
+    """Bounded, explanation-bearing Scene Life/promotion projection.
+
+    ``normalized`` says the caller already holds `normalize_judgments`'s
+    output, so a reader asking for many holders normalizes the store once
+    (`charter_log.scene_ledger`)."""
+    held = (judgments if normalized else normalize_judgments(judgments)
+            ).get(str(holder), {})
     wanted = {str(s) for s in subjects if str(s)}
     rows = []
     for subject, stance in held.items():

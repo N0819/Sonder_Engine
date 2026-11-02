@@ -145,9 +145,15 @@ def members_of(charter, place):
         known = charter.get("presented_bodies") or ()
     else:
         known = charter.get("known_bodies") or ()
+    from .charter_harm import in_a_room
+
     return sorted(
         key for key, body in (charter.get("bodies") or {}).items()
         if str((body or {}).get("place") or "") == room
+        # A CORPSE IS NOBODY'S CROWD (`charter_harm.in_a_room`): a dead body
+        # with no feel entry has strain 0 and was the one a crowd FRONTED
+        # (audit world_charter_behaviours F11).
+        and in_a_room(body)
         and not body_of_an_authored_mind(charter, key, body)
         # A PERSON THE AUTHOR NAMED IS NEVER GROUND. A featured resident
         # carries `resident_seed_id` whoever seeded it; the planner's

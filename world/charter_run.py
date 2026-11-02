@@ -42,6 +42,8 @@ mechanism first, and a pure function is testable in ways a commit path is not.
 
 from __future__ import annotations
 
+import bisect
+
 import hashlib
 import time
 
@@ -65,7 +67,8 @@ from . import charter_chatter
 from .charter_log import window_note
 from .charter_figure import sight_figures
 from .charter_mind import cap_minds, decay_minds
-from .charter_move import (ERRAND_RATE, continue_walks, errands, homecomings,
+from .charter_move import (ERRAND_RATE, continue_walks, errands, forget_window,
+                           homecomings,
                            relocate, walk)
 from .charter_news import (check_reports, decay_news, news_keys_in,
                           witness)
@@ -154,6 +157,11 @@ CO_PRESENCE_WIDTH = 64
 ENCOUNTER_ODDS = 12
 
 
+def _experience_order(row):
+    """The order a holder's experiences are kept in: by hour, then id."""
+    return (float(row.get("at_hours") or 0.0), str(row.get("id") or ""))
+
+
 def _remember_experience(store, holder, row, fold=True):
     """Append one participant-owned experience, updating repeated habits.
 
@@ -182,10 +190,21 @@ def _remember_experience(store, holder, row, fold=True):
                     repetitions=int(existing.get("repetitions") or 1) + 1)
                 store[holder] = rows[-EXPERIENCE_CAP:]
                 return
-    rows.append(dict(row))
-    rows.sort(key=lambda value: (
-        float(value.get("at_hours") or 0.0), str(value.get("id") or "")))
-    store[holder] = rows[-EXPERIENCE_CAP:]
+    # PLACED, NOT RE-SORTED. Every writer of this store comes through here,
+    # so the list is already in `_experience_order`: the new row goes after
+    # every row that sorts no later than it -- where a stable sort of the
+    # appended list would put it -- and in the common case that is the end.
+    # Re-sorting the whole life on every insert made the cost grow with the
+    # life: 840,579 key calls for 8,507 inserts over a 720 h profile (audit
+    # world_charter_core E1), and the reason the year test took 95 s.
+    new = dict(row)
+    if not rows or _experience_order(rows[-1]) <= _experience_order(new):
+        rows.append(new)
+    else:
+        bisect.insort(rows, new, key=_experience_order)
+    if len(rows) > EXPERIENCE_CAP:
+        del rows[:len(rows) - EXPERIENCE_CAP]
+    store[holder] = rows
 
 
 def _record_social_experiences(experiences, acts, bodies, at_hours):
@@ -768,6 +787,8 @@ def step(charter, hours=4.0, seed=0, reach=None, conduct=None, paths=None,
                 bodies, heading, scene, travelled, cache={}, hours=hours,
                 neighbors=neighbors, walked=walked,
                 limit=max(REACH_LIMIT, len(graph or ())))
+    # What a walker had left of this window was for this window only.
+    forget_window(bodies)
 
     upkeeps = {}
     for key, upkeep in charter["upkeeps"].items():
@@ -1059,8 +1080,17 @@ def step(charter, hours=4.0, seed=0, reach=None, conduct=None, paths=None,
     # places a scene is actually in get social simulation. Empty means none,
     # because the cheap thing must be the default.
     active = charter.get("active_places")
+    # IDLE IS MEASURED WHERE THE WINDOW OPENS -- the last instant anything
+    # could have been done -- not where it will close. At `at + hours` a
+    # practice that acted in the previous window was already `hours` idle, so
+    # at any window of `IDLE_CLOSE_HOURS` or longer (presim 4 h/8 h, the
+    # ordinary 4 h advance, the skip's 2 h grid) every situation closed
+    # before its first act, spawned ones were dead on arrival, and
+    # `reconcile` was unreachable (audit world_charter_generation_run F6:
+    # a planted quarrel at 4 h windows, zero acts, closed at the first). The
+    # 2 h constant stays the owner's.
     practices = close_stale(
-        normalize_practices(charter.get("practices")), at + hours)
+        normalize_practices(charter.get("practices")), at)
     if active:
         in_focus = {k: b for k, b in bodies.items()
                     if k not in unminded

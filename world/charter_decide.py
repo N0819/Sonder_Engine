@@ -264,8 +264,10 @@ def mobilisation_calls(charter, minds, watch, posts, bodies, *, at_hours=0.0):
     return calls
 
 
-def decision_view(decisions, *, post="", body="", cap=6):
-    out = normalize_decisions(decisions)
+def decision_view(decisions, *, post="", body="", cap=6, normalized=False):
+    """``normalized``: the caller holds `normalize_decisions`' output
+    already (`charter_log.scene_ledger` reads it for every presence)."""
+    out = decisions if normalized else normalize_decisions(decisions)
     orders = [o for o in out["orders"] if (
         not post or post in {o["from_post"], o["to_post"]}) and (
         not body or body == o["received_by"])]

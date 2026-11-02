@@ -255,9 +255,11 @@ def test_featured_resident_history_seeds_turn_zero_then_retires_charter_mind(
     binding = featured_resident_bindings(
         registry_for(cid), [f"character:{char_id}"])[f"character:{char_id}"]
     written = []
-    monkeypatch.setattr(
-        "mind.memory.add_memories_batch",
-        lambda rows: written.extend(rows) or list(range(len(rows))))
+    # Every module holding the writer, not the facade's re-export alone
+    # (project_check.check_facade_patch_targets, 2026-11-01).
+    from tests.helpers import patch_seam
+    patch_seam(monkeypatch, "mind.memory", "add_memories_batch",
+               lambda rows: written.extend(rows) or list(range(len(rows))))
 
     def interpret(payload):
         assert payload["character_context_for_interpretation_only"] \

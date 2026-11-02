@@ -70,7 +70,10 @@ def test_the_word_is_delivered_where_the_two_stand_together():
     crane = registry["items"]["crown"]["state"]["minds"]["josiah_crane:1"]
     claim = next(iter(crane.values()))
     assert claim["public_evidence"]["exact_quote"] == MESSAGE
-    assert claim["heard_from"] == "Lianw Brabw"
+    # The walker as the addressee's house keys a teller from ANOTHER house:
+    # its person id (audit world_charter_core F12, 2026-11-01); this pinned
+    # the walker's display name.
+    assert claim["heard_from"] == "assembly/footman:0001"
     assert body["errand"]["delivered_at"] is not None
     assert deliver_errands(registry) == []          # once
 

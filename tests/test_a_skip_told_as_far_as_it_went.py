@@ -522,7 +522,13 @@ def test_the_towns_executor_writes_the_same_rule():
     assert run._stretch_row(stretch, [0], None)["outcome"] == "done"
     assert run._stretch_row(dict(stretch, **{"with": [RHONA]}), [0], None)["outcome"] == \
         "not_known"
-    assert run._stretch_row(stretch, [], None)["outcome"] == "not_known"   # unrun
+    # UNRUN IS NOT UNKNOWN (audit world_charter_generation_run F5,
+    # 2026-11-01): a stretch the grid never stepped is the mind's own doing,
+    # judged by the one rule like any other -- the class 4d398090 ruled out
+    # for `away`. This pinned `not_known`, the defect.
+    run.states = {"c": {"state": {}}}
+    run.charter_key = "c"
+    assert run._stretch_row(stretch, [], None)["outcome"] == "done"   # unrun
 
 
 @pytest.mark.parametrize("language", ["en", "ja"])

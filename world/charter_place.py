@@ -87,6 +87,7 @@ from __future__ import annotations
 
 import hashlib
 
+from .charter_harm import in_a_room
 from .charter_identity import display_name, identity_aliases, identity_seed
 from .charter_model import body_of_an_authored_mind
 from .charter_move import en_route
@@ -262,6 +263,12 @@ def charter_placements(registry, scene, *, frame_rooms=None):
             "presented": "crowd" if body_key in crowd_memo[memo_key]
             else "figure",
             "ambiguous": ambiguous,
+            # A CORPSE IS LAID WHERE IT FELL, LYING (`charter_harm.
+            # in_a_room`): a dead body keeps its `place`, and it was laid as
+            # a standing figure among the living (audit
+            # world_charter_behaviours F11). `lay_charter_bodies` writes the
+            # pose; `members_of` keeps it out of every crowd.
+            **({"posture": "lying"} if not in_a_room(body) else {}),
         }
     return out
 
@@ -315,6 +322,13 @@ def lay_charter_bodies(scene, placements, *, keys=None):
         if not key or room_of(scene, key):
             continue
         positions[key] = placement["room"]
+        if placement.get("posture"):
+            # The pose ledger's own protocol shape, as the skip lays a
+            # sleeper (`agents.skip_stage._ASLEEP_POSE`).
+            scene.setdefault("poses", {})[key] = {
+                "posture": str(placement["posture"]), "support": "",
+                "relative_to": "", "relation": "", "constraint": "",
+                "detail": ""}
         station = dict(placement.get("station") or {})
         if "cell" in station:
             station["cell"] = list(station["cell"])
@@ -335,7 +349,7 @@ def scene_with_charter_bodies(scene, placements, *, keys=None):
     three ledgers are copied before they are written -- and nothing here is
     ever persisted."""
     viewed = dict(scene or {})
-    for field in ("positions", "stations", "orientation"):
+    for field in ("positions", "stations", "orientation", "poses"):
         held = viewed.get(field)
         viewed[field] = dict(held) if isinstance(held, dict) else {}
     return lay_charter_bodies(viewed, placements, keys=keys)
@@ -447,11 +461,18 @@ def heal_unbound_twins(registry, scene, standing=None):
         released_from = ""
         if standing is not None and eid in ((standing or {}).get("entities") or {}):
             released_from = str(((scene.get("positions") or {}).get(eid)) or "")
+            # `ledger`, never `table`: `table` is the spelling table every
+            # later entity is looked up in. Rebinding it here sent each
+            # entity after the first released twin to the POSES ledger --
+            # a TypeError where the scene had none (swallowed by the commit,
+            # so every later heal, lease move and release of the beat was
+            # skipped) and a lamp bound as a charter `person` where it had
+            # one (audit world_charter_behaviours F7, 2026-11-01).
             for channel in PLACEMENT_ROWS:
-                table = scene.get(channel)
-                if isinstance(table, dict):
-                    table.pop(eid, None)
-                    table.pop(str(ent.get("name") or ""), None)
+                ledger = scene.get(channel)
+                if isinstance(ledger, dict):
+                    ledger.pop(eid, None)
+                    ledger.pop(str(ent.get("name") or ""), None)
         healed.append({"entity_id": str(eid), "charter": ref[0], "body": ref[1],
                        "name": str(ent.get("name") or ""),
                        "released_from": released_from})

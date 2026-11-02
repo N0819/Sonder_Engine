@@ -75,6 +75,7 @@ from __future__ import annotations
 
 from mind.psychology_runtime import resolve_hedonic, resolve_stress
 
+from .charter_harm import in_a_room
 from .charter_mark import BODY_MARKS
 from .charter_needs import bears_on_duty, body_state
 from .charter_temper import (
@@ -342,7 +343,15 @@ def advance_feel(feel, bodies, needs, watch, posts, upkeeps, events, hours,
                     if e.get("kind") in _PHYSICAL_RELIEF
                     or e.get("kind") == "body_unable"}
     stirred = (failing_places | event_places) - {""}
+    # A CORPSE FEELS NOTHING, whatever room it lies in (`charter_harm.
+    # in_a_room`): a dead body in a failing yard was appraised and grew a
+    # feel entry every window (audit world_charter_behaviours F11).
+    gone = {key for key, body in (bodies or {}).items()
+            if not in_a_room(body)}
+    stimulated -= gone
     for key, body in (bodies or {}).items():
+        if key in gone:
+            continue
         if key in marked or str(body.get("place") or "") in stirred:
             stimulated.add(key)
         else:

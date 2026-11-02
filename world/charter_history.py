@@ -1,10 +1,18 @@
 """Grounded pre-story history for authored people living inside a Charter.
 
 Charter supplies the factual skeleton: work actually stood, events personally
-witnessed, reports still held, commitments, and earned acquaintance.  A model
-may add only subjective meaning to those cited surfaces.  The result is a
-small pre-story memory packet for a full character, after which Charter gives
-up that body's cognition while keeping its institutional projection.
+witnessed, reports still held, commitments, and earned acquaintance.  On that
+skeleton the live pass (`flesh_resident_history`, `_RECENT_LIFE_SYSTEM`) is an
+author licence to invent a bounded PERSONAL recent life, held to the people,
+places and duties the packet names (`ground_recent_history` refuses an
+episode that cites anyone or anywhere else).  The result is a pre-story
+memory packet for a full character, after which Charter gives up that body's
+cognition while keeping its institutional projection.
+
+`ground_personal_history` -- a model adding only subjective meaning to cited
+surfaces -- is the earlier, stricter design.  No production path calls it
+(its system prompt was never referenced and was deleted 2026-11-01, audit
+world_charter_generation_run F12); `tests/test_fable_town.py` still pins it.
 """
 
 from __future__ import annotations
@@ -29,6 +37,11 @@ PERSONAL_MEMORY_CAP = 60
 PERSONAL_MEMORY_FLOOR = 10
 PERSONAL_MEMORY_TARGET = 32
 PERSONAL_SALIENCE_CAP = 0.7
+#: How much a recent-life episode must say to be a memory rather than a note,
+#: and its consequence to be one, in `_content_units` -- the numbers this
+#: module always held, measured in the script's own unit now (2026-11-01).
+THIN_MEMORY_UNITS = 45
+THIN_CONSEQUENCE_UNITS = 4
 PERSONAL_TONES = frozenset({
     "neutral", "steadying", "burdensome", "meaningful", "alienating",
     "reassuring", "unsettling", "frustrating", "absorbing", "bittersweet",
@@ -40,20 +53,24 @@ PERSONAL_LESSONS = frozenset({
 })
 
 
-_PERSONAL_HISTORY_SYSTEM = """You interpret a character's actual simulated
-past. Return JSON only: {career_reflection,career_source_ids,memories:[{
-source_id,tone,lesson,valence,arousal,salience}]}. tone is one of neutral,
-steadying, burdensome, meaningful, alienating, reassuring, unsettling,
-frustrating, absorbing, bittersweet. lesson is one of none, patience,
-vigilance, restraint, empathy, precision, responsibility, adaptability,
-boundaries, teamwork, uncertainty. Choose four to six memories when that many
-distinct evidence rows exist; otherwise choose every worthwhile row. Every
-source_id must be copied exactly from the evidence. You select and classify a
-subjective response; you never rewrite the memory surface. Private card context
-shapes selection and classification only and is not evidence that an event
-happened. Author guidance has the same limit: emphasize matching evidence but
-never turn a requested theme into a fact. Mundane service may remain mundane.
-Omit rather than invent."""
+def _content_units(text):
+    """How much a span SAYS, counted in the script that wrote it: a run of a
+    spaced script is one unit, a character of an unspaced one is one -- the
+    trade `agents.common._countable_word_units` already makes, because the
+    same amount of language is written in fewer characters there. A Latin
+    word counts as it did, save that an apostrophe or a hyphen now splits it
+    (`language_runtime.fold_words`), which only ever counts MORE.
+
+    It was `len(text.split())`, and Japanese does not space its words: a
+    159-character episode measured ONE word, every episode of a Japanese
+    resident was dropped as `thin_memory`, and generating a Japanese story
+    with a charter-route resident failed with "produced 0 usable episodes"
+    (audit world_charter_generation_run F3).
+    """
+    from language_runtime import fold_words, script_of
+
+    return sum(len(word) if script_of(word[:1]) else 1
+               for word in fold_words(text))
 
 
 _RECENT_LIFE_SYSTEM = """Create a richly detailed recent personal history for
@@ -572,9 +589,9 @@ def ground_recent_history(value, packet):
             missing.append("title")
         if not when:
             missing.append("when")
-        if len(memory.split()) < 45:
+        if _content_units(memory) < THIN_MEMORY_UNITS:
             missing.append("thin_memory")
-        if len(consequence.split()) < 4:
+        if _content_units(consequence) < THIN_CONSEQUENCE_UNITS:
             missing.append("thin_consequence")
         if missing:
             dropped.append({"title": title, "reasons": missing})

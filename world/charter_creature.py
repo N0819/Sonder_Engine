@@ -53,6 +53,11 @@ DEFAULT_PREY = ("stock", "unposted", "posted")
 #: Rooms out from where it stands that a creature notices prey.
 DEFAULT_SENSE_RANGE_ROOMS = 2
 
+#: The sense card's fields, closed: a creature senses with these and nothing
+#: else, and a field outside them is refused rather than dropped
+#: (`normalize_creature`).
+SENSE_KEYS = ("range_rooms", "hearing", "scent", "sight")
+
 #: Chance per hunting body per window that an encounter at a shared place
 #: becomes an attack, before hunger and boldness scale it.
 DEFAULT_ENCOUNTER_ODDS = 0.5
@@ -139,7 +144,7 @@ def normalize_creature(stored):
     """
     if not isinstance(stored, dict) or not stored:
         return None
-    from .spatial_fov import normalize_footprint
+    from .spatial import normalize_footprint
 
     refused = []
     prey = []
@@ -153,6 +158,14 @@ def normalize_creature(stored):
         prey = list(DEFAULT_PREY)
     senses = stored.get("senses") if isinstance(stored.get("senses"), dict) \
         else {}
+    # THE SENSE CARD IS CLOSED: a key it does not know is refused with a
+    # notice, as `contest` refuses, never silently dropped -- an authored
+    # `sight: false` vanished that way and the descent's blind stalker
+    # witnessed a knife drawn in its room (audit world_charter_behaviours F3).
+    for key in sorted(str(k) for k in senses):
+        if key not in SENSE_KEYS:
+            refused.append(f"senses has no {key!r}; the card reads "
+                           f"{', '.join(SENSE_KEYS)}")
     contest = dict(DEFAULT_CONTEST)
     for key, value in (stored.get("contest") or {}).items():
         if key in contest:
@@ -272,7 +285,16 @@ def normalize_creature(stored):
                    # both fields exist for -- deaf, and tracking prey only by
                    # warm exhaled breath -- and until these two it could say
                    # neither in a field.
-                   "scent": bool(senses.get("scent", False))},
+                   "scent": bool(senses.get("scent", False)),
+                   # AND WHETHER IT HAS EYES (2026-11-01). Honoured when
+                   # written, and the one sense that reads as PRESENT when
+                   # it is not: every creature authored before this field
+                   # acted on sight -- `charter_observe` graded an act by
+                   # sight with no sense check -- so an undeclared `sight`
+                   # keeps the eyes they all had. Declared-not-defaulted,
+                   # like `hearing`, would blind every existing creature;
+                   # that change is the owner's to rule on, not this fix's.
+                   "sight": bool(senses.get("sight", True))},
         "footprint": normalize_footprint(stored.get("footprint")),
         "can_open_doors": bool(stored.get("can_open_doors", False)),
         "contest": contest,
@@ -344,7 +366,7 @@ def creature_neighbors(scene, creature):
     no second mover: the walk is planned on the whole graph and stops
     where this map says it cannot go.
     """
-    from .spatial import neighbor_map, passable_neighbors
+    from .spatial import passable_neighbors
 
     scene = scene if isinstance(scene, dict) else {}
     rooms = scene.get("rooms") or {}
@@ -353,29 +375,21 @@ def creature_neighbors(scene, creature):
     creature = normalize_creature(creature) or {}
     base = {k: set(v) for k, v in (passable_neighbors(scene) or {}).items()}
     if creature.get("can_open_doors"):
-        every = neighbor_map(scene, None)
-        for room, ends in (every or {}).items():
-            for other in ends:
-                edge = _edge(rooms, room, other)
-                if edge and "door" in str(edge.get("barrier") or ""):
-                    base.setdefault(room, set()).add(other)
-                    base.setdefault(other, set()).add(room)
+        # THE DOORS A HAND OPENS, by the rule a person walks
+        # (`charter_space.people_neighbors`): a plain shut door opens, a
+        # fastened one -- locked, padlocked, jammed, stuck, blocked -- holds.
+        # This added every edge whose barrier merely CONTAINED "door", so a
+        # creature that could open doors walked out of a locked cell a
+        # person could not (audit world_charter_behaviours F12).
+        from .charter_space import people_neighbors
+        for room, ends in (people_neighbors(scene) or {}).items():
+            base.setdefault(room, set()).update(ends)
     footprint = creature.get("footprint") or "point"
     out = {}
     for room, ends in base.items():
         out[room] = {other for other in ends
                      if room_fits(rooms.get(other), footprint)}
     return out
-
-
-def _edge(rooms, room, other):
-    for edge in ((rooms.get(room) or {}).get("adjacent") or ()):
-        if isinstance(edge, dict) and str(edge.get("to") or "") == str(other):
-            return edge
-    for edge in ((rooms.get(other) or {}).get("adjacent") or ()):
-        if isinstance(edge, dict) and str(edge.get("to") or "") == str(room):
-            return edge
-    return None
 
 
 def is_active(charter, at_hours):

@@ -139,6 +139,14 @@ def _company(states):
         for body_key, body in sorted((state.get("bodies") or {}).items()):
             if not body.get("available", True) or is_gone(body):
                 continue
+            # A BODY THE SCENE HOLDS IS THE DIRECTOR'S TO ENDANGER, as a
+            # figure is (the `figure` branch below files and never harms).
+            # A leased townsperson -- standing in the room the story is
+            # being told in -- was ordinary prey here and was killed by the
+            # next tick with the scene still showing them standing: 30 of 40
+            # seeds on the audit's probe (world_charter_generation_run F1).
+            if body.get("leased"):
+                continue
             place = str(body.get("place") or "")
             if place:
                 bodies_at.setdefault(place, {}).setdefault(
@@ -720,6 +728,10 @@ def predation_round(states, at_hours, *, seed=0, hours=4.0):
         for body_key, body in sorted((state.get("bodies") or {}).items()):
             if not body.get("available", True) or is_gone(body):
                 continue
+            # A creature body on loan to the scene acts there by the
+            # Director's hand, never by this round's dice (F1, above).
+            if body.get("leased"):
+                continue
             place = str(body.get("place") or "")
             if place:
                 by_place.setdefault(place, []).append(body_key)
@@ -965,18 +977,27 @@ class _Caches:
     def __init__(self, state, creature=None):
         from .charter_space import frequented_places, reach_map
 
+        from .charter_space import people_neighbors
+
         self.scene = state.get("scene")
         self.places = frequented_places(state) if self.scene else ()
         self.paths = {}
-        self.reach = reach_map(self.scene, self.places, state["bodies"],
-                               cache=self.paths) if self.scene else None
+        # ONE GRAPH FOR THE PLAN AND THE WALK, the one `charter_run.run`
+        # takes: the doors a person opens for an institution's people, the
+        # creature's own graph for a creature. This planned and walked every
+        # ordinary institution of a creature registry on `passable_neighbors`,
+        # where a shut door is a wall -- the Aldermill defect `run` was fixed
+        # for on 2026-09-19 -- so `small_town` with the smithy's doors shut
+        # filled the smith's shift under `run` and reported it `out_of_reach`
+        # under `run_registry` (audit world_charter_generation_run F4).
         self.neighbors = None
         if self.scene:
-            if creature:
-                self.neighbors = creature_neighbors(self.scene, creature)
-            else:
-                from .spatial import passable_neighbors
-                self.neighbors = passable_neighbors(self.scene)
+            self.neighbors = (creature_neighbors(self.scene, creature)
+                              if creature else people_neighbors(self.scene))
+        self.reach = reach_map(self.scene, self.places, state["bodies"],
+                               cache=self.paths,
+                               neighbors=self.neighbors) \
+            if self.scene else None
         self.routes = {}
         self.where = {k: b["place"] for k, b in state["bodies"].items()}
 
@@ -991,7 +1012,8 @@ class _Caches:
                      if self.where.get(k) != place}
             self.reach = refresh_reach(self.reach, self.scene, self.places,
                                        state["bodies"], moved,
-                                       cache=self.paths)
+                                       cache=self.paths,
+                                       neighbors=self.neighbors)
             self.where = now
 
 

@@ -112,12 +112,15 @@ def move_body(charter, *, body="", room="", berth=False):
     room = _text(room, 120)
     if not room:
         raise ValueError("move_body names the room")
+    from .charter_move import set_place
+
     held = _body(charter, body)
     was = str(held.get("place") or "")
-    held["place"] = room
+    # The station, the walk and the errand that rode it stay in the old room
+    # (`charter_move.set_place`, audit world_charter_behaviours F13).
+    set_place(held, room)
     if berth:
         held["berth"] = room
-    held.pop("walk", None)
     return {"body": str(body), "from": was, "to": room, "berth": bool(berth)}
 
 
@@ -163,6 +166,27 @@ def vacate_post(charter, *, post=""):
     return {"post": post, "body": body_key, "was_filled": bool(body_key)}
 
 
+def _member_key(charter, spelled):
+    """The body key ``spelled`` names in this institution -- by key, stored
+    name or display name, where exactly one body answers -- else
+    ``spelled`` unchanged."""
+    from .charter_identity import display_name
+
+    bodies = charter.get("bodies") or {}
+    spelled = str(spelled or "")
+    if spelled in bodies:
+        return spelled
+    wanted = spelled.strip().casefold()
+    roles = {}
+    for post, holder in (charter.get("watch") or {}).items():
+        roles.setdefault(str(holder), []).append(str(post))
+    hits = [key for key, body in bodies.items() if wanted in {
+        str((body or {}).get("name") or "").strip().casefold(),
+        display_name(body, roles.get(str(key)) or (),
+                     charter.get("naming")).strip().casefold()}]
+    return hits[0] if len(hits) == 1 else spelled
+
+
 def _claim_key(text):
     return "authored:" + hashlib.sha256(text.encode("utf-8")).hexdigest()[:12]
 
@@ -182,6 +206,13 @@ def plant_claim(charter, *, body="", text="", told_by="", about="", place="",
         raise ValueError("plant_claim names who told them: a claim with no "
                          "teller is a thought put in a head")
     held = _body(charter, body)
+    # A TELLER THIS INSTITUTION HOLDS IS HELD BY ITS KEY, the vocabulary
+    # every reader of `heard_from` keys by (`charter_news.check_reports`,
+    # `charter_social.update_judgments_from_minds`); an author naming one by
+    # display name is resolved, and a teller the institution does not hold
+    # ("a fisher") stays the author's words (audit world_charter_behaviours
+    # F9).
+    told_by = _member_key(charter, told_by)
     try:
         strength = float(PLANT_STRENGTH_DEFAULT if strength is None else strength)
     except (TypeError, ValueError):
@@ -291,6 +322,15 @@ def send_errand(charter, *, body="", to="", purpose="", scene=None,
     if not to:
         raise ValueError("errand names where the body is sent")
     held = _body(charter, body)
+    if held.get("leased"):
+        # REFUSED BY NAME, never dropped by the next commit. A body the scene
+        # stands is moved by the scene (`charter_move.walk`); a walk written
+        # onto one here was advanced by the next tick and snapped back by the
+        # next commit's lease, which drops the errand with it -- the PB13
+        # fetch lost without trace (audit world_charter_behaviours F14).
+        raise ValueError(
+            "body %r is standing in the scene, which moves it; send it in "
+            "the scene's own movement, or once it has left the room" % body)
     origin = str(held.get("place") or "")
     if scene:
         route = walk_route(scene, origin, to)
@@ -316,7 +356,10 @@ def send_errand(charter, *, body="", to="", purpose="", scene=None,
              "actor": errand["sender"], "exact_quote": message,
              "target": errand["addressee"], "status": "attempted",
              "salience": 0.8},
-            int(turn_idx or 0), at, origin, label=errand["sender"])
+            int(turn_idx or 0), at, origin, label=errand["sender"],
+            # The walker was TOLD whom the word is for: the addressee is the
+            # errand itself, not an overheard name (`evidence_claim`).
+            target_label=errand["addressee"])
         if claim:
             claim["provenance"] = "carried_word"
             errand["claim_key"] = claim["body"]

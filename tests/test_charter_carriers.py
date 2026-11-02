@@ -106,7 +106,10 @@ def test_on_page_telling_moves_a_charter_rumour_without_proximity_broadcast(
 
     claim = next(iter(_minds(cid)["orin"].values()))
     assert (applied, rejected) == (1, [])
-    assert claim["heard_from"] == "Mara Venn"
+    # Mara Venn is a body of Orin's own institution, so the rail's
+    # display-name teller comes back off it as her KEY (audit
+    # world_charter_behaviours F9, 2026-11-01); this pinned the name.
+    assert claim["heard_from"] == "mara"
     assert claim["claim_text"] == "the north gate was chained shut"
     assert claim["retellings"] == 1
 

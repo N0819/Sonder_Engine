@@ -29,6 +29,7 @@ The statistics worth watching, and why each one earned its place:
 from __future__ import annotations
 
 from .charter_feel import normalize_feel, overloaded_bodies
+from .charter_harm import in_a_room
 from .charter_mark import mark_view
 from .charter_mind import acquaintance, contested, divergence
 from .charter_needs import mood, pressure, unmet
@@ -37,10 +38,11 @@ from .charter_feel import strain_of
 from .charter_model import out_of_band
 from .charter_politics import regard_pair, regard_value
 from .charter_temper import temperament_of
-from .charter_commitment import commitment_view
-from .charter_decide import decision_view
-from .charter_economy import normalize_economy, quote, stock_band
-from .charter_social import judgment_view, tie_of, tie_view
+from .charter_commitment import commitment_view, normalize_commitments
+from .charter_decide import decision_view, normalize_decisions
+from .charter_economy import _band, _quote, normalize_economy
+from .charter_social import (judgment_view, normalize_judgments, tie_of,
+                             tie_view)
 
 
 def window_note(charter, events, told):
@@ -283,7 +285,7 @@ def own_state_of(held_needs, feel_entry):
     return out
 
 
-def scene_ledger(charter, place, events=(), hours_per_day=24.0):
+def scene_ledger(charter, place, events=(), hours_per_day=24.0, only=None):
     """Everything a scene manager could riff from, for one place, per presence.
 
     THE SHAPE THIS OWES ITS CALLER. `docs/design/BACKGROUND_LIFE_DESIGN.md`
@@ -305,6 +307,13 @@ def scene_ledger(charter, place, events=(), hours_per_day=24.0):
     a cheap model everything a body knows is how chat 78's wardrobe got
     transposed into a diff: a payload large enough to restate gets restated.
     Three things somebody could plausibly raise beats forty they could not.
+
+    ``only`` builds that one body's presence and no other's -- what
+    `charter_runtime.presence_view` keeps -- while the room around it (who
+    is here, who is a stranger) is read whole. Each social store is
+    normalized ONCE per call, not once per presence: measured (audit
+    world_charter_behaviours E1, 300 bodies, 60 in one room) 3.94 s a call,
+    `normalize_judgments` alone 0.0585 s x 60.
     """
     place = str(place)
     at_hours = float(charter.get("clock_hours") or 0.0)
@@ -312,23 +321,24 @@ def scene_ledger(charter, place, events=(), hours_per_day=24.0):
     minds = charter.get("minds") or {}
     politics = charter.get("politics") or {}
     regard = politics.get("regard") or {}
-    blame = politics.get("blame") or {}
     heard_blame = charter.get("heard_blame") or {}
     needs = charter.get("needs") or {}
     feel = charter.get("feel") or {}
     strains = strain_of(feel)
     watch = charter.get("watch") or {}
     posts = charter.get("posts") or {}
-    judgments = charter.get("judgments") or {}
-    commitments = charter.get("commitments") or {}
-    decisions = charter.get("decisions") or {}
+    judgments = normalize_judgments(charter.get("judgments") or {})
+    commitments = normalize_commitments(charter.get("commitments") or {})
+    decisions = normalize_decisions(charter.get("decisions") or {})
     ties = charter.get("ties") or {}
     marks = charter.get("marks") or {}
     served_beside = charter.get("served_beside") or {}
     economy = normalize_economy(charter.get("economy"))
 
+    # The dead lie where they fell and are nobody's presence or stranger
+    # (`charter_harm.in_a_room`, audit world_charter_behaviours F11).
     here = sorted(k for k, b in bodies.items()
-                  if str(b.get("place") or "") == place)
+                  if str(b.get("place") or "") == place and in_a_room(b))
     present = set(here)
     figures = charter.get("figures") or {}
     figures_here = sorted(k for k, f in figures.items()
@@ -337,6 +347,8 @@ def scene_ledger(charter, place, events=(), hours_per_day=24.0):
 
     presences = {}
     for key in here:
+        if only is not None and key != str(only):
+            continue
         body = bodies[key]
         held_needs = needs.get(key) or {}
         # What this body could raise: its news, strongest first, then the
@@ -437,7 +449,14 @@ def scene_ledger(charter, place, events=(), hours_per_day=24.0):
             "knows_here": known_here,
             "strangers_here": sorted(
                 company - set(minds.get(key) or {}) - {key}),
-            "blamed": int(blame.get(key, 0)),
+            # WHO SAID IT ALOUD, never how often the books say it. The
+            # register's own count (`politics.blame`, written by
+            # `attribute_blame` off the watch the charter BELIEVED it had
+            # arranged) rode here as `blamed`, and this slice is the voice's
+            # payload: a guard blamed twice in the books and told by nobody
+            # was voiced with `blamed: 2, knows_it_is_blamed: []` (audit
+            # world_charter_behaviours F1). The count stays where the author
+            # reads it (`life_of`, `charter_diagnostics`).
             "knows_it_is_blamed": sorted(heard_blame.get(key, ())),
             # WHAT THIS BODY TEMPORARILY IS (`RESEARCH.md` §1.7.6 item 4), and
             # a label is what a narrator can state plainly -- CiF's own reason
@@ -451,13 +470,15 @@ def scene_ledger(charter, place, events=(), hours_per_day=24.0):
             # Independent, evidence-citing stances toward current company;
             # and only commitments this body is party to or has learned.
             "social_judgments": judgment_view(
-                judgments, key, subjects=company - {key}, cap=4),
+                judgments, key, subjects=company - {key}, cap=4,
+                normalized=True),
             "commitments": commitment_view(
-                commitments, key, parties=company - {key}, cap=4),
+                commitments, key, parties=company - {key}, cap=4,
+                normalized=True),
             "institutional": decision_view(
                 decisions,
                 post=next((p for p, who in watch.items() if who == key), ""),
-                body=key, cap=4),
+                body=key, cap=4, normalized=True),
         }
 
     market_rows = []
@@ -469,10 +490,11 @@ def scene_ledger(charter, place, events=(), hours_per_day=24.0):
                        | set((economy["targets"].get(holder) or {})))
         market_rows.append({
             "market": market_key, "holder": holder,
-            "stock": {good: stock_band(economy, holder, good)
+            "stock": {good: _band(economy, holder, good)
                       for good in goods},
-            "quotes": [quote(economy, market_key, good) for good in goods[:6]
-                       if quote(economy, market_key, good) is not None],
+            "quotes": [row for row in (_quote(economy, market_key, good)
+                                       for good in goods[:6])
+                       if row is not None],
         })
 
     return {

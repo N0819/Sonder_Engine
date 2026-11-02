@@ -27,6 +27,24 @@ INTERVENTION_OPS = frozenset({
 })
 INTERVENTION_CAP = 64
 
+#: The notice a row the full schedule could not take carries. THE CAP REFUSES
+#: THE NEWCOMER and never evicts what is already scheduled: it used to sort
+#: and keep the first `INTERVENTION_CAP`, which dropped the LATEST row --
+#: exactly the `:stand_down` and `:revert` ends other ops schedule -- so a
+#: called watch whose stand-down was evicted by one more authored shock
+#: stood for ever, its upkeep first in `priority` (audit
+#: world_charter_behaviours F8, 2026-11-01). The number stays the owner's.
+SCHEDULE_FULL = "the intervention schedule is full (%d rows); refused" \
+    % INTERVENTION_CAP
+
+
+def _scheduled_end(row):
+    """Is this row the END of something already applied -- a watch's
+    stand-down or a dial's revert (`apply_due` schedules both, by these id
+    suffixes)? An end is never refused for room: refusing it leaves the
+    thing it ends standing for good."""
+    return str(row.get("id") or "").endswith((":stand_down", ":revert"))
+
 #: What a mobilisation reads as when the institution authored nothing
 #: (`normalize_mobilisation`). Every one is a cap or a rate and every one is
 #: an institution's own to set: a frontier town and a complacent one are the
@@ -105,9 +123,26 @@ def normalize_interventions(stored):
             row["requires"] = normalize_competence(raw.get("requires"))
         if op not in INTERVENTION_OPS:
             row["refused"] = "unknown intervention op"
+        elif raw.get("refused"):
+            # A refusal is kept, not re-judged: a row refused for room must
+            # not win its place back on the next normalization.
+            row["refused"] = str(raw["refused"])[:240]
         rows.append(row)
+    # IN INPUT ORDER, so the rows a caller APPENDS are the ones refused when
+    # the schedule is full; every caller appends (`charter_surgery.
+    # charter_shock`, `charter_run`'s calls, the institution rules), and a
+    # stored schedule arrives in the order it was kept.
+    live = [row for row in rows if not row.get("refused")]
+    if len(live) > INTERVENTION_CAP:
+        room = max(0, INTERVENTION_CAP - sum(
+            1 for row in live if _scheduled_end(row)))
+        others = [row for row in live if not _scheduled_end(row)]
+        for row in others[room:]:
+            row["refused"] = SCHEDULE_FULL
+    refused = [row for row in rows if row.get("refused")][:INTERVENTION_CAP]
+    rows = [row for row in rows if not row.get("refused")] + refused
     rows.sort(key=lambda row: (row["at_hours"], row["id"]))
-    return rows[:INTERVENTION_CAP]
+    return rows
 
 
 def intervention_warnings(stored):
@@ -164,13 +199,13 @@ def _apply_relocate(charter, row):
         target = found
     if not target or (rooms and target not in rooms):
         return None, "no room to move the lair to"
+    from .charter_move import set_place
+
     for body in bodies.values():
         if str(body.get("berth") or "") == old or not body.get("berth"):
             body["berth"] = target
         if old and str(body.get("place") or "") == old:
-            body["place"] = target
-            body.pop("walk", None)
-            body.pop("station", None)   # a station is a fact about one room
+            set_place(body, target)     # leaves the old lair's cell behind
     return {"kind": "lair_moved", "at_hours": float(row["at_hours"]),
             "place": target, "from": old, "cause": row.get("cause", "")}, ""
 
