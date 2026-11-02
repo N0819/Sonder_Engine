@@ -345,14 +345,13 @@ investigation found and did not close.
   persona accessor -- a field with no reader is what `llm/schemas.py` deleted
   29 models over. `tests/test_card_interior_spec.py` pins the absence, so a
   reader cannot appear without the field appearing with it.
-- **A non-body holder never gets an engine-minted interior.** Not a taxonomy
-  preference: `sync_entity_interior_rooms` and `infer_body_enclosures` are
-  both body-scoped, so a minted crate or lift-car interior is never indexed
-  and never defaulted opaque, `apply_transit_dock_edges` derives an
-  `open_door`, and an occupant `containment_hides` was concealing becomes one
-  visible from the room outside -- information EXPANSION. Serving a container
-  the same way needs the non-body enclosure default first, which is its own
-  landing with the bullet above it.
+- *(Struck 2026-11-01, `world_spatial_truth` F28: "a non-body holder never
+  gets an engine-minted interior" stopped being true on 2026-10-10 --
+  `spatial_containment._mint_thing_interior` mints the one room a body stands
+  in inside a thing, SHUT through the thing's own enclosure, opened only by
+  its own `hatch`, which is the non-body enclosure default this bullet was
+  waiting for. Two docstrings in `world/spatial_containment.py` still call
+  gate 3 body-only.)*
 - **An exterior conduit declares a crossing time nothing can direct.** A room
   may now carry `transit_seconds`, and `world.spatial_containment` carries an
   occupant onward on the simulation clock -- but only inside a
@@ -428,30 +427,20 @@ investigation found and did not close.
   English key by key, so an EN-only fragment fails the `ja` pack's load
   outright -- measured 2026-08-25. Both packs carry it, and the Japanese copy
   is a model draft like the rest of that pack.
-- **Observation metadata is computed and consumed by nothing.** `intensity`,
-  `suddenness`, `ambiguity` and `directed_at_self` are re-derived from the
-  scrubbed view for every atom, cost tokens on every character payload, and
-  have no reader in code — `intensity` does not appear anywhere in the
-  character prompt either. They are also nearly constant: `intensity` is 0.35
-  on **96.7%** of 7,508 observations, and only 18 distinct
-  (intensity, suddenness, ambiguity) tuples exist corpus-wide, because the cue
-  lists behind them are an adventure vocabulary (explosions, gunshots, alarms,
-  agony). Either give them a consumer or stop computing them; a field that
-  tells a character every percept is equally important is worse than no field.
-- **`directed_at_self` mislabels the intransitive own-body case.** Of 590
-  observations opening on the perceiver's own body, **64.7%** carry
-  `directed_at_self: false`, because `_SELF_DIRECTED` recognises only
-  agent-first constructions ("grips your", "against you") and "Your body keeps
-  spasming" matches none of them. Fixed for the deterministic sensation clause
-  only, keyed on its verb rather than on a bare leading `your` — "your
-  companion steps back" is not about the perceiver, and a broad rule would
-  claim it is. Inert until the field above has a consumer.
-- **The atom budget collapses channels.** `_observation_spans` merges
-  smallest-first to fit `_MAX_OBSERVATION_ATOMS = 8`, and merging two spans of
-  different channels marks the result `mixed`. That accounts for 16.6% of
-  `mixed` observations — secondary to the 83.4% that matched no cue at all, but
-  it means a beat arriving through MORE senses loses more channel information
-  than a simple one.
+- **Observation metadata has no reader in code; the model is its only
+  reader.** `intensity`, `suddenness`, `ambiguity` and `directed_at_self`
+  cost tokens on every character payload. *Corrected 2026-11-01*
+  (`agents_composer` docs check): they are no longer re-derived from the
+  scrubbed view by cue lists -- the derivation this bullet measured
+  (`_SELF_DIRECTED`, `_observation_spans` and the eight-atom cap) was
+  deleted, and `observations_from_render` copies them from the percept data,
+  so the 96.7%-constant `intensity` and the 64.7% own-body mislabel were
+  measurements of code that is gone. The copy is what let `directed_at_self`
+  tell a mind that a line it could not hear was said to it; since 2026-11-01
+  the flag below `full` fidelity is exactly `own_name`
+  (`composer_speech._said_to_you`,
+  `tests/test_an_unheard_line_is_never_said_to_you.py`). Whether the model
+  earns the four fields' tokens is still unmeasured.
 - **A hover is not a contact, and there is nowhere else for it.** A measured
   "two inches of visible space" between two mouths is real fiction with real
   tension, and `contacts` can only say touching or nothing. It lives in entity
@@ -580,7 +569,15 @@ Three smaller residuals from the same note, deliberately not landed with it:
   physically-restrained body "breaks free" is nearly always literal.
 - **Restraint synonym and holder-field tables are English** — the same
   standing gap `_RESTRAINT_SYNONYMS` had before that work. Owner decision 2
-  (route recognizers through the packs) covers the class.
+  (route recognizers through the packs) covers the class. So does the
+  backdrop's people strip (2026-11-01, `dressing_language_runtime` F1): it
+  now drops a sentence whose SUBJECT is a body the scene holds, in every
+  script (`backdrops._names_a_person`, measured on 1,237 live rooms: 5
+  sentences dropped, 4 of them rightly), but a Japanese sentence that puts a
+  crowd in the frame -- 「非番の乗組員や民間人がここに集まる。」 -- still reaches
+  the image prompt, because population, speech, posture and body words exist
+  only in the English tables; a `dressing.backdrops` pack module in both
+  packs is the request.
 - **`consciousness` rows stay unread forever** by design: the word does not
   say which way the body is crossing. If a model starts writing them at
   volume the fix is the prompt, not the predicate.
@@ -740,12 +737,18 @@ every card-producing surface.
 `story.attire.entry_for` is the shared casefold-tolerant lookup of a body's
 attire entry, added because `scene.visible_body_text` did a bare `.get(name)`
 and a case-variant identity key therefore found no garment for a dressed body
-— a gate that failed OPEN, delivering the face a covering conceals. Three
-inline copies of the same fallback remain in `agents/common.py` (around the
-`observer_body_regions`, region-coverage and per-body ledger reads). They are
-correct today and independently maintained, which is the same second-copy risk
-`_co_present_company` was just collapsed to remove. Adopting `entry_for` at all
-three is pure subtraction and wants no design decision.
+— a gate that failed OPEN, delivering the face a covering conceals. The
+three inline copies this entry named in `agents/common.py` are gone: those
+reads go through `attire.key_for` / `entry_for` (now in
+`agents/common_bodies.py`; corrected 2026-11-01 from the `agents_common` and
+`story_attire_import` docs checks). **Two NEW open-coded copies took their
+place** with a different fold (whitespace-collapsing), reading the raw
+`wearing` list rather than the re-derived ledger and branching on `wearing`
+items shaped `{item: ...}`, a shape `wearing` never holds:
+`skip_stage.held_things` and `skip_work._worn`. `attire.recover_shed_entity_changes`
+builds its own strip+casefold map beside `key_for` in the same module (the
+same rule today). Adopting `entry_for` at those sites is pure subtraction and
+wants no design decision.
 
 The key is unreliable in the first place because
 `persist.commit_attire._heal_attire_identity_keys` heals on the WRITE path and
@@ -1106,8 +1109,25 @@ indexed room answers is a new room.
 neither its id nor its name -- "the settlement" for "Town Habitations Shelf".
 The index gives the Director the material to make that judgement and does not
 make it; whether a fuzzy match belongs in `planned_context` is a separate
-question, and the deterministic matcher is deliberately exact
-(§ *An exact match is not ambiguous*).
+question.
+
+**Corrected 2026-11-01** (`agents_runtime_loops_mapping` F5,
+`world_layout_bridge_structure` F8): "the deterministic matcher is
+deliberately exact" was false -- `planned_context`'s tiers 0 and 1 matched
+room slugs as raw SUBSTRINGS ("the spinning mill" landed in the `inn`,
+"beginning" named the Inn). Review lane L5 made both tiers whole-name in both
+readers and both scripts (`tests/test_a_planned_room_is_named_only_by_its_whole_spelling.py`).
+**Tier 2 waits on the owner:** `world.spatial_identity.room_words_answer`
+lets a wanted word match the TAIL of a held word -- "the hall" ->
+"Marshall House", "the ford" -> "Stafford Mill", "the house" -> "Lighthouse"
+-- as well as the live case it exists for, "Cope's yard" -> "Cope's
+Boatyard" (scratch play 2026-09-14, chat 5 turn 27). A candidate rule with
+precedent in the engine (`director_prose.rooms_named_by_part`, measured on
+chat 166's 107 encoder calls): one word alone must be a WHOLE word of the
+name; a tail counts only inside a phrase of two or more words. It keeps
+"Cope's yard", refuses the three wrong ones and loses "the yard" -> Cope's
+Boatyard, and it must change `scene_room_id`'s identical word tier at the
+same time, or the plan and the scene answer "the yard" differently.
 
 <a id="unbuilt-1-130"></a>
 
@@ -1210,9 +1230,13 @@ than the shortest (PX11). A planned edge may carry `distance` (PR13).
   `mapping_request: "Map the interior of the cistern vault accessible through
   upper_terrace_rim's cistern_arch"` and nothing answered it — is real and
   not addressed: `agents/mapping.py` files a planning need for an unplanned
-  DESTINATION and an unmatched LOCATION QUERY and for nothing else, and
-  `needs_mapping` alone is set from a word-cue list on ordinary declarations,
-  so filing on it would flood. A need reason for a mapping request the beat
+  DESTINATION and an unmatched LOCATION QUERY and for nothing else. The
+  word-cue lists that set `needs_mapping` on ordinary declarations, and
+  added English boilerplate to `flow.mapping_request`, were deleted on
+  2026-11-01 (`agents_director_core` F12); `needs_mapping` is still set from
+  `generation_requests`, `location_query`, an unheld destination, `pending`
+  and due events, and nothing reads it (`agents_director_core` F19), so
+  filing on it would still flood. A need reason for a mapping request the beat
   raised and no other need covers wants `world/planning_needs.py` and
   `agents/mapping.py` together.
 * **PM3's other half — nothing authors a `run`.** The floor is built and
@@ -1291,9 +1315,14 @@ residues (two more closed when the channel was retired):
 
 **Found 2026-09-06 while widening § 1.137's gate.** `spatial_fov._place_anchors`
 places an anchor against the wall its `dir` names. An anchor with NO `dir`
-falls to the last branch and takes a seeded INTERIOR cell instead --
-`1 + seed % (w - 2)` by `1 + (seed // 7) % (d - 2)` -- so it is spread, but
-spread through the middle of the floor rather than around the walls.
+falls to the last branch and takes a seeded cell on the FLOOR instead, so it
+is spread, but spread through the floor rather than around the walls.
+*(Mechanism restated 2026-11-01, `world_spatial_movement_sight` docs check:
+the `1 + seed % (w - 2)` interior formula this entry quoted is gone -- the
+seed now ranges over the whole floor, the ring included (owner ruling
+2026-09-16), and since 2026-10-12 the fixture is moved off doorways and other
+fixtures. The defect stands: an undirected anchor is still not put against a
+wall.)*
 
 Two consequences, and the second is the one that matters. Furniture is mostly
 against a wall -- a rail, a stair, a hearth, a counter -- so an interior cell
@@ -2055,7 +2084,13 @@ room:
 ### 1.194 A vessel moving within one room stays in it — BUILT 2026-10-09, residuals open
 
 The owner's ruling D2 as worded (`Design.md`, "A vessel moving within one
-room stays in it"; `spatial_transit.settle_departures`). What it leaves:
+room stays in it"; `spatial_transit.settle_departures`). One consequence
+this list never named is closed (2026-11-01, review lane L12a): the room a
+vessel moves within was read as a MEDIUM -- a beach became water for every
+skip -- and `spatial_transit.medium_rooms` no longer counts a route room
+equal to the journey's own `departed_from` (it is a medium only by its own
+`floor`; `tests/test_a_vessel_under_way_is_no_medium_of_its_own_room.py`).
+What it leaves:
 
 - **A departure that names no space now stands where it set off.** Eighteen
   stored TARDIS writes, the same in both databases (chats 30, 56-59, 63, 64,
@@ -2731,6 +2766,75 @@ frontier being a space held open for exploring. What that leaves:
   it no longer walks a join across a medium; it walks a far one at the far
   price, and still walks the water itself.
 
+<a id="unbuilt-1-240"></a>
+
+### 1.240 A couple that ends as "reunited" is partitioned like any other (2026-11-01 review)
+
+`world_spatial_structure_light` F9, confirmed for the decision and
+plausible downstream. `spatial_bubbles.uncouple_decision`'s docstring says
+"the caller routes on it", but its only caller, `spatial_frames.detect_couple`,
+returns None for any ended couple and `close_couple` partitions
+unconditionally -- and the reunion test checks only for a shared room. Two
+people talking through an open doorway with a live duplex handset between
+them: the voice from the study reaches the hall at `full`, `comms_link`
+suppresses the radio wherever a normal voice already arrives whole, and
+`uncouple` answers `channel_closed`, so the call ends and they are
+partitioned back into two frames. Making the reunion test comms_link's own
+audibility test changes nothing observable on its own while the caller
+ignores the reason, and routing on `reason` means a couple that closes
+"reunited" must MERGE its two frames instead of partitioning them. Skipped
+by review lane L12a as **the owner's frames decision:** what the reunion of
+a couple frame does to its two parents.
+
+<a id="unbuilt-1-241"></a>
+
+### 1.241 The contact-bound pose reconciliation reads English only (2026-11-01 review)
+
+`world_spatial_truth` F17: the pose-prose reconciliations were
+English-only. Review lane L12a made the transfer and moved-body ones
+structural, so they hold in every script. It left
+`spatial_geometry.invalidate_contact_bound_poses` behind its English gate on
+purpose: its Japanese clause would clear `relative_to` on ANY ended contact,
+a gaze included -- a subtraction nobody has measured. **The owner's call:**
+whether the structural rule should reach this reconciliation too, which
+first wants the rate at which it would retire a pose that should stand.
+
+<a id="unbuilt-1-242"></a>
+
+### 1.242 Furniture placement never backtracks (2026-11-01 review)
+
+`world_layout_core` F5, confirmed. `layout_solver._place_fixtures` was
+documented as "Fixtures by relation, backtracking", but a level with no
+candidate records the fixture unplaced and continues, so the search returns
+False only once its 3,000-call budget is spent -- and a room makes exactly
+fixtures + 1 calls. The first candidate is always kept; candidates 2-10 and
+the budget are dead. Measured with a frame counter over the shrine
+baseline's 17 furnished rooms: calls equal fixtures + 1 in every room,
+including the roost with two fixtures unplaced, so an early, larger fixture
+can take the cells a later one needed where a second-ranked spot fitted
+both. Whether this is part of §2.43's "more furniture left out than the old
+search (70 pieces over 14 shrine runs against 49)" is unmeasured. Review
+lane L12b rewrote the docstring as the greedy placement it is. **The
+owner's call:** make a level with no candidate return False (true
+backtracking under the existing budget, which changes the lab's baselines),
+or keep the greedy placement and delete the dead loop.
+
+<a id="unbuilt-1-243"></a>
+
+### 1.243 Where the sleepers past a lot's beds go (2026-11-01 review)
+
+`world_layout_bridge_structure` F10. `director_lots.deal_berths` built a
+slot list as long as the room's `sleeps` (8.4 MB peak for `sleeps: 10**6`);
+review lane L5 made it deal by arithmetic, so a vast `sleeps` is harmless
+with no number invented, and it now says how many went past the beds
+(`notes=`). The overflow POLICY is unchanged and flagged: every sleeper past
+the beds goes to the last sleeping room (the pinned garret still takes 8,
+its note saying 7 went past the beds). **The owner's decision:** where
+overflow sleepers go --
+the last sleeping room (today), round-robin over the sleeping rooms, or
+left at the entry -- and whether a room's count is held to the charter's
+`BERTH_CEILING` (8).
+
 ## 2. Roadmap
 
 <a id="unbuilt-2-6"></a>
@@ -2748,8 +2852,9 @@ is the point: a silent retcon is the failure mode. Verified absent.
 **The report landed 2026-08-19.** `attire.guessed_spans` had no production
 caller — its own docstring described the hand-off in the present tense while
 the loop stayed open. It now runs at the attire commit seam and tells the
-Director, which is the only stage with the fiction in front of it and can
-answer with `coverage`. Told rather than repaired, because the cue tables are
+Director, which is the only stage with the fiction in front of it and was
+meant to answer with `coverage` (it cannot -- see the last paragraph). Told
+rather than repaired, because the cue tables are
 the thing that does not know, so a second deterministic guess would be the same
 guess. Measured while it was open: 110 of 560 live worn garment records carry a
 span the tables guessed, twenty of them a nagajuban sitting on the torso alone,
@@ -2761,6 +2866,26 @@ pointed at does not work. `placement` and `add[].covers` are documented in both
 prompts, passed correctly at the call site, and lost to an ordering bug before
 they are applied. Until that lands, the report asks for something the engine
 cannot yet accept — which is worth knowing when reading the warnings.
+
+**The `coverage` advice itself cannot work** (`story_attire_import` F9,
+confirmed by snippet 2026-11-01, not fixed). The report tells the Director
+"If it covers more, say so once: attire.<name>.coverage = {'<garment>':
+{<region>: []}}" (`persist/commit_attire.py`), but `[]` means "displaced off"
+in that vocabulary and no coverage entry ADDS a region:
+`attire.apply_coverage_changes` writes `covered_zones` onto the garment's
+existing copies only, with no note for a region it does not occupy. So
+following the advice leaves the span unchanged, files a false "nagajuban
+displaced off the legs" into `state` (which characters and the narrator
+read), and silences `guessed_spans` for that garment. The fix the audit
+names: refuse, with a note, a region the garment does not occupy; let
+`guessed_spans` count only `placed` as an authored span; point the advice
+at `placement` (itself inert until §1.72 lands). **Narrowed the same day**
+(`story_attire_import` F10, review lane L8a): `attire.regions_covered` no
+longer lets a modifier noun set the span ("kimono sash", "dress shoes"), and
+the closed compounds overcoat, raincoat, trenchcoat, greatcoat, topcoat and
+petticoat are named in `_REGION_CUES`/`_SPANNING_CUES` instead of falling to
+the torso -- garments already placed in a stored ledger keep their recorded
+regions.
 
 <a id="unbuilt-2-15"></a>
 
@@ -2791,9 +2916,17 @@ about.
 
 **Related, from the alpha 6.3 physical-ledger work (its residual list was
 dissolved 2026-08-19 and deleted 2026-09-04):** nothing derives a station from within-room movement INTENT ("she
-crosses to the hearth"), because there is no within-room approach concept for it
-to read — room-level `scene.approach` is the only staged-movement memory there
-is.
+crosses to the hearth") at the moment of declaring it. *Corrected 2026-11-01*
+(`prose_movement_rooms` F3): "room-level `scene.approach` is the only
+staged-movement memory there is" was stale -- the approach carries a
+within-room leg (`to_cell` / `to_anchor`), and since 2026-11-01 a leg left
+under way inside its own destination room is walked on by the beat's paces
+rather than retired as arrived (`director_movement._travel_continues`,
+`walk_within_room`; `tests/test_a_walk_under_way_ends_only_where_it_was_going.py`).
+**Owner's limit, not set:** aging such a leg by `turn`, so a walk nobody
+mentions again does not stand forever (review lane L7b left it unnamed);
+and a departed cast member's stale position standing in a room was not
+traced.
 
 <a id="unbuilt-2-27"></a>
 
@@ -2863,7 +2996,9 @@ clock"). What it deliberately does not do:
   the roof. `room_exposure`'s keyword fallback reads an unrecognised room as
   `enclosed`, so a room the reader cannot place keeps its declared light --
   the failure direction is "a square that should have gone dark stayed lit",
-  never the reverse.
+  never the reverse. (That held only for unrecognised rooms until
+  2026-11-01: substring matching let a keyword darken an indoor room; it is
+  now true by construction -- UNBUILT_PERCEPTION §1.18.)
 - **Evening is dark.** 19:30-22:00 on a 24-hour day reads `dark` outdoors,
   which is right for a town with no street lamps and wrong for a summer
   latitude; seasons and latitude are not modelled, and a lamp is an entity
@@ -2881,7 +3016,19 @@ clock"). What it deliberately does not do:
   the same kind `dressing.backdrops._TIME_BUCKETS` already was, and subject
   to the same rule: it is what the cycle can READ, and a label outside it is
   left standing rather than misread. Expect it to be widened; a widening
-  changes which stories get a cycle, never what the cycle does.
+  changes which stories get a cycle, never what the cycle does. (The
+  backdrop and the ambience key read the canonical `scene.day_phase` first
+  since 2026-11-01 -- `backdrops.scene_time_bucket` -- and fall back to the
+  label table only where the cycle keeps no phase.)
+- **"Midnight, 12:00" reads as midday -- the owner's call** (2026-11-01,
+  `world_offscreen_time` F4). An a.m. marker on hour 12 now reads 0 ("Late
+  night, 12:40 AM" had anchored the story's day at noon;
+  `day_cycle.clock_reading_hour` and `AM_MARKER`,
+  `tests/test_twelve_am_is_the_hour_after_midnight.py`), and every label
+  reader moved with it. Left for a ruling: a phase word beside a reading it
+  contradicts -- "Midnight, 12:00" -- still reads 12:00 = midday; which one
+  wins is the owner's. Noted, not fixed: a Japanese 午前/午後 marker stands
+  BEFORE the reading ("午後3:00") and neither marker pattern looks there.
 - **A skip lands at the START of the phase it names** (2026-09-03, replay
   N13), never inside it: "by dusk" is 18:00 whatever the duration said, and
   "late in the afternoon" is the afternoon's first minute. The phrase is
@@ -3608,7 +3755,11 @@ said in the Room's review. What it leaves:
 * **A dealt sibling name can coincide with an unlanded planned room's name
   elsewhere in the story** and be merged into it by
   `_merge_generated_rooms_by_name`; the closure sees only its own plan.
-  Unmeasured; a dealt word is seeded and rarely collides.
+  Unmeasured; a dealt word is seeded and rarely collides. *Narrowed
+  2026-11-01* (`world_charter_core` F11): a planned room whose payload names
+  ANOTHER structure is never a merge target any more
+  (`tests/test_a_new_building_never_takes_another_buildings_room.py`), so the
+  collision is left only with planned rooms no structure claims.
 * **The person mint does not use `NAME_SIMILARITY_FLOOR`**
   (`UNBUILT_IDENTITY.md` §1.90a).
 
@@ -4183,7 +4334,13 @@ All three decisions in that note are built; its three deliberately-open edges (a
 warden outliving the wound it guards, cross-frame scenes, a toll with no restore
 path) live in the note's §5, not here. None is urgent for the reason the note
 records: no live story has ever opened a paradox. *(Restated here until
-2026-08-19.)*
+2026-08-19.)* One instance of the cross-frame edge was met on 2026-11-01
+(review lane L12c): an entity record under the anchor's id in the operative
+frame's scene now counts as existence even before the projection catches up
+(`paradox._entity_exists(..., scene=)`), but a stale `world_entities` row
+for a being the scene has dropped still reads as existing -- making the
+scene authoritative for ABSENCE makes existence per-frame, which is the
+note's open edge and the owner's.
 
 <a id="unbuilt-6-14"></a>
 

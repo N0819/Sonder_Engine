@@ -6,116 +6,6 @@ lands it.
 
 ## 1. Known defects
 
-<a id="unbuilt-1-0"></a>
-
-### 1.0 The Japanese pack cannot route the Director's manifest
-
-**Deliberate, dated, and switched off in code rather than forgotten.**
-`DirectorInterpret` gained `changes_asserted` on 2026-09-09 (design note
-`DESIGN_NARROW_MODEL_INTERFACE.md` §3c-bis) and the English prompts declare it
-in all three places a field has to appear. `language_packs/ja` does not.
-
-That is not an untranslated string: `canonical_language_tokens` is a PROTOCOL
-guard, so a Japanese Director now emits a ruling missing a key the engine
-routes on — "not a wrong answer, no answer". Every interpret beat in a Japanese
-story addresses its hands by note alone, which is the state English was in
-before this change.
-
-**Widened 2026-09-12 by the causal contract's own churn, and the drift is now
-in the opposite direction too.** `causal_director.txt` in `language_packs/ja`
-still asks for two fields English has retired — `kind`, and `authority_mode`
-on the row — and does not list the `speech` category English added. Neither
-breaks a beat: the engine ignores `kind`, overwrites `authority_mode` from the
-group it handed out, and `row_is_spoken` recovers a worded row that never
-names the category. So a Japanese story still plays, and plays entirely on the
-recovery path — which is a fallback holding up a contract rather than a
-contract. Re-translate the whole sheet when the mandate lifts; patching the
-three fields would leave a sheet written against two different designs.
-
-Suspended under the owner's mandate of 2026-09-09: finish optimizing, testing
-and debugging the English pipeline first, because a translation written against
-a prompt that is still moving is work done twice. Two switches carry it, both
-loud:
-
-- `tools/project_check.DEFERRED_PACK_PARITY = ("ja",)` — a tuple, not a
-  boolean, so it cannot widen into "skip the check"; `make structure` prints
-  the deferral on every run whether or not anything else is wrong.
-- `tests/test_language_pack_integrity.py::test_no_pack_translates_a_canonical_protocol_span`
-  skips exactly the deferred ids and names this entry in the skip reason.
-
-**To clear:** bring `ja`'s `prompts/director_interpret.txt` and
-`interpret_delegation_note.txt` up to the English canonical tokens (plus
-whatever else the English pass adds before it ends), empty
-`DEFERRED_PACK_PARITY`, and delete this entry in the same commit. Until that
-tuple is empty the English pass is not finished.
-
-**Rule 3 is overdue here, and this note is the debt.** §1.2, §1.3, §1.5, §1.13,
-§1.17, §1.19 and both surviving §1.24 bullets were all found at alpha 6.0–6.9;
-the tree is at alpha 9.6, so each has sat through ten-plus releases untouched.
-Rule 3 gives two answers and neither is "leave it here": promote it, or admit it
-is parked and move it to §8. The next reader to touch one of those entries owes
-one of those answers for each of the eight.
-
-### 2. Roadmap
-
-Features the architecture intends and has not built. Stable ids preserve the
-former value-per-risk ordering within each category; items 2.2–2.3 repay the
-structural debt in
-[`../Design.md`](../Design.md) § Structural debt.
-
-### 3. Information-pipeline leaks still open
-
-Ids are the erased pipeline sweep's own. Severity vocabulary: **leak** (a mind
-receives what it did not earn) / **degradation** (a mind is denied what it did
-earn, or is told something false about its own perception) / **corruption**
-(durable state made wrong) / **latent** (mechanism real, crossing model-gated).
-
-**The single largest item in this register**, on which the pipeline sweep and the
-architecture audit converged independently: **structured signals with stable
-identity, rather than prose matching, as the concealment and identity boundary.**
-Everything in §3.1 is a symptom of its absence, and `grep signal_id` returns
-nothing repo-wide. See §4.2.
-
-### 4. Architecture gaps
-
-From the erased 2026-07-19 audit. Its Gap 1 was conceptual, Gap 2 and Gap 7 are
-now largely closed, and Gap 4 is partial. These are what remain. Its Priority 3
-is done bar one item, and Priority 4 is done — the suite it measured at 527 tests
-now stands at 3,112. Gap 3 / Priority 0 (overlapping physical authorities) is
-gone too, and was settled the OPPOSITE way to the direction it recommended: it
-asked for the scene to be generated from the normalized tables, and
-consolidation made the frame-scoped `world.scene` blob the sole runtime
-authority with `world_entities` a derived projection and `world_placements`
-decommissioned. The matrix it said was "verified absent" is published in
-`docs/guides/DATABASE.md` and pinned by `tests/test_world_authority_consolidation.py`,
-whose `test_world_placements_have_no_runtime_writer` fails if the model forks
-again.
-
-### 5. Deferred backlog
-
-From the erased enterprise_d_v2 40-turn audit backlog. Its P1 (pronoun fidelity)
-and P3 (dialogue dedupe) shipped, as did the variant/alias half of P7. Each §5
-entry in the category files is written to be resumable cold: symptom, root
-cause, fix, test.
-
-### 6. Design-note residuals
-
-Features their design notes argue for that are not built. The note holds the
-argument; only the gap is listed in the register.
-
-### 7. Experiments not yet run
-
-Moved to
-[`docs/experiments/MEASUREMENT_BACKLOG.md`](experiments/MEASUREMENT_BACKLOG.md)
-§1 on 2026-08-19. An unrun experiment is unfinished work, not a broken thing —
-which is the argument for keeping it with the evidence rather than in a defect
-register.
-
-### 8. Parked
-
-Not scheduled and not committed to a phase. See the
-[parked register](UNBUILT_PARKED.md).
-
 <a id="unbuilt-1-17"></a>
 
 ### 1.17 A generic name cannot count
@@ -364,10 +254,12 @@ clause construction behind the compositor card and migrating what is stored.
 Sized as its own change, not a follow-up patch.
 
 **`LanguagePack.fallback` is a dead contract, and the choice is drop or
-keep — not "wire or drop".** The field is parsed
-(`language_runtime/__init__.py:154`), published on the pack (`:118`), and
-validated to point at an installed pack (`:272`) — and no lookup anywhere
-consults it. A pack declaring `"fallback": "en"` gets no fallback behaviour of
+keep — not "wire or drop".** The field is parsed from the manifest
+(`language_runtime`'s manifest reader), published on the pack
+(`LanguagePack.fallback`), and validated to point at an installed pack
+(`installed_language_packs`) — and no lookup anywhere consults it (symbols
+replace the line numbers this cited, which had gone stale by 2026-11-01).
+A pack declaring `"fallback": "en"` gets no fallback behaviour of
 any kind. Corrected 2026-08-18: a fallback RESOLVER is unreachable by
 construction, so implementing one is not an option on the table.
 `installed_language_packs` refuses to load at all if a story pack is missing
@@ -784,8 +676,11 @@ phonology > charters > harvested. `tests/test_name_material_partition.py`,
 
 Confirmed by grepping all 77 character payloads across three instrumented runs:
 zero hits for any representation of addressee-hood. The `decision` block a
-character receives is three keys — `deep_tom_requested`, `dialogue_mode`,
+character received was three keys — `deep_tom_requested`, `dialogue_mode`,
 `speech_budget` — and none of them says a question was put to this mind.
+(`deep_tom_requested` was dropped on 2026-11-01 -- a Director judgement over
+the whole beat that no card explained, `agents_character_background` F15;
+`dialogue_mode` is UNBUILT_CHARACTERS §1.250.)
 
 The engine KNOWS: `flow.addressed_to` resolves, `agents/loops.py` uses it for
 speaker ordering and for the silence guard. It reaches the loop and stops there.
@@ -961,7 +856,12 @@ answer and would become the fallback rather than the mechanism.
 **A live defect either way:** `promotion_thresholds` is absent from
 `SETTING_PROVENANCE` and therefore from `PRESERVED_SETTING_KEYS`, while
 `background_config` and `dialogue_config` both have entries -- so a threshold
-set by hand is rolled back by any restore or reroll.
+set by hand is rolled back by any restore or reroll. (Its sibling
+`reaction_config` had the same defect and is fixed since 2026-11-01, with a
+class guard that requires a `SET_BY_HAND` entry for every `*_config` world
+key the engine reads -- `tests/test_a_rewind_keeps_every_config_dial.py`.
+`promotion_thresholds` is not a `*_config` name, so the guard does not reach
+it, and review lane L3 left it for the owner's word.)
 
 **2026-10-09, the owner on the Brackwater run's D7: "Yes but automatic should remain a setting."** The sweep stays, behind the same switch and dial, and since 2026-10-10 reaches a person the Writers' Room planned on the player's engagement alone (`commit_background.presence_person_plan`, `PLANNED_PROMOTION_ADDRESSED_THRESHOLD`), so retiring the sweep and its setting is off the table. Four things stay open:
 
@@ -969,6 +869,56 @@ set by hand is rolled back by any restore or reroll.
 - **The "planned" bar rides `promotion_thresholds`**, so a value set by hand is rolled back by a restore, as the paragraph above says of the other three.
 - **The panel does not say a person was planned.** The `/promotable` row carries `planned` and `addressed_turns`; `static/js/settings.js`'s presences row still reads lines and mentions only, so a planned person offered on engagement shows "1 line(s), 0 mention(s)" beside the button.
 - **A planned person's own history does not reach their sheet.** The draft is handed the plan's work, home, look and who knew them (`importers.PLAN_FIELDS_FOR_SHEET`), never its truths or purpose, because a plan truth carries no mark of whose head it is in. Story 166's Abel Gale was planned behind on his boat's loan to Selwick, a fact of his own, and it reached neither of two replayed drafts. A per-truth `known_by` on plan truths, as package truths carry, would let the ones the person holds through ([§1.198](UNBUILT_PLANNING.md#unbuilt-1-198)).
+
+<a id="unbuilt-1-244"></a>
+
+### 1.244 Name novelty floors count code points in every script (2026-11-01 review)
+
+`story_scene_schema` F9. A family name inside an unspaced registered name
+reserved nothing; review lane L11 made a name's parts its spaced words and,
+for a word in an unspaced script, its script runs
+(`language_runtime.fold_words`: 佐藤ヒナミ -> 佐藤, ヒナミ;
+`charter_identity._tokens`,
+`tests/test_a_family_name_inside_an_unspaced_name_is_reserved.py`). What it
+left is the owner's: an all-kanji name (佐藤花子) is still one part, since
+there is no dictionary segmenter; and `charter_identity.NAME_RUN_FLOOR` and
+`NAME_PREFIX_FLOOR` (4, the owner's numbers) are counted in code points in
+every script, so ヒナミコ -- three characters shared -- still passes as a new
+name beside ヒナミ. The engine's own unspaced precedent is `_display_floor`,
+4 -> 2. **The owner's ruling:** a per-script floor, and its numbers.
+
+<a id="unbuilt-1-245"></a>
+
+### 1.245 A body whose stored name is its own key counts as named forever (2026-11-01 review)
+
+`world_charter_core` F14. A charter body whose stored name equals its key
+is treated as named by the allocator, so a naming law added later never
+names it; and a law with family material but no given material mints
+nothing, silently. Review lane L11 made both loud
+(`charter_runtime.registry_warnings` names up to three such bodies, with a
+count, and names a law that "cannot mint and names nobody";
+`tests/test_a_naming_law_that_names_nobody_is_reported.py`) and changed no
+name. **The owner's decision:** whether the allocator treats `name == key`
+as unnamed -- which would RENAME every key-named body on the next
+normalization -- and whether `charter_identity.generated_name_parts` should
+mint family-alone names when the format addresses by family alone.
+
+<a id="unbuilt-1-246"></a>
+
+### 1.246 A kanji name of two or more characters keeps open edges (2026-11-01 review)
+
+Review lane L10 moved `name_boundary_pattern` into `language_runtime` and
+gave it per-script edges, closing every measured over-match (ヒナミ inside
+ヒナミコ, レイ inside プレイヤー, a one-character 角 inside 角ばった). It kept
+OPEN edges for a kanji name of two or more characters, deliberately:
+"within one script class there is no boundary" would make 田中部長, 佐藤隊長
+(title compounds) and 山田花子 (a given name inside an unspaced full name)
+unmatchable, and the identity scrub would then LEAK the name -- the
+engine-failure direction. No audit measured a multi-kanji over-match;
+Hangul and Thai keep open edges too, for want of a closed class that says
+where their words end. **The owner's decision:** recall against precision
+for kanji names -- strict edges, which risk a leak, or open ones, which
+risk a name found inside a longer word.
 
 ## 5. Deferred backlog
 

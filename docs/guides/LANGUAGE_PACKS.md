@@ -219,9 +219,18 @@ pack actually had:**
    your alternatives need it too, or the guard degrades to "appears anywhere".
 4. **Never wrap a cue in `\b`.** Word boundaries describe scripts that space
    their words. Use `character_schema.cue_boundary_pattern` for alternations
-   and `name_boundary_pattern` for names — both exclude only spaced-script
-   letters, so Japanese matches after a particle while `walk` still refuses to
-   match inside `sidewalk`. The decision is per-token, not per-language, which
+   — it excludes only spaced-script letters, so Japanese matches after a
+   particle while `walk` still refuses to match inside `sidewalk` — and
+   `language_runtime.name_boundary_pattern` for names (2026-11-01; the
+   `character_schema` spelling is now a delegate), whose edges are per
+   script: a kana name never matches inside a longer kana word (ヒナミ is not
+   in ヒナミコ, レイ is not in プレイヤー), a particle, an honorific or another
+   script still ends one, and a kanji name of two or more characters keeps
+   open edges so a title compound (田中部長) and a given name inside a full
+   name (山田花子) still match (UNBUILT_IDENTITY §1.246). For a SET of names
+   use `find_names` (longest at a position, never one inside another), for a
+   comparison key `fold_key` / `fold_words`, for sentences
+   `split_sentences`. The decision is per-token, not per-language, which
    is what keeps code-switching working in both directions.
 
 Translate behavior, not spelling. A useful checklist is:
@@ -309,7 +318,10 @@ presence:
 - target-language mental, action, speech, sleep/wake, and authority cues fire;
 - the compositor produces target-language view and episode prose;
 - story and interface languages persist independently;
-- missing cards, prompt ids, UI ids, or adapters fail closed;
+- missing cards, prompt ids, UI ids, or adapters fail closed when the pack
+  is selected (an existing story whose stored pack is missing still falls
+  back to English, and since 2026-11-01 logs it once per process per
+  language id: `story_language`, `ui_language`);
 - English output remains byte-compatible.
 
 Run:

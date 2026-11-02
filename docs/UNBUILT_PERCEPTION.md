@@ -34,6 +34,21 @@ be edited; and emit a reconciliation signal when a room is created without one,
 the same shape as `restraint_scan` and `unconsciousness_scan` already use. Then
 the word list serves ~14% of rooms instead of 86% and its gaps stop mattering.
 
+**Narrowed 2026-11-01** (review lane L12c, `world_offscreen_time` F3). The
+fallback matched SUBSTRINGS -- "hold" in "holding", "wood" in "wooden" -- so
+a keyword could darken an indoor room. A keyword is now a whole word of the
+room's own text (`weather._says`), and only the room's NAME may put it under
+the open sky; a description may still take a room indoors. Measured
+read-only over 671 unauthored live rooms: 53 records change, all toward lit,
+none darker -- so "the failure direction is never the reverse" now holds by
+construction. **Two owner questions it left, both failing lit, never dark:**
+"Street -- lined with shops" reads `enclosed`, because the plural "shops" is
+an enclosed word (letting a name's open word outrank a description's
+enclosed word fixes it, and was measured turning two bunker rooms named
+"Shelter" `sheltered`); and compound outdoor names (a boatyard, a shoreline)
+read `enclosed`. Storing the derived exposure at commit is still the fix
+this entry asks for.
+
 **Ask the same question of any other table first: is there an authoritative
 field this is standing in for?** Where there is not (`_SPEECH_VERBS` parsing
 model prose, `_BARRIER_ALIASES`), the table really is the mechanism and coverage
@@ -832,7 +847,11 @@ of them is load-bearing for what landed.
 ### 1.129 The perception-admission lane of the campaign-3 runs: what landed, and the seven answers that live in other files
 
 **Worked 2026-09-05** over `PR1`, `PM5`, `PS13`, `PX5`, `PX6`, `PR5`, `PR8`.
-Three landed. The other seven answers are written out here rather than
+Three landed, and a fourth since (PX5's third floor, in the interaction
+micro-round: `loops.deterministic_micro_perception` calls
+`_act_surface_admission`, now in `agents/common_identity.py`, 4665a673; the
+paragraph that asked for it was deleted 2026-11-01). The other answers are
+written out here rather than
 applied, because each belongs in a file this work did not own -- stated with
 its live case and its exact condition, so the next hand applies it without
 re-deriving the evidence.
@@ -864,18 +883,6 @@ re-deriving the evidence.
   not follow station: the three factors who received nothing were turned
   north while the doors were south. Pinned in
   `tests/test_perception_act_reaches_the_room.py`.
-
-**PX5's THIRD floor, in `agents/loops.py`.** The interaction micro-loop
-delivers `observable_action_text(event)` straight into an observer's additions
-(`deterministic_micro_perception`, the `type == "action"` branch) with no
-third-body admission at all, so the same leak is live on the micro-round path
-that the two perception passes are now closed on. It needs the same call. The
-helper is `agents.perception._act_surface_admission` today and `loops.py`
-importing `perception` would be a new role-module cross-import (already
-discouraged, already real for `loops -> character`); moving it to
-`agents/common.py` -- which both already import -- is the clean placement, and
-it needs the observer's seen-set, which the micro-loop computes as
-`_delivery_ok` per body rather than as a set.
 
 **PM5's remaining half, in `agents/composer.py`.** `entity_arc` promises "no
 new visual detail … though sound still carries" and neither half holds.
@@ -1274,8 +1281,13 @@ beyond the next room -- is the only case that changes.
 
 **WHAT IS NOT DONE, and it is where `max_hops` lives: THE HEARING-ACUITY
 ENVELOPE.** `sense_range_class` grades a card's `range` as reduced | ordinary
-| extended and the consumer widens `max_hops` for `extended` -- so sharp
-hearing is currently spelled as EXTRA HOPS. Replacing hops with decibels
+| extended -- and nothing consumes it (corrected 2026-11-01,
+`world_spatial_sound` F13: the function has five test callers and no
+production one, and no other reader touches a sense's `range`; the sentence
+here, and its own docstring, said a consumer widens `max_hops` for
+`extended`). So a card's `range` does nothing today, though every generated
+card writes `"range": "ordinary"` and the senses note calls it "how far".
+Wiring it as EXTRA HOPS was the old intent; replacing hops with decibels
 means acuity has to be spelled as a dB bonus instead, which is a design
 decision about what a sense card means, not a defect. `sound_bearing`'s
 non-adjacent arm is bound the same way (`sound_path(max_hops=2)`) and would
@@ -2058,6 +2070,154 @@ noun, and none changes. These remain:
   label ("the gangly fifteen-year-old with scorched cuffs", kept from before);
   a number or a decade never does. The owner's call whether the first goes
   too.
+
+<a id="unbuilt-1-235"></a>
+
+### 1.235 The backdrop and the sound bed show a room the player perceives nothing of (2026-11-01 review)
+
+`dressing_language_runtime` F2, the mechanism confirmed by tracing every
+reader from route to projection. `dressing.backdrops.build_backdrop_request`
+draws `scene.rooms[<the player's room>]` (`_room_of_player`) and
+`dressing.ambience.build_ambience_request` plays that room's bed, and
+neither -- nor `static/js/backdrops.js` / `ambience.js` -- reads the player's
+awareness or senses. A player character knocked out and carried into a cell
+is handed the non-awake floor by perception and nothing else, while the same
+turn's backdrop shows the cell's walls, openings and light and the bed plays
+its sound: the human player sees and hears where the character is through a
+channel the perception floor closed. The same holds for a blindfolded or
+sleeping player (`_viewer_light` accounts for the player's lamp, not their
+eyes). Both modules call themselves a perception channel (ambience rule 2:
+a crowd murmur "would report that character's presence through a channel
+perception never authorized"). Skipped by review lane L10 as **the owner's
+ruling**: whether the dressing must obey the perception floor -- and if so
+what an unconscious, asleep or blind player is shown instead.
+
+<a id="unbuilt-1-236"></a>
+
+### 1.236 The backdrop's key moves with what its prompt never says (2026-11-01 review)
+
+`dressing_language_runtime` F16 and F17, both confirmed by snippet, both
+against the module's own rule that "a key that hashes text the prompt never
+sees pays for regenerations the picture cannot show". `ground` is in
+`_VISUAL_STATE_KEYS` and its whole record is hashed, but the projection and
+the prompt never carry the ground: a water level going 7 -> 8 under the same
+"standing puddles" state moves the signature with a byte-identical prompt,
+once a weather window while a room wets or drains. And `visual_signature`
+hashes `scene.location`, which the projection leaves out on purpose, so a
+room left and re-entered under a different venue label buys a second
+picture of itself. Each fix (key only `ground.state` and carry it in the
+prompt; drop `location` from the key) re-keys every affected backdrop -- one
+paid redraw per room on its next view -- so review lane L10 left both as
+**the owner's cost call**.
+
+<a id="unbuilt-1-237"></a>
+
+### 1.237 A Japanese room's ambience search has no words of its own (2026-11-01 review)
+
+The residual of `dressing_language_runtime` F10 and E3. Review lane L10 made
+the ambience KEY hear every script (`ambience.acoustic_fingerprint` reads
+kanji, katakana, Hangul and Thai runs beside the old English tokens,
+`tests/test_an_ambience_key_hears_every_script.py`), but left the search
+English on purpose: the sound libraries are indexed in English, and with no
+`ambience_prompt` model a Japanese room's draft carries no room terms, so its
+`fit` is always 0 and `ambience.search_freesound` never stops early -- up to
+about nine Freesound requests a layer before the `standard` ladder runs
+again (5-10x the requests of an English bed, once per cache miss). **The
+owner's decision:** where a Japanese room's English search terms come from
+-- a model call, or structural fields the room already carries.
+
+<a id="unbuilt-1-238"></a>
+
+### 1.238 Whether a `private` line is concealed (2026-11-01 review)
+
+`agents_director_floors` F1. A row's `visibility` was copied raw and the
+firewall reader matched one exact word, so `Concealed`, `hidden` and
+`secret` read overt. Review lane L7a canonicalised it once at ingest
+(`director_evidence.CONCEALED_SPELLINGS` -- `concealed|hidden|secret`, the
+dialogue log's own X14 fold -- and anything else overt;
+`tests/test_a_concealed_row_is_concealed_however_it_was_spelled.py`).
+Measured over 3,000 recent interpret/resolve variants of the owner's
+database: overt 4,877, public 97, normal 87, visible 15, private 8,
+unobscured 7, open 7, concealed 4, low 4, plain_sight 4, plain 3,
+audible_to_Mirelle 3. Failing closed on an unknown value would have hidden
+every `public` and `normal` row from every observer, so it was not done.
+**The owner's vocabulary ruling:** `private` (9 rows) and
+`audible_to_<name>` (3) read overt, as the firewall always read them --
+whether `private` joins the concealed set, and whether `audible_to_<name>`
+means a line only that body hears. (The X14 fold in `llm/schemas.py` still
+spells the set inline; reading the one constant is a request, not landed.)
+
+<a id="unbuilt-1-239"></a>
+
+### 1.239 A guest's page shows a story title made from a character's name (2026-11-01 review)
+
+Found while closing the guest page's stale-step leak (`web_app` F4,
+`frontend_core` F1): a stale note printed "Character · Mirelle Sulmirath"
+-- a true name the guest had not earned -- and both halves now print the
+phase alone (`web.app.guest_state`, `static/guest.html`). What both review
+lanes (L1 and L15a) left: the guest page's header prints the story title,
+`chat_name`, and a greeting quick start composes that title as
+"<Character> — <Persona>". **The owner's decision:** whether the story title
+is persona-safe for a guest, or is withheld or shown generically to a guest
+who has not met the character it names.
+
+<a id="unbuilt-1-281"></a>
+
+### 1.281 Three free-prose word tests the cue fix left, one of them a firewall floor (2026-11-01 review)
+
+Review lane L16 made the beat-ending and reaction-phase cue tables match
+whole words (`common_acts._names_a_cue`; measured on 1,273 live action
+elements: conflict-verb exits 76 -> 51, every one removed in-word -- "center"
+15 times -- and attempt cues 56 -> 25, likewise). It left three of the same
+class, each for a measurement and a call: (a) `common_acts._reaches_inward`
+reads `state in low` over the pack's `_INTERIOR_STATES` ("lust" in
+"cluster", "rage" in "garage") -- and it is a firewall-direction floor, an
+interior act never delivered, so a whole-word rule would drop
+"fearful"/"guilty"/"hopeful" and DELIVER private cognition; (b)
+`_is_autonomous_response` reads `phrase in low` over `_AUTONOMY_PHRASES`
+("give in" inside "give instructions"); (c) the word-level remainder that
+still ends beats ("breaks" 10, "force" 10, "break" 9, "breaking" 7,
+"grabbing" 7) -- whether "breaks eye contact" or "casts a glance" belong in
+the table. Japanese compound verbs (気に入る, 見入る) still match 入る, since
+no script boundary tells 部屋に入る from them -- pack data. **The owner's
+call, after a measurement each:** (a)'s rule, given which way it may fail,
+and (c)'s table.
+
+<a id="unbuilt-1-282"></a>
+
+### 1.282 A sightless body keeps its room's authored description (2026-11-01 review)
+
+`agents_perception` F1, fixed by review lane L17: the sense card gated bodies
+and lines only, so an authored-blind card was shown the room ("You can see
+the long oak counter within arm's reach ..."), a deaf card heard its din and
+an anosmic one smelt its toast. Now one floor per stage, asked after every
+builder has spoken (`perception_senses._card_admitted`), keeps any percept on
+a channel the card says is ABSENT from the mind
+(`tests/test_perception_card_senses.py`). What it kept, flagged: a sightless
+body keeps WHERE it stands -- the room's name and its authored description
+("A warm kitchen with a scrubbed table."), on channel `mixed`
+(`_where_without_eyes`) -- on the precedent that the dark keeps the
+description for a sighted body, and because free prose cannot be split by
+sense. **The owner's call:** whether a room's authored notes and description
+are sight, in which case a sightless body is told only the room's name.
+Residuals of the same fix: a soundscape a sightless ear hears no longer
+names its source, and a same-room act a blind card cannot see is refused
+rather than heard as movement.
+
+<a id="unbuilt-1-283"></a>
+
+### 1.283 A world `event` in the outcome stream is never rendered as an act (2026-11-01 review)
+
+`agents_perception` F8. The outcome stream dropped every element kind it did
+not name, without a word; review lane L17 made the refusal explicit
+(`perception_stream._STREAM_REFUSED_KINDS = ("ponder", "event")`, each
+dropped one recorded as a step decision, an unknown kind warned;
+`tests/test_the_outcome_stream_says_what_it_drops.py`). A `ponder` is
+private cognition and never enters perception; an `event` -- a player's
+world assertion, which `common_sequence` mints live, or the causal
+projection of a world row on an archived rerun -- reaches views today only
+through the resolve's state diff. **The owner's question (the audit's):**
+whether a world `event` should be an act the composer renders.
 
 ## 2. Roadmap
 

@@ -41,12 +41,16 @@ make structure  # run tools/project_check.py (duplicate-symbol, patch-debris, em
                 #   resolve, uncleared turn-scoped contextvars, new package import
                 #   cycles, stale map)
 make compile    # compileall over ENGINE_SOURCE_ROOTS (tools/project_check.py --source-roots)
-make check-fast # compile + structure/map freshness + full suite
-make check      # compile + map + structure + full suite — run this before considering a change done
+make stack      # which interpreter and pinned versions a verdict is about; refuses an unpinned one (ALLOW_UNPINNED=1)
+make check-fast # stack + compile + structure/map freshness + full suite
+make check      # stack + compile + map + structure + full suite — run this before considering a change done
 ```
 
-**`make check` runs whatever `python` resolves to, which is very unlikely to be
-the stack that ships.** Measured 2026-08-18: the system interpreter carried
+**Every target runs the checkout's `.venv` when there is one, and `python` only
+where there is none** (the Makefile's `PYTHON`, since 2026-11-01; `make stack`
+runs first in `check` and `check-fast` and says which stack the verdict is
+about). It used to run whatever `python` resolved to, which is very unlikely to
+be the stack that ships. Measured 2026-08-18: the system interpreter carried
 Pydantic 1.10.14 / NumPy 1.26.4 while `.venv` — what both launchers build, what
 every player runs, and what `constraints.txt` pins — carried Pydantic 2.11.7 /
 NumPy 2.2.6. Two defects were live in that gap at once and the suite was green
@@ -106,7 +110,7 @@ Key ownership boundaries (see `AGENTS.md` for the full table):
 
 Physical-world authority (consolidated in movement/space Phase 3a): the frame-scoped `world.scene` JSON blob is the single runtime source of truth for live rooms/positions/entity state; `room_registry` is the single cross-frame ledger of room identity/retirement; the normalized `world_entities` table is a derived projection of the scene commit. `world_placements` is decommissioned; `fiction_worlds` and `fiction_locations` are deprecated import-compatibility tables, and `transit_edges` is not — it is in no archive, no checkpoint and no restore path, so an old export carrying rows loses them silently. Every scene writer must keep the registry projection in sync — check both the commit path and restore path before adding one (see `docs/guides/DATABASE.md`).
 
-Supporting service seams are explicit: `web/auth_routes.py` owns typed host-auth routes and cookie transport; `persist/chat_archive.py` owns portable chat import/export; `persist/pipeline_trace.py` owns privacy-conscious persisted-history export/replay; `world/spatial_orientation.py` owns bearing math. It is one of the `spatial_*` siblings behind the `world/spatial.py` FACADE, not a seam you import directly — `tools/project_check.py` enforces that for `world.spatial`, `agents.director` and `persist.commit` alike: a caller imports the facade, and only a test that PATCHES or introspects a sibling may name it.
+Supporting service seams are explicit: `web/auth_routes.py` owns typed host-auth routes and cookie transport; `persist/chat_archive.py` owns portable chat import/export; `persist/pipeline_trace.py` owns privacy-conscious persisted-history export/replay; `world/spatial_orientation.py` owns bearing math. It is one of the `spatial_*` siblings behind the `world/spatial.py` FACADE, not a seam you import directly — `tools/project_check.py` enforces that for all seven facade families (`world.spatial`, `agents.director`, `persist.commit`, `mind.memory`, `agents.common`, `agents.composer`, `agents.perception`), in absolute and relative spellings alike since 2026-11-01: a caller imports the facade, and only a test that PATCHES or introspects a sibling may name it.
 
 Frontend (`static/js/`) uses browser globals, not ES modules. `theme-init.js` loads in the document head; the remaining order is `i18n-core.js → utils.js → components.js → editors.js → lorebooks.js → backdrops.js → ambience.js → weather-fx.js → chime.js → chat.js → writers_room.js → world_browser.js → settings.js → themes.js → extensions.js → app.js` (`static/index.html`). `i18n-core.js` is the localization rules, loaded by the SPA and by `login.html`/`guest.html` alike — there is one translator, not one per page. Never rename a shared JS function without grepping every file.
 

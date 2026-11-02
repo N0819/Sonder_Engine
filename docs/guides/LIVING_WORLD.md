@@ -77,13 +77,26 @@ spelling under the living-world key — it is dropped on every write
 
 ## 1. Every gate
 
+**Corrected 2026-11-01 (`world_offscreen_time` F11): three of these six gate
+nothing today.** Since 7140b9cc (2026-09-20) `scene.dialogue_config` forces
+`offscreen_life` to its default and `max_offscreen_actors` to 0 on every read
+(a stored `max_offscreen_actors` is read as `max_bubbles`, the dial the
+Dialogue Config UI sets now), and `living_world.LIVING_WORLD_APPROACHES = ()`,
+so no `living_world.<approach>` survives a write (`normalize_living_world`
+always answers `{}`) and `living_world_allows` -- asked only inside
+`world/offscreen.py` -- is False for every approach and depth. So the paid
+rungs below cannot run, and the floors this guide describes as gated -- the
+consequence fuses, place obligations, routine residue -- run in every story.
+Retire or revive is UNBUILT_LIVING_WORLD §1.256; the tables below keep the
+ladder as it was built.
+
 Six axes. All of them must permit a behaviour before it occurs.
 
 | Gate | Values | Default | Stored | Set by | Unknown value |
 |---|---|---|---|---|---|
-| `offscreen_life` | `inert`, `deterministic`, `reactive`, `stochastic`, `character_agent` | `stochastic` | `dialogue_config`, chat-global | Dialogue Config UI | falls to the **default**, not the floor (`story/scene.py`, `normalize_offscreen_life`) |
-| `living_world.<approach>` | `off`, `floor`, `ceiling` × four approaches | `off` | world KV `living_world`, per chat | `PUT /api/chats/{id}/living_world` | unknown **depth** → default `off`; unknown **approach key** → silently dropped |
-| `max_offscreen_actors` | `0`–`12` | `3` | `dialogue_config` | Dialogue Config UI | clamped (`story/scene.py`, `dialogue_config`) |
+| `offscreen_life` | `inert`, `deterministic`, `reactive`, `stochastic`, `character_agent` | `stochastic` | `dialogue_config`, chat-global | nobody since 2026-09-20: `dialogue_config` forces the default on every read | falls to the **default**, not the floor (`story/scene.py`, `normalize_offscreen_life`) |
+| `living_world.<approach>` | `off`, `floor`, `ceiling` × four approaches | `off` | world KV `living_world`, per chat | `PUT /api/chats/{id}/living_world` (stores nothing since 2026-09-20: `LIVING_WORLD_APPROACHES = ()`) | unknown **depth** → default `off`; every **approach key** is dropped, since none is known |
+| `max_offscreen_actors` | `0`–`12` | `0`, forced | `dialogue_config` | nobody: a stored value is read as `max_bubbles` (default 3) | clamped (`story/scene.py`, `dialogue_config`) |
 | `background_config.scene_life` | `off`, `ambient`, `full` | `off` | world KV `background_config` | `PUT .../background_config` | treated as `off`, silently — there is no `normalize_scene_life` |
 | `background_config.max_reactors` | `1`–`3` | `1` | as above | as above | clamped in the stage, not in the config reader |
 | `simulation.offscreen_agent` | bool | `false` | the character card | card editor | see the trap in §7 |

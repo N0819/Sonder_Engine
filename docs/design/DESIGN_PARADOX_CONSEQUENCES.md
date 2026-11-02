@@ -60,9 +60,15 @@ and the argument is a classification, not a taste:
 Sort this module's consequences by two axes — *reversible on resolution?* and
 *visible to a perceiver?*
 
-- Hazard's wrongness note and room consumption: visible (perception reads
-  `room.notes` verbatim) and reversible (`_restore_consumed` strips exactly
-  what was added; rooms were only ever flagged, never deleted).
+- Hazard's wrongness note and room consumption: visible (the wound heads the
+  prose field the view reads -- `notes`, else `desc`, else `description`;
+  until 2026-11-01 it was appended to `notes` and replaced a desc-only room's
+  whole description, `world_misc_causal` F4) and reversible
+  (`_restore_consumed` strips exactly what was added; rooms were only ever
+  flagged, never deleted -- and the flag, `paradox_consumed`, has no reader:
+  no movement floor makes a consumed room impassable, a product behaviour the
+  owner's 2026-09-21 ruling moved to the Writers' Room, UNBUILT_PLANNING
+  §1.263).
 - A warden or bureau enforcer: visible (an ordinary scene entity every
   spatial and reaction system treats as real) and removable by an ordinary
   `remove_entities`.

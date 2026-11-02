@@ -36,7 +36,13 @@ Two properties are non-negotiable:
    hand-authored intro). Extract structured scaffolding *underneath* it.
 2. **Persona-neutral at ingest.** The persona isn't chosen yet, so the player slot is a
    canonical placeholder `{{PLAYER}}` (normalize `{{user}}`/`<USER>`/… at import), resolved
-   deterministically at launch.
+   deterministically at launch. *(As built, 2026-11-01: the normalization holds on the
+   heuristic and the AI-reinterpret import paths alike; the slot is resolved per mind --
+   the persona's name to a mind that recognises it, a description of the player's body
+   to one that does not (`scene.player_handle_for_mind`, `resolve_player_token`) -- in the
+   greeting and in private histories, and is still NOT resolved in a card's
+   `public_history` or in lore a mind recalls (a request to `agents/character.py` and the
+   lore-recall path).)*
 
 ## The clean cut (better than a new pipeline stage)
 

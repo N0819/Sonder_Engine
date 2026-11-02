@@ -140,6 +140,22 @@ the `agents/__init__.py` facade re-export and tests:
 | `common._fallback_perception_views` | `agents/common.py` |
 | `common._perceptible_entities` | `agents/common.py` |
 | `perception._deliver_foreground_body_details` | `agents/perception.py` |
+| `common._action_already_rendered` | `agents/common_views.py` (added 2026-11-01, `agents_common` docs check: reachable only through `_inject_visible_actor` / `_inject_action`) |
+
+**Five more production-dead names that tests or a tool still call** (added
+2026-11-01 from `agents_common` F21; review lane L16 left them because
+deleting any changes a test or tool): `common._stable_event_key` (tests),
+`_scrub_undeclared_player_speech` (`tools/perception_quality.py` by
+`getattr`, and tests), `common_names._SENTENCE_END` (one test), and
+`_DANGLING_SPEECH_VERB_RE` / `_SPEECH_CUE` (test-only English views, loaded
+at import). Two more are dead outright and await a deletion request the
+review logged: `common_rooms._ambient_blocked_slugs` and
+`_keys_reference_blocked` (`agents_common` F18), and the
+`_check_action_direction` stub (F19). On the composer side,
+`composer.micro_round_percept` / `micro_round_percepts` (now in
+`agents/composer_things.py`) have no production caller and three test files
+that call them (`agents_composer` F11; review lane L17 left them so the
+deletion and its pins land in one commit).
 
 So each has passing tests and no effect, which is the worst combination
 available: it reads as a live floor. Six test files pin them —
@@ -239,16 +255,14 @@ more that the checklist does not name, because it is specific to this engine:
 accident**, so every read site has to be re-examined for whether it wants
 `wget_for_frame` with an explicit frame, not merely left alone.
 
-- **PERSISTENCE-F17 — three world keys are not frame-scoped while seventeen
-  siblings are.** `world_pressures` (`persist/commit_ledgers.py:150,227,299`),
-  `background_claims` (`world/background_claims.py`, six sites) and
-  `engine_notices` (re-verified 2026-08-19: `agents/director.py` reads it at two
-  sites, and the WRITERS are `persist/commit_mechanics.py`,
-  `persist/commit_destruction.py` and `persist/commit_scene_state.py` — the
-  last was missing from this row)
-  are plain `wget`/`wset`. So a pressure raised in one era, a claim ratified in
-  one era and a notice raised in one era are all visible from every other era,
-  and a rewind does not retract them. Adding a key to
+- **PERSISTENCE-F17 — two world keys are not frame-scoped while their
+  siblings are.** `world_pressures` (`persist/commit_ledgers.py`) and
+  `background_claims` (`world/background_claims.py`, six sites) are plain
+  `wget`/`wset`. So a pressure raised in one era and a claim ratified in one
+  era are visible from every other era, and a rewind does not retract them.
+  (This row named a third, `engine_notices`; `core.db.FRAME_SCOPED_WORLD_KEYS`
+  has scoped it since the playerless Aldermill run of 2026-09-23 -- corrected
+  2026-11-01 from the `persist_scene_entities` docs check.) Adding a key to
   `FRAME_SCOPED_WORLD_KEYS` is not itself a migration — the scoping is a key
   rewrite at the storage layer — but the EXISTING rows keep the unscoped key
   and would go silent on the next read, so the data migration (re-key each row
@@ -315,10 +329,12 @@ checker cover them for free. Audit TOOLS-S3.
 
 Two halves of one repair, in two files, both confirmed 2026-08-18:
 
-- `agents/runtime.establishment_plan` is a fixed five-step list
-  (`mapping_stage`, `director_establish`, `perception_establish`, `narrator`,
-  `commit`) and never appends `narrator_extra`, which `build_plan` does append
-  on every normal turn when the chat has extra players in this frame.
+- `agents/runtime.establishment_plan` is a five-step list
+  (`compile_world_context` -- spelled `mapping_stage` here until the
+  2026-11-01 docs check -- `director_establish`, `perception_establish`,
+  `narrator`, `commit`), widened only by extension splices, and never appends
+  `narrator_extra`, which `build_plan` does append on every normal turn when
+  the chat has extra players in this frame.
 - `agents/perception.perception_establish` builds perceivers for `"player"` and
   for each cast member, and no `extra:<pid>` perceiver at all — `perception_act`
   and `perception_outcome` both do (`agents/perception.py:2051`).
@@ -569,6 +585,321 @@ not reach:
   restart.
 - **Extensions are out of scope**: they keep their own reload path.
 
+
+<a id="unbuilt-1-264"></a>
+
+### 1.264 A database older than v7 cannot be opened (2026-11-01 review)
+
+`persistence_paths_schema` F18, confirmed on a scratch database stamped 6
+(`OperationalError: no such column: resource_uid`). `core/db.py`'s docstring
+promises any older version opens, but `init()` runs `executescript(SCHEMA)`
+before the migration chain, and SCHEMA creates indexes on columns that
+v2, v4, v7 and v8 add (`uq_characters_resource_uid`,
+`idx_memories_chronology`, `idx_lorebooks_parent`, ...). SCHEMA's own
+comment explains the hazard for `idx_lorebooks_anchor` alone, which alone
+moved to `LATE_SCHEMA`; and `tests/test_schema_integrity_fresh_vs_migrated.py`
+builds the CURRENT schema and stamps 1, so it cannot see it. No such
+database is known to exist (the owner's is v45). Skipped by review lane L3:
+**the owner's decision** is which versions the engine promises to open --
+move every migration-dependent index to `LATE_SCHEMA`, or refuse below a
+named oldest version with a named error.
+
+<a id="unbuilt-1-265"></a>
+
+### 1.265 Captured text a prune orphans waits for the next story deletion (2026-11-01 review)
+
+`persistence_paths_schema` F15. Capture retention never ran -- `prune` and
+`vacuum_blobs` had no callers. Review lane L3 wired both:
+`llm_capture.record_exchange` prunes a chat to `RETAIN_TURNS` (200) on a
+turn's first captured call (capture is off by default), and
+`chat_delete.delete_chat_data` runs `vacuum_blobs()` after its transaction
+(`tests/test_a_capture_is_kept_to_its_window_and_dies_with_its_story.py`).
+What it left: blobs orphaned by a PRUNE, not a deletion, stay in
+`llm_blobs` until some story is deleted, and `vacuum_blobs` reads every
+capture row, so it is O(capture store) wherever it runs. **The owner's
+choice:** a vacuum per turn (a new cost and rate), a vacuum on some other
+cadence, or deletion-only as now.
+
+<a id="unbuilt-1-266"></a>
+
+### 1.266 A book a turn minted after a checkpoint is carried into it by a later refresh (2026-11-01 review)
+
+The residual of `persistence_paths_schema` F6. Every checkpoint refresh now
+carries the host's book-set change and keeps the beat's own entries as
+taken (`checkpoints._carry_the_book_set`,
+`tests/test_a_book_refresh_carries_the_hosts_change_not_the_beats.py`). But a
+chat-owned book MINTED by a turn after the checkpoint -- a location or
+vehicle book, a canon book minted on its first write -- reads "added since"
+and is carried into the checkpoint by any later refresh. `lorebooks` has no
+`created_turn_id`, so a host's fork (origin set) and a turn's mint (origin
+NULL) can be told apart, but a host's `POST /api/lorebooks` book (origin
+NULL) cannot. **Needs a provenance field or the owner's ruling**, and it is
+the same question as §1.267.
+
+<a id="unbuilt-1-267"></a>
+
+### 1.267 Which lorebook edits a reroll carries is decided route by route (2026-11-01 review)
+
+`web_app` F10, confirmed by trace. `web.app._refresh_rewindable_checkpoints`
+exists because "retrieval is snapshotted with the turn, so the checkpoint
+has to move with the books or a rewind restores the old reach", and it is
+called from attach, enable, detach, bind and unbind (since 2026-11-01 also
+from an unbind written as `{"lorebook_id": null}`, `web_app` F9). The
+routes that change the reach of the story's own books in other ways never
+refresh it: `lorebook_link_create` / `_update` / `_delete` (where
+`follow_for_retrieval` and `weight` are reach) and `lorebook_move` /
+`lorebook_reorder` (where parent and inheritance are). The restore puts
+parents, links and entries back, so a host who links two of the story's
+books and rerolls loses the link -- the exact symptom the attach refresh was
+written for -- while the reroll confirm (`static/js/chat.js`) tells the host
+"lorebook edits" are reverted, untrue for attachments. **The owner's
+ruling**, stated once: which lorebook edits are configuration (carried
+across a rewind) and which are story facts (reverted).
+
+<a id="unbuilt-1-268"></a>
+
+### 1.268 Stopping the server waits for every turn in flight (2026-11-01 review)
+
+`web_app` F18. `web.app._shutdown_engine`'s docstring said "Daemon threads
+mean nothing HANGS", but `_drain_on_own_thread` starts its thread without
+`daemon=`, daemon status is inherited, and AnyIO's worker thread is not a
+daemon; the shutdown neither aborts nor tracks these threads. So Ctrl-C, or
+a `make run` reload, waits out every in-flight turn -- minutes -- after the
+lifespan has "finished". **The owner's call:** abort with a bounded join,
+or wait for the commit; the docstring then says which.
+
+<a id="unbuilt-1-269"></a>
+
+### 1.269 A guest's input has no size or rate bound (2026-11-01 review)
+
+`web_routes_extensions` F21, confirmed by reading. `web.app.guest_input`
+takes any length, at any rate, for any `idx >= 0`; `_submit_player_input`
+upserts per (chat, idx, persona); `guest_state` reads all of the guest's
+rows on every poll; and the next served declaration rides the Director's
+and narrator's payloads -- so a guest script posting multi-megabyte lines
+for idx 0..N grows `turn_player_inputs` without bound and spends the host's
+provider budget, from the less-trusted actor this module exists for.
+Skipped by review lanes L2 and L1 alike: **the owner's numbers** -- a byte
+cap and a rate (the join limiter's pattern is there to reuse), and whether
+`idx` is limited to the guest frame's next-beat window.
+
+<a id="unbuilt-1-270"></a>
+
+### 1.270 Only first-run setup checks the Host a request was sent to (2026-11-01 review)
+
+`web_routes_extensions` F2. During the unclaimed first-run window -- a fresh
+install, or every restart under `FICTION_ENGINE_RESET_HOST=1` --
+`request_is_local` reads only the TCP peer, so a DNS-rebinding page in the
+host's own browser counted as local, could claim setup and got a
+same-origin `fe_host` cookie. Review lane L1 fixed it narrowly:
+`POST /api/auth/setup` from an IP peer is refused unless the Host is an IP
+literal, `localhost` / `*.localhost`, or a name in `SONDER_SETUP_HOSTS`
+(`web.app.SETUP_HOSTS_ENV`, empty by default;
+`tests/test_first_run_setup_answers_only_its_own_address.py`). It assessed
+and did not make the allowlist for every `/api/*` that review lane L2 called
+better: it would lock a tunnel or LAN name out of an instance already
+claimed unless the operator declares it, and after setup a rebinding page
+holds no cookie and no password. **The owner's decision:** the narrow rule,
+or the whole-API allowlist and the declaring it demands of a host on a
+tunnel or a LAN name.
+
+<a id="unbuilt-1-271"></a>
+
+### 1.271 A branch holds the write lock while it re-dumps every older checkpoint (2026-11-01 review)
+
+`persistence_paths_schema` P4 (with P3). `web.app.turn_branch` holds the
+global write lock while it parses, remaps and re-dumps every checkpoint.
+Review lane L3 cut the remap itself (one 4.0 MB checkpoint with 2k entities
+and a 3k-body charter: 1.003 s -> 0.002 s, by no longer remapping
+chat-partitioned ids), which leaves about 0.44 s a checkpoint inside the
+lock for `json.loads` + `json.dumps` (a 41 MB charter row scales about ten
+times). Two changes were written out and not made: copy steps, variants
+and events with `INSERT ... SELECT` instead of pulling every variant
+through Python; and move the older checkpoints' parse/remap/dump out of the
+lock by splitting the transaction -- commit the branch with its
+branch-point checkpoint, then insert each older one in its own short
+transaction. **The owner's call is the split:** it trades "a failed branch
+leaves nothing visible" for the older checkpoints only -- a branch missing
+them is playable, just not rewindable past its start.
+
+<a id="unbuilt-1-272"></a>
+
+### 1.272 A grammar verdict is per model, and its stall count never decays (2026-11-01 review)
+
+The two skipped parts of `llm_providers_quality` F8. Review lane L13 made a
+json_schema rejection heal across restarts: the stored verdict is a
+timestamp, a lapsed one is pruned, and a grammar-bearing answer removes it
+(`tests/test_a_grammar_rejection_heals_across_restarts.py`; in the process
+that saw the 400 it stays permanent). Left for the owner: (a) the verdict is
+keyed on the MODEL, so one step's oversized grammar costs every role on
+that model -- keying it on the schema too changes what the verdict is about;
+(b) `providers._SCHEMA_STALLS` never decays or resets on success, so a model
+that stalls one call in three is suspended in time; changing that changes
+the measured "two stalls" threshold's meaning. (The owner's memory note
+"the grammar blacklist never heals" is now stale for 400s as well as
+stalls.)
+
+<a id="unbuilt-1-273"></a>
+
+### 1.273 The call ledger's `in` means two things by dialect (2026-11-01 review)
+
+`llm_providers_quality` F14. Review lane L13 put reasoning tokens on the
+ledger (`providers._log_usage` writes `reasoning` when the provider reports
+it, and leaves it absent when it does not -- unmeasured is not zero;
+`tests/test_the_ledger_says_how_much_was_thinking.py`). It implemented and
+reverted the other half: normalising `in` to the inclusive total for
+Anthropic and the CLI (`input_tokens` plus the two cache fields; the
+Responses dialect's `input_tokens` is already inclusive) changes five pinned
+assertions in three test files (`test_usage_telemetry.py`,
+`test_llm_call_ledger.py`, `test_claude_cli_provider.py`) and what the
+stderr metric means. **The owner's decision:** one meaning for `in` -- a
+six-line change in `providers._normalize_usage` plus those five pins -- or
+two, documented.
+
+<a id="unbuilt-1-274"></a>
+
+### 1.274 Two schema enums are second spellings, and six models are validated by tests alone (2026-11-01 review)
+
+`tooling_gate` F5. The schema reachability test was satisfied by a class
+name in a comment; review lane L14 rewrote it to read reachability off code,
+which found seven classes beyond the audit's three that only text reached.
+Review lane L13 deleted the two nothing read (`Engagement`, `BookOp`). The
+rest are kept by name, each with the test that needs it
+(`tests/test_schemas.py`'s `kept`): `PlayerAuthorityMode` and
+`BehaviorController`, second spellings of vocabularies `story.scene` holds
+(`PLAYER_AUTHORITY_MODES`, `OFFSCREEN_LIFE_LADDER`) that only a test holds
+equal; and `ActionElement` (with its field types `ActionCommitment` and
+`IntendedEffect`), `LoreOp`, `DestructionEffect` and `Observation` -- shapes
+the engine never validates, since every `sequence` is `list[dict]`.
+**The owner's question:** one spelling per vocabulary (delete the enums and
+rewrite their two tests against the `story.scene` tuples), and for the
+fixture models, engine validation or deletion -- deleting a kept name means
+deleting the model.
+
+<a id="unbuilt-1-275"></a>
+
+### 1.275 An extension's character-hook attribution is lost on a rerun (2026-11-01 review)
+
+`tooling_gate` F3. The side-channel check read only `agents/` and `story/`;
+review lane L14 widened it to every engine package, which found
+`extension_runtime`'s `_extension_routing` (and the commit's own
+`_engine_notices_rewritten`). `_extension_routing` is now declared in
+`runtime.SIDE_CHANNELS` honestly: diagnostic, and NOT rebuilt -- a resume or
+rerun that does not re-run the character stage commits without that
+stage's notes of which extension rewrote what a mind or the narrator was
+handed. **The owner's call:** rehydrate it from the persisted character
+variants on resume, or accept that a rerun from the narrator or the commit
+loses the attribution.
+
+<a id="unbuilt-1-276"></a>
+
+### 1.276 The extension contract `provision_story(living_world=...)` refuses its own guide's example (2026-11-01 review)
+
+`web_routes_extensions` F13, confirmed by snippet. Since
+`LIVING_WORLD_APPROACHES = ()` (2026-09-20) `extension_runtime/api.py`
+refuses every non-empty `living_world` -- the guide's own call raises
+"unknown living_world approach 'routine_residue'; the approaches are " (an
+empty list); `provision_story(offscreen_life=...)` stores a value
+`scene.dialogue_config` overwrites; `web/story_view.py` reports constants
+(`offscreen_life` always `"stochastic"`, `max_offscreen_actors` always 0
+where the live dial is `max_bubbles`, `approaches` always `[]`); and the API
+still advertises `living_world_provisioning`, a capability name its own rule
+says is never removed or repurposed while `ext_api` stays 1. Skipped by
+review lane L2: **the owner's contract decision** -- accept the retired
+approach names as documented no-ops, keep `offscreen_life` validated but
+documented inert and report `max_bubbles`; or bump `ext_api` and retire the
+capability name. (The engine side of the same retirement is
+UNBUILT_LIVING_WORLD §1.256.)
+
+<a id="unbuilt-1-277"></a>
+
+### 1.277 CI proves the direct pins, not the stack players run (2026-11-01 review)
+
+`tooling_gate` F17 (plausible; no defect measured). `constraints.txt` pins
+the twelve direct packages and transitive dependencies float: CI resolves
+fresh on every push, while a player's `.venv` is reinstalled only when the
+digest of `requirements.txt` plus `constraints.txt` changes. On the audit's
+day CI and the owner's `.venv` differed on anyio, websockets, uvloop,
+watchfiles, urllib3, httptools, idna and click; only the direct pins
+agreed. "CI is the authority" holds for the direct layer only, and no
+Windows or macOS leg runs although a `.bat` launcher ships. Review lane L14
+added `make stack`, which reports how the running interpreter differs from
+the pins. **The owner's call:** a full lock file used by both the launchers
+and CI (for example a `pip freeze` from the CI job), and whether to add the
+other platforms.
+
+<a id="unbuilt-1-278"></a>
+
+### 1.278 `tools/package_edges.json` is generated and read by nothing (2026-11-01 review)
+
+`tooling_gate` F12. The edges table was stale (58 rows against 72; 59
+differing) and the walker missed an import under an `if` inside a function;
+review lane L14 fixed the walker and regenerated the table
+(`--write-package-edges`), and the cycle baseline (`[agents, persist, story,
+world]`) is unchanged and checked. But nothing reads the edges, so they will
+go stale again. **The owner's call (the audit proposed, did not choose):**
+store the cycles only, or ratchet the eager edges inside the cycle.
+
+<a id="unbuilt-1-279"></a>
+
+### 1.279 The caps the 2026-11-01 fix lanes named, kept at today's values for the owner to set
+
+Every cap, bound and rate the review's lanes touched is named in code and
+kept at the value it had (or, where it is new, at one chosen to cut nothing
+measured), per the standing rule to name a cap rather than bury it. Each
+number is the owner's:
+
+- `director.ENGINE_NOTICES_SHOWN` = 8 (new): how many of the commit's
+  notices reach the next beat's author and encoder; the rest are counted.
+- `director_fanout.PUBLIC_SOURCES_SHOWN` = 20 and
+  `director.PUBLIC_EVIDENCE_KEPT` = 12: bare slices before, now named and
+  said when they cut. 12 < 20, so 12 is the cut that bites; whether the
+  overflow falls back rather than drops is part of the call.
+- `charter_intervene.INTERVENTION_CAP` = 64 (a scheduled end is now never
+  evicted for room); `charter_trigger.TRIGGER_CAP` = 32 and
+  `TRIGGER_THEN_CAP` = 3 (a cut is now reported, and the shipped default
+  rule is never the one evicted).
+- `lots.LOT_STOREYS_MAX` = 4 now also bounds the architect's answer for a
+  lot the plan gave no storeys, and a lot with no `cellar` refuses a level
+  -1 room (`DESIGN_BUILDING_LOTS.md` "Defaults").
+- A structure's `max_planned` (200): one meaning now (a lot's interior is
+  not frontier), the number unchanged.
+- `director_layout.LAYOUT_RUN_NOTES_MAX` = 12: the 12 a refusal was always
+  cut to, now named and shared with the solve's warnings.
+- `web.world_routes.LINT_MEMO_SIZE` = 16 and
+  `director_repair.ATTRIBUTION_MEMO_SIZE` = 64: cache bounds, not behaviour.
+- `character_jev.MAX_AIMS` = 5: the aims a read-back offers, now filled
+  around every held project rather than cut by position.
+- `ambience.QUERY_TERMS` = 9: the search's term cut, now applied before
+  its own "ambience" anchor.
+- `research_providers.FETCH_REDIRECTS_MAX` = 5 (new; requests' default was
+  30) and `providers.HTTP_POOL_MAXSIZE` = 32 (new; requests' default was 10
+  per session).
+- `plot_packages.PUBLISH_ATTEMPTS` = 3 (new): publish refuses after three
+  races with a story that kept moving.
+- `RUN_FOLLOW_POLL_MS` = 2000 doubling to `RUN_FOLLOW_POLL_MAX_MS` = 30000
+  (`static/js/chat.js`), and `GUEST_POLL_MAX_MS` = 60000
+  (`static/guest.html`): the re-attach and guest back-off polls.
+- `character._MEMORY_CONTEXT_POOL` (4 workers) against
+  `skip_stage.SKIP_ASK_WORKERS` (8): minds five to eight of a skip queue for
+  an embedding round trip; raise the pool to 8 (or `max(4,
+  SKIP_ASK_WORKERS)`), or keep 4 to bound concurrent embedding calls.
+- `affect._FORMER_PROJECTS_CAP` = 6: how many unauthored project endings
+  the former ledger keeps (every authored ending is now kept regardless).
+- Two caps found unnamed and not yet named (`agents_director_prose_movement_rooms`
+  F13 and F17): `director_rooms.inspect_rooms` takes the first six ids
+  silently, and `director_prose.bind_new_places` stops at 250 rooms.
+- One engine table widened, flagged: overcoat, raincoat, trenchcoat,
+  greatcoat, topcoat and petticoat joined `attire._REGION_CUES` /
+  `_SPANNING_CUES` (closed compounds that fell to the torso). And one left as
+  it was, flagged: whether belted gear ("a sword at her hip") is worn is
+  `attire._NON_ATTIRE_TERMS`' question.
+
+The numbers the review left as their own entries are there with their
+evidence: `IDLE_CLOSE_HOURS` (UNBUILT_LIVING_WORLD §1.253),
+`NAME_RUN_FLOOR` / `NAME_PREFIX_FLOOR` (UNBUILT_IDENTITY §1.244), a
+courier's wait (UNBUILT_LIVING_WORLD §1.258), a region hazard's linger
+(UNBUILT_PLANNING §1.260), and a guest's input bounds (§1.269 here).
 
 ## 2. Roadmap
 

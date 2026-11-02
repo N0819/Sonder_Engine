@@ -87,6 +87,85 @@ The owner's D6 and D7 rulings (2026-10-09) landed as `story/carriers.unbacked_cl
 - **The reply rule is a card's.** Both cards forbid a reply that says whether a character's words are true or only a claim, unless the player asked, and the full planner's reply names what it planted spoiler-safe where the package is sealed; no code reads a reply.
 - **A planned person's own truths do not reach their sheet.** `importers.PLAN_FIELDS_FOR_SHEET` withholds a plan's truths and purpose from the promotion draft because they carry no mark of whose head they are in; a per-truth `known_by` on plan truths, as package truths carry, would let the person's own through. The owner's to decide.
 
+<a id="unbuilt-1-260"></a>
+
+### 1.260 A region event's hazard never ends (2026-11-01 review)
+
+`world_offscreen_time` F6, confirmed for the predicate. `region_events._stand_hazard`
+writes each room's hazard condition with no `expires_at` ("No end is
+authored, because the event authors none"), and `mechanics._condition_states_harm`
+reads any non-empty `severity` as harm -- so a passed flood is a hazard for
+good: `commit_transit_sweep` warns "The scene states a hazard where X
+stands..." on every beat a body stands there, and the row rides the
+Director's `active_conditions` as standing danger. Nothing ends it but
+expiry, which it lacks, or the Director re-emitting the exact
+`region:<slug>:<room>` id. The fix the lanes wrote out (review lane L12c,
+not landed -- `world/region_events.py` was another lane's): an end at the
+event's last wave plus a span the op states (`effects.lasts_hours`,
+validated like `ramp_hours`) or **a named default whose number is the
+owner's** (`REGION_HAZARD_LINGER_HOURS`), moved by a later wave's
+restatement. A sibling request rides with it: `normalize_region_event`
+should refuse `destroy: true` below `DESTROY_THRESHOLD`, which is previewed
+as ruin today and does nothing (`world_offscreen_time` F9).
+
+<a id="unbuilt-1-261"></a>
+
+### 1.261 The planned-entity ledger is one for every era (2026-11-01 review)
+
+The frame half of `world_layout_bridge_structure` F1. Review lane L12b
+split the ledger's decision from its write (`planned_entities.plans_in_sight`
+/ `mark_plans_rendered`) and review lane L4 made the turn commit mark a
+planned thing rendered inside its own transaction
+(`tests/test_the_commit_marks_a_stood_up_plan_inside_its_transaction.py`),
+which closed the corruption half. But `planned_entities` is in neither
+`core.db.FRAME_SCOPED_WORLD_KEYS` nor `ERA_WORLD_KEYS`, so every `frame_id`
+threaded through the module is ignored: a thing rendered in one era reads
+rendered in every era. Review lane L3 wrote out the change and did not make
+it: add the key to both sets, bump `SCHEMA_VERSION` 45 -> 46 with a one-shot
+pass inside the stamping transaction that copies the bare row into every
+other-era frame's row -- and it is BLOCKED on a prerequisite: every
+checkpoint in an existing story predates v46 and holds only the bare row,
+so the first reroll after the upgrade would delete every era's copy, and
+re-copying at restore would hand a post-v46 era with no plans the
+present's (the bug back). The restore must know a blob's version first --
+`persistence_paths_schema` F11, checkpoint blobs carry no schema version.
+**The owner's decision:** the migration, and stamping checkpoint blobs with
+the schema version that makes it safe.
+
+<a id="unbuilt-1-262"></a>
+
+### 1.262 The room designer cannot remove a room or a way, though its sheet teaches both (2026-11-01 review)
+
+`agents_director_prose_movement_rooms` F14, confirmed by reading (no test
+exercises it). `director_rooms.ROOM_TOOLS` lists inspect, draft, view, check
+and submit only; the dispatch accepts `remove_rooms` / `remove_adjacent`
+with an undocumented `items` argument, while the designer's sheet
+(`llm/prompts.room_author_prompt`) ships the spatial `remove_rooms` /
+`remove_adjacent` chunks, which teach the state-diff shape
+(`remove_rooms: [room_id]`), and its card says the tools are in `tools`. A
+call shaped as the chunk teaches is refused as an unknown tool. **The
+owner's call (the audit's):** list both tools in `ROOM_TOOLS` with their
+argument, or stop shipping the two chunks to the designer (the encoder
+keeps both channels).
+
+<a id="unbuilt-1-263"></a>
+
+### 1.263 The paradox consequence the owner moved to the Writers' Room is not built (2026-11-01 review)
+
+Found unregistered by the `world_misc_causal` docs check. The owner's
+ruling of 2026-09-21: detection stays code, and the CONSEQUENCE of a
+paradox moves to the Writers' Room -- the Room drafts the wound as a plot
+package from a typed planning need, a turn late being fine. Not built:
+`planning_needs.NEED_REASONS` has no paradox reason, and the five
+hard-coded consequence modes still run (`paradox._apply_stage_consequence`).
+Review lane L12c met the same ruling from the other side: a consumed room
+was "flagged impassable" in two docstrings while `paradox_consumed` has no
+reader, and making it one would be a product behaviour the ruling has moved
+to the Room -- so the flag stays a record and the docstrings now say so.
+No live story has ever opened a wound (re-checked read-only 2026-11-01: no
+`paradoxes` row carries one), so nothing is wrong on any page today.
+**Left for the owner:** whether to build it now.
+
 ## 2. Roadmap
 
 <a id="unbuilt-2-9"></a>
@@ -369,7 +448,10 @@ for what follows. Residuals of this entry rather than a section of their own:
   wall. **A corner anchor has no `offset`** (a corner is one cell; the
   field is kept on the record and moves nothing). **Undo is ONE step and
   only for a drag** -- a write from the card clears it, since the card's own
-  value is then what the server holds; a deeper history is a decision about
+  value is then what the server holds (true since 2026-11-01: until then a
+  card write left it standing and Undo re-issued a whole-field snapshot over
+  later card edits and onto another room, `frontend_settings_world` F1; any
+  write and any room change now clear it); a deeper history is a decision about
   where it would live. **A passage's `state` has no reader** (§ 2.37).
   **A body dropped in a neighbour's cells that are also a doorway's** is
   stationed at that door anchor, which is the honest reading and looks odd
@@ -441,7 +523,9 @@ for what follows. Residuals of this entry rather than a section of their own:
   land as planting; and a pass hands the Planner the first
   `FILL_NEEDS_PER_JOB` = 3 open needs while the question is keyed by all of
   them, so with more than three open and the first three declined, the rest
-  are not shown until one of those closes (as before this work).
+  are not shown until one of those closes (as before this work). Retired
+  `setting_fact` needs no longer take those three places (2026-11-01,
+  `world_misc_causal` F11); the slice itself is unchanged.
 - **Planting ahead is one sketch call (2026-10-08, `story/room_sketch.py`).**
   A planting-only question -- no need open, no player's line waiting -- is
   one compact call that files light plans as one package and hands the
@@ -451,8 +535,9 @@ for what follows. Residuals of this entry rather than a section of their own:
   ahead of is offered none however quiet it has been (`LOCAL_EVENT_BEATS` =
   8 of this frame's beats paces the ones it does file, where the design
   note's pacing budget was per story hour); a sketched room carries a name,
-  a purpose and the way it joins, never geometry, exposure or level, so it
-  is in no far view until the room author or the Director renders it, and a
+  a purpose, the way it joins and -- since b829a73d (2026-10-09) -- its
+  `exposure` and `far_look` (`room_sketch._seen_from_afar`; corrected
+  2026-11-01, `story_room_carriers` docs check), never geometry or level, and a
   sketched person has no `brief.station` (the validator warns that it
   stands at nothing); the sketch's spend records its one model call, not
   the write tools its package passes through; a sketch whose grants cover
@@ -1003,19 +1088,3 @@ patch in a file another hand was editing that day:
   operation would be a second answer to a question that already has one.
   What the run actually wanted -- creating, splitting and altering regions
   -- is § 2.26's region tier, and is unbuilt.
-- **The recap cites what it read (BUILT 2026-09-05), and the room has to be
-  told to.** `story/room_citations.py` holds the contract and the check: a
-  ledger of every row a reply actually read (filled at `room_tools.run_tool`,
-  the one call site), and `check_claims`, which marks a claim `supported`
-  only when every row it cites was read this reply. A claim citing nothing,
-  or citing a row nobody served, is DEMOTED to a proposal -- it keeps its
-  sentence and loses the authority it was borrowing -- and `converse` and
-  `converse_stream` return the verdicts as `citations`. Measured cases it is
-  for: "feigning sleep", the servant who was never sent, the salve "she
-  declined". WHAT REMAINS, and it is two other owners': the Planner must
-  emit `claims` in its reply envelope and be given `room_citations.
-  CONTRACT_TEXT` in its system block (`agents/story_planner.py`), and the
-  panel should show an unsupported claim as a proposal
-  (`static/js/writers_room.js`, `web/room_routes.py` passes the envelope
-  through untouched). Until the first of those lands every reply reads as
-  `stated_nothing`, which is honest and is not a pass.

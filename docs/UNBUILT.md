@@ -52,6 +52,14 @@ still carries its 2026-07-29 verification date and should be re-checked before
 being acted on — rule 2 exists because the register's claims go stale faster
 than the code does, and two of the ten checked this pass had.
 
+**The 2026-11-01 whole-codebase review filed what waits on the owner as
+§1.229–§1.283**, each titled "(2026-11-01 review)" and filed by owner across
+the category files (§1.279 lists the caps its fix lanes named), and corrected
+the entries its audits found wrong about code that had changed under them --
+deleting two (UNBUILT_PIPELINE §1.49, UNBUILT_IDENTITY §1.0). What its lanes
+landed, and the requests none landed, are in
+`docs/experiments/REVIEW_2026_11_01.md` §§ 5 and 8.
+
 Rules that keep it honest:
 
 1. Delete an entry in the same commit that lands it. Do not mark it done here.
@@ -175,7 +183,6 @@ Not scheduled and not committed to a phase. See the
 - [§1.13 — `ActionStage` is classified and the resolve path never reads it](UNBUILT_PIPELINE.md#unbuilt-1-13)
 - [§1.32 — A region assertion has an owner only by slot position](UNBUILT_PIPELINE.md#unbuilt-1-32)
 - [§1.33 — An interpret that says nothing costs two model calls](UNBUILT_PIPELINE.md#unbuilt-1-33)
-- [§1.49 — Three things the prompt-card split made visible and did not change](UNBUILT_PIPELINE.md#unbuilt-1-49)
 - [§1.59 — A channel census over persisted `state_diff`s cannot see `phase_sources`](UNBUILT_PIPELINE.md#unbuilt-1-59)
 - [§1.60 — The interpret sheet and `agents/common.py` state opposite rules about concealed speech](UNBUILT_PIPELINE.md#unbuilt-1-60)
 - [§1.69 — Three other sentence splitters still have no abbreviations](UNBUILT_PIPELINE.md#unbuilt-1-69)
@@ -209,6 +216,13 @@ Not scheduled and not committed to a phase. See the
 - [§1.215 — Home 10's fifteen failings — what is built, what waits on a ruling (2026-10-13)](UNBUILT_PIPELINE.md#unbuilt-1-215)
 - [§1.216 — Chats 175-178: the fix round of 2026-10-20 — what is built, what waits on a ruling](UNBUILT_PIPELINE.md#unbuilt-1-216)
 - [§1.227 — A walk the floor refuses is offered to its mind, and the account's framing and the world agree — built 2026-10-21, residuals open](UNBUILT_PIPELINE.md#unbuilt-1-227)
+- [§1.229 — Another player's asserted rows never reach the interpret (2026-11-01 review)](UNBUILT_PIPELINE.md#unbuilt-1-229)
+- [§1.230 — At autonomy 0 a contested beat asks only the flow reactors (2026-11-01 review)](UNBUILT_PIPELINE.md#unbuilt-1-230)
+- [§1.231 — The duplicate-mint fold runs after the beat was perceived and narrated (2026-11-01 review)](UNBUILT_PIPELINE.md#unbuilt-1-231)
+- [§1.232 — Dice and ability modifiers cannot run on the prose path (2026-11-01 review)](UNBUILT_PIPELINE.md#unbuilt-1-232)
+- [§1.233 — The interpret's preview shows a crossing the resolve has not ruled on (2026-11-01 review)](UNBUILT_PIPELINE.md#unbuilt-1-233)
+- [§1.234 — An interpret mint can be stood where a resolve span's actor stood (2026-11-01 review)](UNBUILT_PIPELINE.md#unbuilt-1-234)
+- [§1.280 — `realized_event_ids` has had no producer since the prompt cards were split (2026-11-01 review)](UNBUILT_PIPELINE.md#unbuilt-1-280)
 
 **2. Roadmap**
 
@@ -268,6 +282,14 @@ Not scheduled and not committed to a phase. See the
 - [§1.206 — Words in the view that break (2026-10-12)](UNBUILT_PERCEPTION.md#unbuilt-1-206)
 - [§1.217 — What the stranger-label rule leaves (2026-10-20)](UNBUILT_PERCEPTION.md#unbuilt-1-217)
 - [§1.221 — A line reaches a mind through the hearing rule alone; a background presence perceives through its own body -- built 2026-10-21, residuals open](UNBUILT_PERCEPTION.md#unbuilt-1-221)
+- [§1.235 — The backdrop and the sound bed show a room the player perceives nothing of (2026-11-01 review)](UNBUILT_PERCEPTION.md#unbuilt-1-235)
+- [§1.236 — The backdrop's key moves with what its prompt never says (2026-11-01 review)](UNBUILT_PERCEPTION.md#unbuilt-1-236)
+- [§1.237 — A Japanese room's ambience search has no words of its own (2026-11-01 review)](UNBUILT_PERCEPTION.md#unbuilt-1-237)
+- [§1.238 — Whether a `private` line is concealed (2026-11-01 review)](UNBUILT_PERCEPTION.md#unbuilt-1-238)
+- [§1.239 — A guest's page shows a story title made from a character's name (2026-11-01 review)](UNBUILT_PERCEPTION.md#unbuilt-1-239)
+- [§1.281 — Three free-prose word tests the cue fix left, one of them a firewall floor (2026-11-01 review)](UNBUILT_PERCEPTION.md#unbuilt-1-281)
+- [§1.282 — A sightless body keeps its room's authored description (2026-11-01 review)](UNBUILT_PERCEPTION.md#unbuilt-1-282)
+- [§1.283 — A world `event` in the outcome stream is never rendered as an act (2026-11-01 review)](UNBUILT_PERCEPTION.md#unbuilt-1-283)
 
 **2. Roadmap**
 
@@ -346,6 +368,10 @@ Not scheduled and not committed to a phase. See the
 - [§1.224 — A thing offered and then taken ended with nobody — built 2026-10-21, residuals open](UNBUILT_WORLD.md#unbuilt-1-224)
 - [§1.225 — A boat under way with no written eta never arrived — built 2026-10-21, residuals open](UNBUILT_WORLD.md#unbuilt-1-225)
 - [§1.228 — A frontier stub's join was a doorway — built 2026-10-21, residuals open](UNBUILT_WORLD.md#unbuilt-1-228)
+- [§1.240 — A couple that ends as "reunited" is partitioned like any other (2026-11-01 review)](UNBUILT_WORLD.md#unbuilt-1-240)
+- [§1.241 — The contact-bound pose reconciliation reads English only (2026-11-01 review)](UNBUILT_WORLD.md#unbuilt-1-241)
+- [§1.242 — Furniture placement never backtracks (2026-11-01 review)](UNBUILT_WORLD.md#unbuilt-1-242)
+- [§1.243 — Where the sleepers past a lot's beds go (2026-11-01 review)](UNBUILT_WORLD.md#unbuilt-1-243)
 
 **2. Roadmap**
 
@@ -384,7 +410,6 @@ Not scheduled and not committed to a phase. See the
 
 **1. Known defects**
 
-- [§1.0 — The Japanese pack cannot route the Director's manifest](UNBUILT_IDENTITY.md#unbuilt-1-0)
 - [§1.17 — A generic name cannot count](UNBUILT_IDENTITY.md#unbuilt-1-17)
 - [§1.19 — An unregistered presence has no name to be called by](UNBUILT_IDENTITY.md#unbuilt-1-19)
 - [§1.38 — A line addressed by epithet is addressed to nobody](UNBUILT_IDENTITY.md#unbuilt-1-38)
@@ -400,6 +425,9 @@ Not scheduled and not committed to a phase. See the
 - [§1.92 — A registered character can be voiced by the background path — FIXED](UNBUILT_IDENTITY.md#unbuilt-1-92)
 - [§1.104 — The persona has no per-story copy, so a card edit reaches every story at once](UNBUILT_IDENTITY.md#unbuilt-1-104)
 - [§1.106 — Promotion has four authorities and the owner wants two](UNBUILT_IDENTITY.md#unbuilt-1-106)
+- [§1.244 — Name novelty floors count code points in every script (2026-11-01 review)](UNBUILT_IDENTITY.md#unbuilt-1-244)
+- [§1.245 — A body whose stored name is its own key counts as named forever (2026-11-01 review)](UNBUILT_IDENTITY.md#unbuilt-1-245)
+- [§1.246 — A kanji name of two or more characters keeps open edges (2026-11-01 review)](UNBUILT_IDENTITY.md#unbuilt-1-246)
 
 **5. Deferred backlog**
 
@@ -423,6 +451,10 @@ Not scheduled and not committed to a phase. See the
 - [§1.107 — `generalization_tags` promises a mechanism that does not exist](UNBUILT_CHARACTERS.md#unbuilt-1-107)
 - [§1.184 — The tell and carriage changes: quiet beats measured (2026-10-09), and what is still open](UNBUILT_CHARACTERS.md#unbuilt-1-184)
 - [§1.226 — A memory said "me can hear", and named its own doer as done — built 2026-10-21, residuals open](UNBUILT_CHARACTERS.md#unbuilt-1-226)
+- [§1.247 — The mood's home reads a card's arousal on two scales (2026-11-01 review)](UNBUILT_CHARACTERS.md#unbuilt-1-247)
+- [§1.248 — A mind's notes about people fade on story minutes at rates authored in turns (2026-11-01 review)](UNBUILT_CHARACTERS.md#unbuilt-1-248)
+- [§1.249 — Every recent-lane memory is re-delivered and felt again each beat (2026-11-01 review)](UNBUILT_CHARACTERS.md#unbuilt-1-249)
+- [§1.250 — `decision.dialogue_mode` reaches every mind and no card explains it (2026-11-01 review)](UNBUILT_CHARACTERS.md#unbuilt-1-250)
 
 **2. Roadmap**
 
@@ -488,6 +520,15 @@ Not scheduled and not committed to a phase. See the
 - [§1.150 — A creature has no held hunt — the courier maze problem, one subsystem over](UNBUILT_LIVING_WORLD.md#unbuilt-1-150)
 - [§1.152 — A creature can be stopped by the shape of an opening and by nothing else](UNBUILT_LIVING_WORLD.md#unbuilt-1-152)
 - [§1.213 — The bubble radius — built 2026-10-13; the building and the sleeper upstairs — built 2026-10-20; residuals open](UNBUILT_LIVING_WORLD.md#unbuilt-1-213)
+- [§1.251 — The beat's 10 s charter budget does not bind a creature story (2026-11-01 review)](UNBUILT_LIVING_WORLD.md#unbuilt-1-251)
+- [§1.252 — A creature story's skip is not the skip its cast lived (2026-11-01 review)](UNBUILT_LIVING_WORLD.md#unbuilt-1-252)
+- [§1.253 — A quarrel's idle close, its 12 h reconcile and an offer whose effect lands nothing (2026-11-01 review)](UNBUILT_LIVING_WORLD.md#unbuilt-1-253)
+- [§1.254 — A creature that never declared its sight sees (2026-11-01 review)](UNBUILT_LIVING_WORLD.md#unbuilt-1-254)
+- [§1.255 — A body the scene holds cannot be sent on a charter errand (2026-11-01 review)](UNBUILT_LIVING_WORLD.md#unbuilt-1-255)
+- [§1.256 — The paid off-screen tiers cannot run: retire them or revive them (2026-11-01 review)](UNBUILT_LIVING_WORLD.md#unbuilt-1-256)
+- [§1.257 — A resident knows its own region's rooms, and a site's regions are flat (2026-11-01 review)](UNBUILT_LIVING_WORLD.md#unbuilt-1-257)
+- [§1.258 — A courier whose addressee exists and never comes waits at the gate forever (2026-11-01 review)](UNBUILT_LIVING_WORLD.md#unbuilt-1-258)
+- [§1.259 — A courier send or a posted notice needs no declaration from its sender (2026-11-01 review)](UNBUILT_LIVING_WORLD.md#unbuilt-1-259)
 
 **2. Roadmap**
 
@@ -511,6 +552,10 @@ Not scheduled and not committed to a phase. See the
 
 - [§1.134 — What the campaign-3 plan/structure/tools wave left open (2026-09-05)](UNBUILT_PLANNING.md#unbuilt-1-134)
 - [§1.198 — A person someone claims, and a planned person's mind — residuals (2026-10-10)](UNBUILT_PLANNING.md#unbuilt-1-198)
+- [§1.260 — A region event's hazard never ends (2026-11-01 review)](UNBUILT_PLANNING.md#unbuilt-1-260)
+- [§1.261 — The planned-entity ledger is one for every era (2026-11-01 review)](UNBUILT_PLANNING.md#unbuilt-1-261)
+- [§1.262 — The room designer cannot remove a room or a way, though its sheet teaches both (2026-11-01 review)](UNBUILT_PLANNING.md#unbuilt-1-262)
+- [§1.263 — The paradox consequence the owner moved to the Writers' Room is not built (2026-11-01 review)](UNBUILT_PLANNING.md#unbuilt-1-263)
 
 **2. Roadmap**
 
@@ -544,6 +589,22 @@ Not scheduled and not committed to a phase. See the
 - [§1.186 — The format ladder after a hold, and service tiers (2026-10-08)](UNBUILT_PLATFORM.md#unbuilt-1-186)
 - [§1.197 — An active prompt preset masks every later change to the card it replaces (2026-10-09)](UNBUILT_PLATFORM.md#unbuilt-1-197)
 - [§1.212 — One code version per process — built 2026-10-13, residuals open](UNBUILT_PLATFORM.md#unbuilt-1-212)
+- [§1.264 — A database older than v7 cannot be opened (2026-11-01 review)](UNBUILT_PLATFORM.md#unbuilt-1-264)
+- [§1.265 — Captured text a prune orphans waits for the next story deletion (2026-11-01 review)](UNBUILT_PLATFORM.md#unbuilt-1-265)
+- [§1.266 — A book a turn minted after a checkpoint is carried into it by a later refresh (2026-11-01 review)](UNBUILT_PLATFORM.md#unbuilt-1-266)
+- [§1.267 — Which lorebook edits a reroll carries is decided route by route (2026-11-01 review)](UNBUILT_PLATFORM.md#unbuilt-1-267)
+- [§1.268 — Stopping the server waits for every turn in flight (2026-11-01 review)](UNBUILT_PLATFORM.md#unbuilt-1-268)
+- [§1.269 — A guest's input has no size or rate bound (2026-11-01 review)](UNBUILT_PLATFORM.md#unbuilt-1-269)
+- [§1.270 — Only first-run setup checks the Host a request was sent to (2026-11-01 review)](UNBUILT_PLATFORM.md#unbuilt-1-270)
+- [§1.271 — A branch holds the write lock while it re-dumps every older checkpoint (2026-11-01 review)](UNBUILT_PLATFORM.md#unbuilt-1-271)
+- [§1.272 — A grammar verdict is per model, and its stall count never decays (2026-11-01 review)](UNBUILT_PLATFORM.md#unbuilt-1-272)
+- [§1.273 — The call ledger's `in` means two things by dialect (2026-11-01 review)](UNBUILT_PLATFORM.md#unbuilt-1-273)
+- [§1.274 — Two schema enums are second spellings, and six models are validated by tests alone (2026-11-01 review)](UNBUILT_PLATFORM.md#unbuilt-1-274)
+- [§1.275 — An extension's character-hook attribution is lost on a rerun (2026-11-01 review)](UNBUILT_PLATFORM.md#unbuilt-1-275)
+- [§1.276 — The extension contract `provision_story(living_world=...)` refuses its own guide's example (2026-11-01 review)](UNBUILT_PLATFORM.md#unbuilt-1-276)
+- [§1.277 — CI proves the direct pins, not the stack players run (2026-11-01 review)](UNBUILT_PLATFORM.md#unbuilt-1-277)
+- [§1.278 — `tools/package_edges.json` is generated and read by nothing (2026-11-01 review)](UNBUILT_PLATFORM.md#unbuilt-1-278)
+- [§1.279 — The caps the 2026-11-01 fix lanes named, kept at today's values for the owner to set](UNBUILT_PLATFORM.md#unbuilt-1-279)
 
 **2. Roadmap**
 

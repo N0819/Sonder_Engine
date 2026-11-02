@@ -38,13 +38,18 @@ For both `director_interpret` and `director_resolve`:
    story keeps and the stage serves (`jev_questions.<channel>`), all asked
    at once against the prose, the cast names and the known rooms. A channel is
    granted when its yes-probability reaches `prose_contract_threshold`
-   (default 0.3). Jev writes nothing, so it cannot start authoring. It
-   **fails open**: if Jev is unreachable, every candidate is granted.
+   (default 0.5 today, `director_prose.DEFAULT_THRESHOLD`; 0.3 when this was
+   written). Jev writes nothing, so it cannot start authoring. It
+   **fails open**: if Jev is unreachable, every candidate is granted (a
+   channel a partial answer leaves out still reads as a no -- AGENTS.md, the
+   Director contract).
 3. **One encoder does every hand's job** (role `encoder` -- named
    `director_specialist` until 2026-09-27, and a setting stored under that name
    is read as the encoder's, `providers.RENAMED_ROLES` -- step key
    `director_specialist`). Its sheet is a small core plus the granted
-   channels' **existing, unmodified** chunks. The core tells it how to read
+   channels' chunks -- the hands' existing, unmodified chunks when this was
+   written; its own card under `system_prompts/encoder/` since 2026-09-27, as
+   the section below says. The core tells it how to read
    those chunks' several-hands vocabulary. Its payload is the prose, the
    Director's own inputs, and the union of the world slices the granted
    channels' owners would have received, so it binds existing things by
@@ -115,10 +120,15 @@ and the raw events.
   shapes and `test_every_ops_field_the_card_asks_for_exists_on_a_hand` the
   `_ops` fields; the prose of the rules has no guard.
 - **Establish is out of scope.** The opening turn keeps its own Director.
-- **No author-side retries.** The causal Director was re-asked with a
-  correction when a must-tick world pressure went untouched, or when an
-  authority reading found conduct nobody declared (once, kept only if it
-  lowered the count). This contract has neither: a must-tick pressure is an
+- **No author-side retries -- except two that came later.** The causal
+  Director was re-asked with a correction when a must-tick world pressure
+  went untouched, or when an authority reading found conduct nobody declared
+  (once, kept only if it lowered the count). This contract kept neither --
+  but it re-asks the author in two other cases, both before anything is
+  encoded: an account that leaves out a line the player quoted
+  (`carry_every_quoted_line`, up to `CARRIED_SHORT_REASKS` times) and one
+  that aims a player's words at somebody no player perceived
+  (`aim_by_their_view`, once). A must-tick pressure is an
   input group of its own and a row sourced to it is its tick
   (`tests/test_world_pressure.py`), and the authority readings warn on the
   step and never retry, so a flagged fabrication commits

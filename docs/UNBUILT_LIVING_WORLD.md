@@ -993,7 +993,9 @@ What that leaves open:
 
 - ~~**`accused` has no OFFSCREEN producer, and the measurement says so.**~~
   **CLOSED 2026-08-27 by design 5** (§1.99b). It was true as written:
-  `quarrel` is not in `COARSE_PRACTICES`, so an institution nobody was looking
+  `quarrel` was not in `COARSE_PRACTICES` (since the owner's call of
+  2026-08-27 the constant is `None`, every kind; corrected 2026-11-01), so an
+  institution nobody was looking
   at produced zero accusations in health and in famine (`twin_towns(240)`,
   famine month: 0). `charter_trigger`'s one shipped default rule,
   `blame_opens_a_quarrel`, opens the situation from the blame LANDING rather
@@ -1090,8 +1092,10 @@ wherever it comes from.
 
 WHAT IT ACTUALLY BOUGHT, measured on `.venv`, this workstation. The one
 shipped default rule, `blame_opens_a_quarrel`, closes the residual §1.99a
-registered: a blame landing OFF SCREEN reached nobody, because `quarrel` is
-not in `COARSE_PRACTICES` and the offscreen branch passes no ledger. On the
+registered: a blame landing OFF SCREEN reached nobody, because `quarrel` was
+not then in `COARSE_PRACTICES` and the offscreen branch passes no ledger
+(today `COARSE_PRACTICES = None` admits every kind, and the conclusion still
+holds only because the off-screen branch passes no `blame`). On the
 four-body yard fixture the whole chain now runs in two windows — blame lands
 at hour 20 and marks the keeper `disgraced`; the trigger fires at hour 24,
 opens the quarrel, somebody accuses her in the same window, `heard_blame`
@@ -1521,14 +1525,19 @@ while his memories said he had done it all. Now each mind's `done` rows on the
 map are told to the engine's encoder once per mind, and what it types for the
 things the mind had to hand lands at the far end, in time order across minds,
 through the beat's own floors. What it leaves:
-- **A `not_known` row changes nothing, and the owner's own example is one.**
-  The keeper's two days on the new clockwork were `not_known` both times --
-  turn 25's beside the player (`with`), turn 26's told as far as it went
-  without the toolkit the player carried -- so the clockwork stands where it
-  stood while his memories say he examined it and laid it beside the old.
-  Whether a `not_known` row's own part -- what the mind did whatever the other
-  answered, or without what was missing -- changes things is the owner's call;
-  it would be told from the same account, its outcome beside it.
+- **A `not_known` row's own part now lands, and its memory can deny it**
+  (restated 2026-11-01; the bullet here said a `not_known` row changes
+  nothing, which 1342bbde of 2026-10-22 ended -- `skip_work.told_rows` tells
+  such a row's own part to the encoder, `agents_runtime_loops_mapping` F15).
+  A stretch the town's grid never stepped is now `done` rather than
+  `not_known` (`world_charter_generation_run` F5). What is left, PLAUSIBLE
+  and not traced end to end: for an `[own part]` row the world carries what
+  the mind did -- the lamp is out at dawn -- while the memory job tells the
+  row with `skip_record_not_known` ("{name} set about it, and the rest was out
+  of {name}'s hands", chosen in `mind.skip_memories`) and its check pass
+  holds each memory to that wording, so the memory may say the dawn's work
+  was not his to finish while the world shows it finished. The audit's fix
+  is record words of its own for an `[own part]` row.
 - **What work makes, destroys or consumes is not built.** `entities__new`,
   `remove_entities` and `destruction` are not granted, and a change naming a
   thing the world does not hold is dropped and counted (`out_of_reach`).
@@ -1904,6 +1913,22 @@ each a decision rather than a defect:
 **Ruled by the owner 2026-09-04**, in three parts. The first landed with the
 ruling; the other two are what is left.
 
+**Corrected 2026-11-01 (`world_offscreen_time` F11, `story_scene_schema`
+F14): the toggle and the rung this entry describes are gone, and the
+machinery it says the toggle enables cannot run.** Since 7140b9cc
+(2026-09-20, "Absent threads: one dial replaces the off-screen ladder") the
+panel's question is `max_bubbles`, and `scene.dialogue_config` forces
+`offscreen_life` to `OFFSCREEN_LIFE_DEFAULT`, `offscreen_cognition` to its
+default and `max_offscreen_actors` to 0 on every read -- the retired keys stay
+in the dict and gate nothing, because 120 readers index them. And
+`living_world.LIVING_WORLD_APPROACHES = ()`, so `living_world_allows` is
+False for every approach and depth: `offscreen.schedule_profile_ticks`,
+`schedule_agent_ticks` and the rest of the paid rungs (about 1,700 lines of
+`world/offscreen.py`) are unreachable. Whether to retire them or revive them
+is §1.256. The paragraphs below are kept as the history of the ruling; where
+they say "derives the rung", "still enables" or "sits at
+`character_agent`", read the correction.
+
 **Charter is unconditional, and that is done.** `schedule_charter_ticks` no
 longer reads the `offscreen_life` ceiling. Charter is where an unwatched body
 lives rather than a mechanism a rung may switch off, its advance path holds no
@@ -2027,8 +2052,10 @@ looks like when it is wrong.
 **Docstrings that overstate, each now contradicted by the guide.** Fix the
 docstring or fix the code; do not leave both.
 
-- "five approaches" in `world/living_world.py:1` and `web/app.py:4547` —
-  `LIVING_WORLD_APPROACHES` has four. Approach C became core carrier physics.
+- "five approaches" in `world/living_world.py`'s module docstring and
+  `web/app.py` — `LIVING_WORLD_APPROACHES` had four when this was written
+  (Approach C became core carrier physics) and has NONE since 2026-09-20
+  (7140b9cc); see §1.105's correction and §1.256.
 - ~~`pick_background_reactors` returning `[]` as "the common case"~~ —
   **withdrawn, and worth recording as a method note.** The audit reasoned from
   the code that `dialogue_turns` is a standalone qualifying signal and records
@@ -2201,7 +2228,16 @@ beat could not have known is a refusal the fiction cannot act on. A refusal
 anywhere reports the WHOLE event and applies none of it (`author_charter_ops`
 is all-or-nothing), reaches the Director through `tell_director`, and the
 beat still commits: a town that could not take an order is not a reason to
-lose the scene.
+lose the scene. *(Two corrections, 2026-11-01. Inside a turn commit the
+landing was NOT all-or-nothing until then: a refused order half-landed
+(`persist_scene_entities` F1, fixed at `_apply_charter_orders`'s call site,
+`tests/test_a_refused_charter_order_lands_nothing_inside_a_commit.py`). And
+`apply_charter_ops` skipped the closed-vocabulary validation for the
+Director's raw ops, so "`world/charter_ops.py` already normalizes ... an
+`errand` op" below held for the Planner's route only
+(`world_charter_behaviours` F19,
+`tests/test_a_directors_charter_op_is_checked_like_a_planners.py`). Both
+hold on both routes now.)*
 
 **Narrowed 2026-09-05.** The Planner's half is built (`charter_ops`,
 § 1.123), so what is missing here is now only the CHANNEL and not the landing
@@ -2663,7 +2699,11 @@ shut doors where `can_open_doors`, minus rooms its `footprint` does not fit
 -- and its own docstring names exactly the two constraints it models: "a
 door that holds a wolf and a passage too narrow for a large thing". Both are
 facts about the WAY THROUGH. An anchor on the floor is a third kind and
-there is no field for it.
+there is no field for it. (Until 2026-11-01 even the door half was loose: a
+creature that `can_open_doors` walked through LOCKED doors, every edge whose
+barrier said "door" counting as open; it now takes
+`charter_space.people_neighbors`' fastening reader, so a fastened door holds
+it -- `tests/test_a_locked_door_holds_a_creature_that_opens_doors.py`.)
 
 The whole vocabulary a creature charter can be consulted on:
 
@@ -2808,6 +2848,178 @@ that does not reach:
   Hale's room") rendered as "old Mrs the unfamiliar person's room" -- the
   name scrub took her own surname for the two strangers who share it. Neither
   is this round's fix.
+
+<a id="unbuilt-1-251"></a>
+
+### 1.251 The beat's 10 s charter budget does not bind a creature story (2026-11-01 review)
+
+`world_charter_core` (the advance-snapshot question) and review lane L11's
+owner decision 1. `charter_runtime.CHARTER_BUDGET_SECONDS` caps the town's
+advance at 10 s of wall clock a beat -- the owner's cap -- and on the
+solitary path a stopped run lands its partial state and carries the
+shortfall. A registry holding a creature takes the `together` arm of
+`charter_runtime.advance_snapshot` (`charter_predation.run_registry`), which
+takes no deadline -- "a group begun is a group finished"
+(`DESIGN_INSTITUTIONS_AND_UPKEEP.md` §7a) -- so the budget bounds that path
+at entry only. Documented in the design note, contradicted by the owner's
+cap, measured nowhere. **The owner's call:** give the creature arm a
+deadline that lands a partial group, or accept an unbounded creature beat
+and say so beside the cap.
+
+<a id="unbuilt-1-252"></a>
+
+### 1.252 A creature story's skip is not the skip its cast lived (2026-11-01 review)
+
+`world_charter_core` F10, confirmed by trace; review lane L11's owner
+decision 2. In `charter_runtime.advance_snapshot` a creature registry's
+`time_skip` beat is prepared for the `together` arm BEFORE the
+`context == "time_skip"` branch, so it is stepped on equal windows and the
+epoch seed (plus predation), not on `charter_skip.skip_windows` and
+`skip_seed`, which the cast's own skip (`charter_skip._TownRun`) stepped
+every charter on. And any skip longer than `MAX_CATCHUP_HOURS` (720 h),
+creature or not, carries its remainder into later ordinary beats, again on
+equal windows and the epoch seed. AGENTS.md's "the town the story stores is
+the town every asked mind lived in" fails in both cases: residents the cast
+saw at window edges are elsewhere in the stored town, and a kill the stored
+town holds is in no cast memory. **The owner's choice:** run the skip grid
+and seed through `run_registry`, or have `charter_skip.live_in_charter` run
+the same predation rounds; and carry the skip context with a shortfall past
+720 h.
+
+<a id="unbuilt-1-253"></a>
+
+### 1.253 A quarrel's idle close, its 12 h reconcile and an offer whose effect lands nothing (2026-11-01 review)
+
+Review lane L11's owner decision 3, from `world_charter_generation_run` F6.
+No situation outlived a window of 2 h or more, because idleness was
+measured at the window's END; `charter_run.step` now measures it at the
+window's start, so a practice that acted in the last window lives into this
+one (`tests/test_a_situation_acted_in_last_window_lives_into_the_next.py`;
+wider than the finding: every charter's situations live a window longer at
+every window size, so more social acts and events come out of presim and
+ordinary advances). The constant itself, `charter_practice.IDLE_CLOSE_HOURS`
+= 2.0, is unchanged and the owner's. With quarrels alive a residual shows:
+`reconcile` is offered at 12 h and loses the actor's single act slot to an
+affordance whose effect lands nothing -- on the test fixture `tell`
+(utility 0.456) beat `reconcile` (0.409) and its effect returned '', so the
+accuser did nothing that window. **The owner's tuning:** the idle constant,
+the 12 h `reconcile` gate, and whether `enact` skips an offer whose effect is
+empty (or `_afford_tell` stops offering when there is nothing to tell).
+
+<a id="unbuilt-1-254"></a>
+
+### 1.254 A creature that never declared its sight sees (2026-11-01 review)
+
+`world_charter_behaviours` F3; review lane L11's owner decision 4. An
+authored `sight: false` was dropped from the creature card and a blind
+stalker acquired a figure's act as a witness. The closed sense card now
+carries `sight` (`charter_creature.SENSE_KEYS`), `body_receives_evidence`
+refuses an act to a body whose declared senses have no sight, and an
+unknown sense key is refused with a notice
+(`tests/test_a_blind_creature_sees_no_act.py`). But `sight` reads PRESENT
+when undeclared, unlike `hearing` and `scent`, because every creature
+authored before the field acted on sight. **The owner's decision:**
+declared-not-defaulted (as `hearing` and `scent` are), which would blind
+every existing creature story, or default-present as now.
+
+<a id="unbuilt-1-255"></a>
+
+### 1.255 A body the scene holds cannot be sent on a charter errand (2026-11-01 review)
+
+`world_charter_behaviours` F14; review lane L11's owner decision 5.
+`charter_move.continue_walks` ignored the lease `walk()` honours, so a body
+on loan to the scene was walked by the window; it now skips a leased body,
+and `charter_surgery.send_errand` REFUSES a leased body by name, which the
+Director's `_apply_charter_orders` reports to the Director -- where before
+it wrote a walk the next commit's lease dropped silently
+(`tests/test_a_window_walks_a_body_once_and_never_one_on_loan.py`). So an
+on-screen body can no longer be sent on an errand at all. **The owner's
+decision:** keep the refusal, or release the lease on dispatch -- which also
+needs the commit to drop the entity's scene rows
+(`persist/commit_scene_state.py`), or the next lease step re-leases it from
+the stale rows.
+
+<a id="unbuilt-1-256"></a>
+
+### 1.256 The paid off-screen tiers cannot run: retire them or revive them (2026-11-01 review)
+
+`world_offscreen_time` F11, confirmed; skipped by review lane L12c on
+instruction, nothing deleted. `living_world.LIVING_WORLD_APPROACHES = ()`
+(since 7140b9cc, 2026-09-20) makes `living_world_allows` False for every
+approach and depth, `LIVING_WORLD_BUILT = {}`, and `scene.dialogue_config`
+forces `offscreen_life`, `offscreen_cognition` and `max_offscreen_actors = 0`
+unconditionally. Dead in production in `world/offscreen.py` (2,319 lines):
+`stochastic_ticks`, `apply_plan_ops` (and no writer of `offscreen_plan_ops`),
+`advance_reactive_plans`, `compose_tick`, `_ProfileFallback` (never raised
+or caught), `full_agent_candidates`, `profile_candidates`,
+`schedule_profile_ticks`, `land_profile_ticks`, `agent_context`,
+`land_agent_tick`, `schedule_agent_ticks` and their helpers; in
+`world/living_world.py`, `LIVING_WORLD_DESCRIPTIONS`, `LIVING_WORLD_REQUIRES`,
+`normalize_living_world` (always `{}`), `effective_depth`,
+`living_world_levels`. Still live and to keep: `epoch_reasons`,
+`advance_epoch` (stamps the charter's `beat_id` every beat),
+`_reactive_due_crossed`, and living_world's `mint_consequences`,
+`fired_consequences_at`, `record_obligations`, `owed_history`,
+`attach_owed_history`. The published extension contract
+`provision_story(offscreen_life=..., living_world=...)` refuses its own
+guide's example and stores a value nothing reads (§1.276 on the platform
+side). **The owner's call** (REVIEW_2026_11_01 § 6.1 item 7): retire the
+tiers -- readers first, keys after (`DESIGN_OFFSCREEN_SUPERSEDED.md` §4) --
+or revive them. Until then `Design.md`, `AGENTS.md` and
+`docs/guides/LIVING_WORLD.md` say they are unreachable where they used to
+describe them as live.
+
+<a id="unbuilt-1-257"></a>
+
+### 1.257 A resident knows its own region's rooms, and a site's regions are flat (2026-11-01 review)
+
+`agents_character_background` F4. Every per-presence voice was handed every
+room of the scene by name. Review lane L6 measured and rejected the audit's
+"drop unentered planned stubs" -- most rooms in the owner's stories ARE
+undeveloped planned stubs (chat 179: 18 of 20; 172: 19 of 22; 174: 19 of
+21), so a priest would have known two room names in his own shrine house --
+and took instead: the rooms of the presence's own region
+(`regions.room_region`), plus every room one doorway off or in view from
+where it stands; a scene with no regions keeps every room
+(`background._presence_rooms`,
+`tests/test_a_presence_knows_the_rooms_of_its_own_place.py`). **The owner's
+look:** regions are flat, and chat 179 splits one site into shrine_house
+(12 rooms), shrine_grounds (6) and shrine_under (2), so a groundskeeper now
+knows the grounds and their doorways but not the house's rooms by name.
+Counting a site's sub-structures as one place needs a parent-region notion
+`world/regions.py` does not have.
+
+<a id="unbuilt-1-258"></a>
+
+### 1.258 A courier whose addressee exists and never comes waits at the gate forever (2026-11-01 review)
+
+`story_room_carriers` F20. Review lane L8b closed the measured class: a
+send addressed to nobody the story holds is refused by name, and a courier
+already at his gate whose addressee the story no longer holds ends
+`undelivered` (`couriers.UNDELIVERED`, freeing the slot; the message reaches
+nobody, the direction that adds no knowledge). What it skipped: a courier
+whose addressee EXISTS and never comes -- or whose route a door that never
+reopens holds -- still waits at the gate forever, holding one of
+`MAX_COURIERS` (6) slots. A wait in story time is the owner's number.
+**The owner's call:** a named `COURIER_WAIT_SECONDS`, after which an ARRIVED
+courier ends `undelivered` exactly as the addressed-to-nobody case does, or
+no bound.
+
+<a id="unbuilt-1-259"></a>
+
+### 1.259 A courier send or a posted notice needs no declaration from its sender (2026-11-01 review)
+
+The skipped half of `story_room_carriers` F8. Review lane L8b fixed the
+measured half -- a REFUSED send or post no longer files the invented claim
+in the sender's ledger (`tests/test_a_courier_and_a_notice_carry_only_what_happened.py`)
+-- and left the grounding half: a send or post by a sender who declared
+nothing this beat lands, though "the dispatch itself is a decision the mind
+never declared" (a telling, by contrast, needs a line). Refusing it needs a
+reader of the sender's own declaration (character step intents, the
+player's declared acts) that the carriers do not have, and it touches the
+owner's 2026-10-20 ruling that the Director writes what a body undergoes and
+never what it decides. **The owner's decision:** what counts as a sender's
+declaration of a dispatch.
 
 ## 2. Roadmap
 
@@ -3033,7 +3245,11 @@ does not do, and what the measurement left open:
 - **Spoor stands in play until the Director removes it or the next landing
   takes it down.** The registry's `until_hours` sweeps the record; the
   artifact follows on the next `land_snapshot`, so a beat between may show a
-  carcass the town has already forgotten.
+  carcass the town has already forgotten. (The removal half holds since
+  2026-11-01: a carcass the Director tore down came back at the next landing,
+  because the registry record and the artifact status were two stores of one
+  fact; `artifacts.post_spoor` no longer re-posts a removed uid --
+  `story_room_carriers` F7.)
 - **News reaches an office only through channels**, which is correct and is
   why a month of the small-town fixture shows one mobilisation in three arms:
   a posted herder who never leaves the pen never tells the reeve. The fixture's

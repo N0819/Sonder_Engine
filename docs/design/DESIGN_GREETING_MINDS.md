@@ -162,8 +162,11 @@ structural, never trusted to the model:
    is recorded (see visibility).
 3. **The existing `{{PLAYER}}`-naming guard stays**, deterministic, on
    knowledge seeds: a "secret" whose content names the player's slot is
-   force-flagged revealed, because knowledge about the player's own conduct
-   cannot be asymmetric against the player.
+   force-flagged revealed in every CHARACTER mind, because knowledge about the
+   player's own conduct cannot be asymmetric against the player -- never in
+   the player's own mind, which point 2 governs (2026-11-01: the guard had
+   force-revealed the player-mind seeds too, a leak;
+   `tests/test_a_player_mind_item_is_never_made_revealed.py`).
 4. **The identity floor applies to every string that enters a mind.**
    Belief text, stance notes, and mind-model subject keys pass
    `_substitute_player_slot` with the same handle the memory seeds use: the

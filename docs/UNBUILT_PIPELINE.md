@@ -50,7 +50,16 @@ of these things; nothing on the prose path does yet.
    the replay lanes -- none of them would have fired, and no beat wrote an
    awareness condition, so there is nothing yet to measure a false-positive
    rate on. Enable them on the first corpus that exercises them, and keep
-   the model repair off for beats with rows.
+   the model repair off for beats with rows. **One of them needs a ruling
+   first** (`agents_director_floors` F11, 2026-11-01): the release floor
+   frees the possessor of a thing untied, and "unties Hinami's hair ribbon"
+   and "unties Hinami's ropes" have the same grammar -- what decides it is
+   WHAT is possessed, which no possessive rule sees (and
+   `tests/test_restraint_exits.py` rightly pins サラはヒナミの縄をほどいた。 as a
+   release). A candidate rule is that a possessed thing frees its possessor
+   only when it is a restraint the floor's own `_RESTRAINT_KEYWORDS` names;
+   the subject side would also want a pack possessive
+   (`_POSSESSIVE_AFTER_NAME`, en `'s`, ja `の`), which neither pack has.
 4. **Rules the deleted sheets taught that no prose card carries.** The
    encoder's half landed 2026-09-28, en and ja, from the deleted sheets' own
    wording: the movement fields (`arrives`, `to_anchor`, `pace`) and a
@@ -69,7 +78,11 @@ of these things; nothing on the prose path does yet.
    the owner's resolve calls) -- and carries none of `dwellings`,
    `present_figures` (so no `answers`), `planning_needs` or `author_notes`.
    `planning_needs`, `author_notes` and `present_figures` without `answers`
-   reach the encoder only; `dwellings` and `answers` reach no call. So each
+   reach the encoder only; `dwellings` and `answers` reach no call (since
+   2026-11-01 `dwellings` is not even built: the resolve's staging payload,
+   which reached no model, was cut to the keys `_orch_extras`, `_gate_facts`
+   and `_causal_event_inputs` read -- review lane L7a, `agents_director_core`
+   E2). So each
    rule below needs its field handed to the author with it, which widens the
    Director's input on every beat that has one -- proposed shape: a sheet
    section per field, added only when the field is present, as the narrator's
@@ -87,7 +100,14 @@ of these things; nothing on the prose path does yet.
      only (`prose_author_sheet/11_planning_need.txt` before c452a50d);
    - the resolve-time author-notes duty, lost on 2026-09-12: "AN AUTHOR'S
      NOTE SAYS WHAT THE PLAN MEANS" is on the opening's sheet alone
-     (`prose_author_sheet/27_author_notes.txt` before c452a50d).
+     (`prose_author_sheet/27_author_notes.txt` before c452a50d);
+   - the beat's compiled lore and the standing time of day (found
+     2026-11-01, review lane L7a): `relevant_lore` (`common.lore_for`, the
+     beat's lore and rulebook rows) lived only in the resolve's dead staging
+     payload, so the prose author has never been handed it; and the
+     author's lean payload carries no time of day -- only the encoder's
+     spatial slice does (`director_fanout._time_of_day_beside`). Neither
+     widening was made without a ruling.
    Each is a payload field and a prompt edit to every story, which is the
    owner's to make.
 5. **Tooling.** `tools/contract_bench.py` benches no prose Director step (its
@@ -154,8 +174,11 @@ of these things; nothing on the prose path does yet.
       outputs pass the lenient `validate_llm_output`, which runs no semantic
       check), but ten schema-coercion tests validate strictly through them,
       so the cut is a move of each test to a live key first.
-      `_name_what_was_discarded` is NOT dead -- it names every step's
-      semantic errors -- and was wrongly listed here.
+      `_name_what_was_discarded` is dead in production as well: it returns
+      its error unchanged for every step key but `director_interpret`, and
+      production never validates that key strictly (corrected 2026-11-01,
+      `llm_schemas_prompts` F9; the earlier "NOT dead" line here was wrong).
+      Only tests reach it, so it goes with the branches above.
     - the `required_channels` and verdict branches in `director.py`'s
       dispatch code, which the prose path still runs: trace before cutting.
     - the ledger-notes layer (found while cutting): `note_key_targets`'
@@ -430,49 +453,6 @@ so the existing same-call repair fixes it before `_reconcile_interpretation`
 runs; and make `recon["repaired"]` require the re-check to actually pass, so
 the metric stops reporting 100% success on a 0% success rate.
 
-<a id="unbuilt-1-49"></a>
-
-### 1.49 Three things the prompt-card split made visible and did not change
-
-The 2026-08-29 split moved every prompt leaf out of
-`cards/system_prompts.json` into per-prompt `.txt` files
-(`language_runtime/card_source.py`). Byte identity was the acceptance
-criterion and it holds, so all three of these SHIPPED UNCHANGED. They were
-invisible inside an escaped 414 KB JSON string and are obvious in a file, and
-each is a judgement about prompt text rather than a refactor's business.
-
-**The one glued join among 31 specialist joins.**
-`specialists/body/chunks/conditions.txt` ends `"…and end what has ended."`
-with no terminator of its own, and `vitals` follows it in `body`'s `order`.
-A specialist sheet is `core + "".join(chunks in order)` with no separator, so
-the shipped English sheet reads `…has ended.BODILY CONDITION (only when…` —
-one sentence running into the next section header with no break at all. Every
-other one of the 31 joins carries its own terminator. Whether the model reads
-past it is unmeasured; the fix is one newline and a ledger line in
-`tests/data/prompt_cards_presplit/EXPECTED_DIVERGENCE.json`.
-
-**Two prose-author segments joined by a single trailing space.**
-`prose_author_sheet/20_world_pressure.txt` ends `"…an unrelated invention. "`
-and segment 21 begins `"WORLD PRESSURE — OPENING:"`, so the assembled sheet
-runs them together on one line. Same shape as above, same one-character fix,
-and now protected in the other direction: that space is load-bearing enough
-that `.editorconfig` disables trailing-whitespace trimming for these files and
-`test_assembled_card_matches_the_pre_split_reference` fails if it disappears.
-(`prose_author_sheet/16.txt` is a single newline and nothing else — the same
-class, but there the whitespace is doing the job correctly.)
-
-**Nothing checks that a `character_block_keys` marker still prefixes a line of
-the `character` body.** The 22 markers are matched with
-`stripped.startswith(marker)` against lines of `prompts/character.txt`
-(`llm/prompts.character_prompt`), and the match is what SUBTRACTS a block a
-character has no business receiving. Editing a heading in the body — now an
-easy, inviting edit, which is the point of the split — silently disarms its
-subtraction: no error, no warning, no failing test, just a block that stops
-being removed. The two files are deliberately kept in one place (the markers
-stayed inline in the index) precisely because the coupling is silent, but
-that is mitigation, not a check. A `project_check` rule asserting every marker
-prefixes some line of the body is cheap and is not written.
-
 <a id="unbuilt-1-59"></a>
 
 ### 1.59 A channel census over persisted `state_diff`s cannot see `phase_sources`
@@ -532,12 +512,28 @@ the perception redactor and the two narration fidelity checks all route through
 it. `_subject_opener` gained the matching admission: a title standing
 immediately before a name opens that name's sentence.
 
-**Still splitting on a bare period, and there are THREE, not four** (title
-corrected 2026-08-19; the body always said three): `common._VIEW_SENTENCE_SPLIT_RE`
-(the view deduper — a different contract, its split keeps the separators
-interleaved), `dressing/backdrops.py` and `tools/perception_retrieval.py`. **None
-of them decides what a mind receives**, so none can produce the chat 82 failure;
-they can only mis-count a sentence. Watch item, not a defect.
+**Re-counted 2026-11-01 (review lane L10).** The count of three was short:
+`language_runtime.referring.SENTENCE_END` was a fourth, and it DID decide what
+a mind receives -- a stranger label cut at "Capt." -- so it now reads
+`language_runtime.split_sentences`, the script-aware splitter the review
+landed, and so does `dressing/backdrops.py`. **Still splitting on a bare
+period:** `_VIEW_SENTENCE_SPLIT_RE` (the view deduper, now in
+`agents/common_scrubs.py` -- a different contract, its split keeps the
+separators interleaved), `tools/perception_retrieval.py`, and two the old
+count never named, `agents.director_evidence._SENTENCE_END` (row-order
+scoring) and `agents.story_planner._SENTENCE_END` (the Planner's folded first
+line). **None of them decides what a mind receives**, so none can produce the
+chat 82 failure; they can only mis-count a sentence. Watch item, not a
+defect. `agents.common_names.split_sentences`, the agents' own splitter, ate a
+closing `」` after `。` and cut a quotative; since 2026-11-01 (review lane L16)
+it hands text that ends its sentences in an unspaced script to
+`language_runtime.split_sentences` and keeps its old pattern for the rest.
+**The owner's call:** routing ENGLISH through the script-aware splitter too.
+Measured on 2,682 stored narrator and perception texts, the two disagree on
+850 English ones -- every sample a closing quote before the next sentence
+(`…on it." Your crotch…`), which the agents' pattern keeps together and
+`split_sentences` splits -- so routing English would re-segment about a third
+of the texts every sentence-reading guard sees.
 
 The token set is deliberately not every abbreviation — "etc." and "Ph.D."
 genuinely end sentences, and rejoining there welds two real ones together. It
@@ -579,12 +575,16 @@ because the entry still holds one quote; it costs the channel (the group
 degrades to `mixed`) and the attribution, both of which the loop already
 spends there.
 
-**Still open: the cap itself.** `composer._MAX_OBSERVATION_ATOMS` is 8 and is
-untouched — turn 29 delivered nine atoms a mind legitimately received, so SOME
-boundary was going to be spent whatever the ordering, and the reorder only
-chooses the cheapest one. Raising it trades narrator payload size against how
-often any boundary is spent at all, which is the owner's call rather than the
-workflow's.
+**A recognition is not a change either** (closed 2026-11-01, `agents_composer`
+F7): learning a body's name re-declared every pose arranged against that body
+as CHANGED, because the pose key hashed the relabelled text; it now hashes the
+authored arrangement.
+
+**The cap itself is gone** (c93ceea7, 2026-09-16; this paragraph called it
+untouched until the 2026-11-01 review found the name nowhere).
+`observations_from_render` now keeps one row per admitted span
+(`agents/composer_standing.py`: "There is no row-count cap here"), so no
+boundary is spent and the price order above no longer runs.
 
 **Not fixed: the `act_player` obligation marker asserts something false.**
 `{n}. {actor} did this (NOT yet on the page — the player described attempting
@@ -1631,12 +1631,12 @@ are in no sheet. Lowest cost of the set: the rendering half is
 deterministic and intact, so the result is prose that contradicts the
 contact ledger rather than a leak.
 
-**And the citations rotted with them.** Three comments in
-`agents/director.py` and three rows of `AGENTS.md` cite
-`prose_author_sheet/16.txt`, `/17_approach.txt` and `/20_world_pressure.txt`
-as live files; only `00.txt` exists. `make structure` is green through all
-six, so whatever checks docs for unresolvable references does not reach
-these.
+**The citations that rotted with them are gone** (checked 2026-11-01): no
+comment in `agents/director*.py` and no row of `AGENTS.md` names a
+`prose_author_sheet/` file any more, and the directory itself no longer
+exists in either pack. Why `make structure` could not see them stands:
+`check_docs_name_real_paths` judges only a token whose first segment is a
+top-level directory.
 
 **The fix is re-homing, not reverting.** Every orphan above has an obvious
 owner among the five hands or the engine floor, and (a) and (f) want code
@@ -1824,6 +1824,14 @@ Measured read-only on stored step times and call timelines (`variants.created`, 
 5. **The room author is still the beat's when it outlasts the encoder.** Its repair overlap is built; its own steps are sequential tool rounds (up to `MAX_ROOM_STEPS` = 8, 15.7 s on the replayed beat 22).
 6. **A write beside that writes nothing** (with writing beside on: 3 of 11 replayed, against 0 of 10 writes inside the call). Why is not known -- the write's upstream is not recorded, and the 3 took 2.0-2.5 s where landed writes took 3.1-5.0 s. After one, the next call on the prefix writes it beside itself again; on beat 24's resolve that write wrote nothing too and both repairs went plain ($0.141 for the stage). Writing inside on the next call instead (the rule this was first built with) costs its first token about 1-2 s (3.1 and 3.8 s measured, against about 2 s) and would have saved about $0.07 there; the choice belongs with the owner's on writing beside at all.
 7. **A connection that keeps its default name names every connection of its kind.** `+ Provider` names a new connection after its kind, and a name that is the kind is the kind-level token in the cache settings. Ticking `write beside` on such a connection turns writing beside on for every connection of that kind, and while it stays ticked no sibling can be unticked: the expansion that keeps the others as they were (`_set_cache_write_beside`) writes its name, the kind, back. Unticking or renaming it frees them. The cache box's deny list has had the same gap since before 2026-10-10: while such a connection's caching is off, a sibling's cannot be turned back on. Refusing the tick, or asking the host to rename the connection, while another of its kind exists is unbuilt; the owner's database has one OpenRouter connection, so neither has bitten.
+8. **The first crowd of a story costs one widening** (2026-11-01,
+   `prose_movement_rooms` F4). The record-fact gate made the create-capable
+   channels unreachable on a story with no record yet; they now stay in the
+   encoder's `requestable_tools` (`director_prose._MAKES_ITS_RECORD`), so a
+   first crowd, courier, telling or notice costs a second encoder call
+   instead of being lost. Asking their four decision questions on every beat
+   would save that call at the token cost the chat 153 measurement priced;
+   which to pay is the owner's.
 
 <a id="unbuilt-1-188"></a>
 
@@ -2213,9 +2221,36 @@ are (`director_interpret.authorial_offers`).
 - A follow written for a mind into another's act is refused and offered
   nothing (0 stored firings). The walk beside it, when it is written too,
   is offered.
-- An event recorded as a cast member's own conduct is dropped whole, and
-  a walk the player declared inside it goes with it. The conduct floor does
-  the same.
+- An event recorded as a cast member's own conduct is dropped whole only
+  when everything it writes is that mind's own
+  (`director_prose._writes_only_of`, 2026-11-01); an event that also writes
+  another subject's record, a thing placed beside the mind or any world
+  channel is kept with only the mind's walk taken out, so a walk the player
+  declared inside it now stays. The lighthouse shape (a walk plus the one
+  body's pose) still drops whole. The conduct floor still drops the whole
+  event.
+- A body the WORLD moves is no longer refused (2026-11-01): a mind is let go
+  when what bears it as the beat begins -- a holder up its `contained` chain,
+  a contact, its pose `support`, its station, its room or that room's
+  `parent_entity` -- is moved to the same room or taken out of the world by
+  the same event (`director_prose._walks_refused`,
+  `tests/test_a_body_borne_by_what_moves_is_moved_by_the_world.py`). **Owner's
+  call:** a bearer's new STATE carries nothing, because a state is a word and
+  not a place -- the audit's own fall, `entities{loft_boards: {state:
+  broken}}`, still refuses the drop and offers "in The Barn". Reading a
+  state change as a fall would read prose; the alternative is to tell the
+  encoder to write a floor that gives way as `remove_entities` (or the
+  boards' own position), which the floor already honours.
+- **Owner's call (prose_movement_rooms F7, logged 2026-11-01):** a mind
+  that declared ANYTHING at a stage may be walked by another's span, because
+  `_walks_refused` exempts every declarer (`key not in declarers`). The
+  `Design.md` row documents the exemption ("it has a declaration of its own
+  at that stage"); the 2026-10-07 ruling's text does not have it ("drop the
+  move ... unless a hold/carry links the two"). Measured: 0 stored firings
+  (81 cast moves at resolve, every one the mover's own). If the exemption is
+  ruled out, the change is one line -- the moved mind's own declaration must
+  carry the move -- and the audit's Hester/Coyle snippet (Coyle declared
+  "stays by the boat") is the test.
 - A departure written into another's act is no walk to this floor: a
   `cast_changes` row to dormant (control chat 1 idx 4: the boatman made
   dormant on the player's watching him go).
@@ -2292,6 +2327,129 @@ where it says"; `tests/test_the_account_and_the_world_agree.py`.
 Rhona in the kitchen, by the encoder's position or the floor's; turn 26 should
 offer the keeper both acts and tell the resolve and the narrator neither).
 
+<a id="unbuilt-1-229"></a>
+
+### 1.229 Another player's asserted rows never reach the interpret (2026-11-01 review)
+
+Found by review lane L7a while fixing the silent-beat guard; not in any audit
+report and not fixed. `director_interpret` keeps every player's rows in
+`out["_all_causal_sequence"]`, and `validate_llm_output` drops that key before
+any reader, so ANOTHER player's rows never become interpret spans and their
+asserted transforms are never folded at interpret. Confirmed by a throwaway
+run: a co-player "sits down" with a `poses` transform; his row is in
+`ledgers` and `state_assertions.poses` is None -- a multiplayer wrong scene
+on every beat a co-player asserts a change. The likely fix carries
+`_all_causal_sequence` across validation the way the resolve carries
+`player_act_warnings`; it was not made because it changes what the
+multiplayer onset holds and then meets `common.validated_player_state_assertions`,
+which validates against the primary player only. **The owner's call:** whether
+the onset holds a co-player's asserted transforms, and if so whether each is
+validated against its own player.
+
+<a id="unbuilt-1-230"></a>
+
+### 1.230 At autonomy 0 a contested beat asks only the flow reactors (2026-11-01 review)
+
+`agents_runtime_loops_mapping` F6, confirmed with every gate stubbed: at
+autonomy 0 a contested beat plans `reaction_loop` and no `character:<id>`
+steps (`runtime.build_plan`, on the comment that the loop "already gives
+every reactor its single character_step declaration"). The loop asks only
+`flow.reactors` widened by the acted-upon, cut to `max_reactors`, and
+`break`s after the first reaction needing resolution -- which a contested
+physical reaction usually is -- while the planner widened in hearers,
+engaged and enclosure bodies. Player swings at Ann, flow reactors Ann and
+Bob, Cy hears the shout next door: Ann dodges, and Bob and Cy never run (no
+appraisal, no memory of choosing, a silence the narrator renders). At
+autonomy above 0 the interaction loop picks them up. `loops.reaction_loop`'s
+docstring still says it runs on `contested or possible_reactors`; it is
+planned on `contested` only. The audit's fix is one reactor derivation for
+`build_plan`, `interaction_loop` and `reaction_loop`, and the per-character
+steps planned at autonomy 0 with the interaction loop's `already_reacted`
+dedup. Skipped by review lane L5 as **the owner's**: whether an autonomy-0
+contested beat should ask the bodies the planner widens in, and whether the
+loop's `break` after the first reaction needing resolution stands.
+
+<a id="unbuilt-1-231"></a>
+
+### 1.231 The duplicate-mint fold runs after the beat was perceived and narrated (2026-11-01 review)
+
+`persist_scene_entities` F5, confirmed by trace: `_fold_duplicate_mints`
+runs in `persist/commit_scene_state.prepare_scene_commit`, while
+`compose_beat_scene` -- the composition `perception_outcome`, the narrator
+and every memory episode read -- has no fold. So every view of the beat
+shows the mint beside the thing it duplicates (Flat 4B's `door_buzzer` and
+`intercom_buzzer`), the world keeps one, and memories cite a thing that no
+longer exists; `docs/guides/PIPELINE.md`'s "the two sides cannot disagree by
+construction" is false for duplicate mints. REVIEW_2026-09-07 A67's rule
+was "fold on the DIFF before the merge"; the `_apply_entity_renames` half
+landed, the timing did not. The fix would run the fold in
+`compose_beat_scene` against `prev_scene` and the diff before
+`merge_scene_with_diff`. Review lane L4 logged it and did not make it:
+**the owner's call**, because the fold would then shape what perception and
+the narrator see this beat -- two buzzers become one in the prose, a change
+the player can see.
+
+<a id="unbuilt-1-232"></a>
+
+### 1.232 Dice and ability modifiers cannot run on the prose path (2026-11-01 review)
+
+`agents_director_core` F6: no card in either pack asks the encoder for
+`ability` or `difficulty`, so `flow.dice` is empty on every prose beat (0
+of 149 measured), and on a silent beat it is now emptied with the rest
+(review lane L7a). The other half -- `story.scene._ability_mod` matched
+display names while a row's actor is an identity handle -- was fixed by
+review lane L8a (`tests/test_a_dice_actor_handle_reaches_its_own_abilities.py`),
+so a roll would now find its modifier if one were ever asked for. **The
+owner's call:** teach the encoder the two fields in both packs, or retire
+the dice path.
+
+<a id="unbuilt-1-233"></a>
+
+### 1.233 The interpret's preview shows a crossing the resolve has not ruled on (2026-11-01 review)
+
+`agents_director_core` F11. The restraint half is fixed (review lane L7a:
+`director._block_restrained_moves` now runs over the interpret's
+`state_assertions` before the onset copy, so a bound body no longer walks
+off in the preview). The REACHABILITY half was assessed and left: at resolve
+the declared mover is spared by the physical floor (`_spared`) because the
+movement backstop has already ruled on that crossing, and running
+`director_movement._unreachable_position_writes` at interpret would pre-empt
+that ruling for the commonest interpret position write and needs the
+charter view, `declared_moves` and `_spared` rebuilt at the wrong stage.
+What remains is narrow -- a non-mover's position written through a WALL at
+interpret and previewed for one beat. **The owner's call:** whether the
+onset preview may show a crossing the resolve has not ruled on.
+
+<a id="unbuilt-1-234"></a>
+
+### 1.234 An interpret mint can be stood where a resolve span's actor stood (2026-11-01 review)
+
+The residual of `agents_director_core` F7 (PLAUSIBLE, not fixed). The
+reported half is fixed -- a resolve span is now judged by its own records
+(`director_evidence.span_result_findings(..., exclude=)`), which ended chat
+177 t22's three bogus `written_by_non_owner` notes and every
+`unowned_channel` note for speech. But `director_evidence.span_mint_rooms`
+and `beat_worlds` key worlds by `chrono_id` across BOTH stages' causal
+steps, so an unplaced mint from the interpret citing chrono k can be stood
+where resolve span k's actor stood. The fix needs stage-qualified step ids
+in `beat_worlds`, and a record carries no stage today; review lane L7a left
+it **for a ruling** on whether records gain a stage.
+
+<a id="unbuilt-1-280"></a>
+
+### 1.280 `realized_event_ids` has had no producer since the prompt cards were split (2026-11-01 review)
+
+`agents_common` F20. `common_acts.scan_claims_for` and
+`adjudicated_player_action_text` read a fallback keyed on
+`realized_event_ids`, but no card asks for it -- the encoder's
+`claim_dispositions` chunk asks for `{claim_id, status, reason?}` -- and the
+only writers of the key are tests (`test_sequence_causality.py`,
+`test_narrator_world_fidelity.py`, `test_claim_disposition_single_scan.py`,
+`test_perception_intent_leak.py`). Review lane L16 corrected the two
+docstrings that called it THE mechanism and left the code: dropping the
+branch changes pinned tests. **The owner's decision:** restore the field to
+the encoder card, or drop the fallback and move its tests.
+
 ## 2. Roadmap
 
 <a id="unbuilt-2-18"></a>
@@ -2312,9 +2470,12 @@ measurements stay in `design_notes/19-director-orchestration.md`.
 
 ### 3.1 Prose matching as a boundary
 
-Materially improved — `_surface_translate_event` now fails closed, speaker
-attribution is structured, `_redact_concealed_from_event` is casefolded,
-word-anchored and pronoun-continuation-aware — but **not eliminated**.
+Materially improved — speaker attribution is structured,
+`_redact_concealed_from_event` is casefolded, word-anchored and
+pronoun-continuation-aware — but **not eliminated**. (`_surface_translate_event`,
+once listed here as a boundary that fails closed, is no boundary: nothing in
+production calls it, only tests and the perception facade's export --
+`agents_perception` audit F10, 2026-11-01.)
 
 - **C1 — quoted spans are an identity smuggling channel**, and the whitelist
   that guards them is loose: `body == L or body in L or L in body`, so any
@@ -2498,7 +2659,13 @@ alone — moved to
   Idempotency itself is closed and by a better key than the design named: each
   seed carries `greeting_seed:<sha1(content)[:16]>` and the batch upserts on
   `(chat, character, event_key)`, so a retried or partially-failed launch
-  updates one row rather than writing a second, and editing or reordering the
+  updates one row rather than writing a second (until 2026-11-01 that held
+  for the memory seeds alone: a resumed quick start re-seeded every mind's
+  beliefs, relationship-ledger rows and the player's history; the minds
+  stage now writes a `greeting_minds` record as its last act and a resume
+  goes on after it -- `tests/test_a_resumed_quick_start_seeds_each_mind_once.py`.
+  A failure inside `_seed_minds`, before that record, can still repeat part
+  of it), and editing or reordering the
   greeting cannot orphan the old row the way a positional key would. It
   deliberately does not dedupe ACROSS launches — `start_story` creates a fresh
   chat each time, so a second launch is a different story entitled to its own
@@ -2509,6 +2676,8 @@ alone — moved to
 - **The verbatim-preservation invariant test.** The knowledge-boundary half of
   this pair now exists and is stronger than the design asked for —
   `tests/test_greeting_minds.py` pins the player-naming forced reveal in
-  every mind, the identity floor on a stranger start, and the refusal of
+  every CHARACTER mind (the player's own mind is pinned the other way since
+  2026-11-01: `tests/test_a_player_mind_item_is_never_made_revealed.py`),
+  the identity floor on a stranger start, and the refusal of
   player affect/stances with the refusal made visible — but nothing asserts
   that imported greeting prose reaches the page byte-for-byte.

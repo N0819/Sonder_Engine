@@ -169,7 +169,7 @@ strain never moving a drive, not success moving it).
 - **Where the line still misses.** In English an end that is one act at a place ("A drink at the Anchor before I face Coyle again" / "I've had a drink at the Anchor", 0.17) and a deadline taken to a doctor (0.49); two many-step procedures read as ways ("ring the duty officer and report the breach", "write up the incident report"), and among the stored adoptions so does the three-minute observation window in the lift, whose end is reaching the shelter gate (0.88); an investigation whose end is one fact learned can read as one thing to find out (2 of 6 written long investigations, 0.39 and 0.46), the price of keeping the corpus's investigations out. In Japanese five of the 49 journeys miss and three errands sent, left or fetched read as ways, and `note_kind` reads seven of the 49 journeys as something other than a commitment before the deliberation is asked.
 - **Japanese is probed only on its own batteries**, never in situ (no Japanese story has played on the bare card).
 - **A kept reminder does not steer.** An aim with no room among a mind's intentions is kept in its notebook in its own words; it is not offered back as an intention when a slot frees.
-- **Probation and service are unmeasured under the bare contract**: nothing has yet been held long enough to establish or lapse, and the restored drift marker has never fired in the corpus.
+- **Probation and service are unmeasured under the bare contract**: nothing has yet been held long enough to establish or lapse, and the restored drift marker has never fired in the corpus. One mechanism beneath it is closed (2026-11-01, `mind_affect_psychology` F8): the read-back cut its aims at `MAX_AIMS` (5) by position, so a held project behind four steering intentions was never offered and could neither be served nor struck; every held project is now offered and the cap is filled around it (`character_jev.aims_offered`, read by `character_bare.holding_from`; `tests/test_a_held_project_is_always_an_aim.py`). So is its sibling (F17): a struck project with no `satisfied_when`, read back as "done", stayed held; it is now given up (`tests/test_a_project_with_no_end_is_given_up_when_struck.py`).
 
 The record below is the state before 2026-10-09.
 
@@ -591,6 +591,78 @@ subject's verbs rightly left; quoted spans changed 0. What it leaves:
   clause's subject), so the fallback keeps today's line. "I saw Hinami's
   tails bristle" is the line it means; not built.
 
+<a id="unbuilt-1-247"></a>
+
+### 1.247 The mood's home reads a card's arousal on two scales (2026-11-01 review)
+
+`mind_affect_psychology` F10, skipped by review lane L9 with the evidence
+for a ruling. Two conventions live in the engine for one field. On 0..1:
+`affect_pass.home_mood` (reads `arousal*2-1`), `affect_pass.given_affect`
+(emits `(arousal+1)/2`, the same commit 3f57c88c) and the card editor's
+label "Mood arousal (0..1)" (`static/js/editors.js`). Signed, on -1..1:
+`mind/affect.py` (`_va_pair` clamps to [-1, 1]), `story/greetings.py` (seeds
+on [-1, 1]) and the card template, where `"arousal": 0.0` IS "neutral".
+Over the 70 live cards: 15 at exactly 0, 2 negative, 53 between 0.1 and 0.9
+(12 at 0.3, 10 at 0.2, 8 at 0.4) -- each read differently under each scale.
+It cannot be fixed at the reader alone: `character_initial_active_state`
+stores an unset value as 0.0, indistinguishable from an authored 0. **The
+owner's decision:** pick one scale; then convert at `home_mood` and
+`given_affect`, and match the editor label and the schema default.
+
+<a id="unbuilt-1-248"></a>
+
+### 1.248 A mind's notes about people fade on story minutes at rates authored in turns (2026-11-01 review)
+
+`mind_affect_psychology` F9, assessed by review lane L9 and skipped: the
+rates are the owner's. The theory-of-mind half-lives were authored as TURNS
+on 2026-07-19, when `theory_of_mind._elapsed` returned turns (observation 5,
+stated_fact 18, emotion 6, goal 45, second_order 75, trait/identity 400).
+Commit 032f8569 (2026-07-27) made `_elapsed` return MINUTES whenever
+`elapsed_seconds` is given -- and the commit always gives it -- without
+rescaling the numbers; the module's later comment justifies minutes for
+EMOTION only ("a belief about how someone feels should fade in lived
+time"). So the durable kinds' prune ages -- a trait about 21 h, what
+happened about 25 h, a stated fact about 75 minutes -- are turn-calibrated
+numbers read in a unit they were not chosen in, and against "good memory is
+the goal" (`mind/notebook.py`) the minute reading deletes a note the mind
+wrote within the evening. **The owner's choice of replacement:** bound the
+durable kinds' decay per beat (as `_STRAIN_DECAY_FLOOR_PER_BEAT` bounds
+strain), fade only emotion and observation on the clock, or rescale.
+(`story/greetings.py`'s greeting-seed clock passes no `elapsed_seconds` and
+was not traced.)
+
+<a id="unbuilt-1-249"></a>
+
+### 1.249 Every recent-lane memory is re-delivered and felt again each beat (2026-11-01 review)
+
+The skipped half of `mind_affect_psychology` F11. Review lane L9 fixed the
+measured defect -- a memory's habituation landed once per ROUND, so a beat
+with two rounds felt it twice (`affect_pass` `Felt.landed`;
+`tests/test_a_memory_is_felt_once_a_beat.py`). What it left: every
+recent-lane row is re-delivered each beat for 8 turns and lands each time,
+so a memory nobody asked for climbs toward the habituation ceiling in about
+three beats. Until 2026-11-01 this bit harder than the audit's simulation
+assumed, because in a clocked story the mood clock never advanced and no
+habit ever rested; that is fixed (review lane L4,
+`tests/test_the_mood_clock_runs_with_the_story_clock.py`). **The owner's
+call (the audit's words):** whether recent-lane delivery lands at all --
+whether an unasked re-delivery is a recall.
+
+<a id="unbuilt-1-250"></a>
+
+### 1.250 `decision.dialogue_mode` reaches every mind and no card explains it (2026-11-01 review)
+
+`agents_character_background` F15. Two Director flags rode every
+character payload's `decision` block with no card section in either pack
+explaining them (grep: zero hits). Review lane L6 dropped
+`deep_tom_requested` -- `flow.tom_triggers` is the Director's judgement over
+the whole beat, acts the mind never perceived included, a Director-derived
+signal with no channel -- and kept the loop's use of `tom_triggers` for
+speaker order. `dialogue_mode` is the same unexplained shape but carries
+nothing this mind could not perceive (people are talking), so it stays.
+**The owner's decision:** gate a card section on `dialogue_mode`, or drop
+it.
+
 ## 2. Roadmap
 
 <a id="unbuilt-2-2"></a>
@@ -908,7 +980,13 @@ haunting warning above for the PROMOTION case only; characters authored with
 a past, and the retrieval-layer plumbing this entry is really about, are
 untouched. Its firewall tests (unheard blame does not cross, the register
 does not cross) are the promotion-leak tests
-`DESIGN_INSTITUTIONS_AND_UPKEEP.md` §12a called for.
+`DESIGN_INSTITUTIONS_AND_UPKEEP.md` §12a called for. Since 2026-11-01 its
+memory CONTENT names people, rooms and posts as the voice knew them --
+"heard from gate_watch:0002" and a figure's canonical name in a body that
+only saw "the slight woman" were engine keys written as prose
+(`world_charter_behaviours` F10,
+`tests/test_a_promoted_memory_names_people_as_the_mind_knew_them.py`); the
+routing fields stay keys.
 
 **Several story-start slices have since landed (2026-08-22), and narrow rather
 than close this entry.** `story.history_routing` now resolves conservative
@@ -1793,6 +1871,19 @@ note's remaining owner decisions are the list. Measured in
 [`JEV_MEMORY_PROBE_2026_09_26.md`](experiments/JEV_MEMORY_PROBE_2026_09_26.md);
 instruments `tools/jev_*.py`.
 
+**The concern-settle check: ruled 2026-10-05, not built** (registered
+2026-11-01 from `mind_affect_psychology` F4, a corruption relative to the
+ruling). Every beat the read-back asks of each held concern "Is it settled
+now?" (`character_jev`, the `concern:{k}` question) and
+`character_bare` drops a concern answered yes from the list the commit
+stores -- no memory row, no reason, nothing a later beat can reopen by name.
+The owner's ruling of 2026-10-05: the character strikes only, every
+retirement is filed, and the unprompted check that silently deletes a
+concern goes; the same ruling held the concern build for the owner's go,
+and `DESIGN_JEV_CHARACTER_PASS.md` still describes the per-beat check as the
+design. When it is built: a retirement is a filed memory row, the check
+goes, and a concern the reply did not strike survives a "yes".
+
 <a id="unbuilt-6-17"></a>
 
 ### 6.17 The bare character contract — [`DESIGN_JEV_CHARACTER_PASS.md`](design/DESIGN_JEV_CHARACTER_PASS.md)
@@ -2019,3 +2110,12 @@ The character read-back's volume question asks "How loudly did you say it?" and 
 **2026-10-20, the hearing rule** (`docs/design/DESIGN_SOUND_FIELD.md` § 11): the solver (`spatial_sound_field.pitched_level_db`) now returns the quietest WORD the rule carries to the addressee whole -- a whisper within two paces, a mutter at three, an ordinary voice across a room, a raised one through a shut door from farther off -- so a line can be pitched below the room only within breath's reach; beyond it the room hears an ordinary voice. An unsolved `pitched` word is read as an ordinary voice by every reader (`spatial_senses._volume_word`), as the sound field always read it; the edge rule had read it as nothing through an opening. The quiet fallback this entry asks for is still the owner's.
 
 **2026-10-20, the ear rung** (`DESIGN_SOUND_FIELD.md` § 11.9): the read-back offers `ear` -- "Into one person's ear, your lips at it." -- below the whisper, which now reads "In a whisper, for whoever is within arm's reach." (en + ja; the option KEY is the volume the line carries). An `ear` line reaches its addressee alone, so it needs the addressee this entry says the read-back cannot always place: a `to` the roster does not resolve leaves `targets` empty and the line reaches nobody. Both options want a Jev probe in each pack before they are trusted.
+
+**2026-11-01, the alias table** (`llm_schemas_prompts` F2):
+`schemas.normalize_speech_volume` now FOLLOWS THE ENCODER CARD -- `soft`,
+`softly`, `excited`, `enthusiastic` and the card's own `breathy`, `shaky`,
+`murmured`, `moaned` read `normal` (soft and softly had folded to a mutter,
+the excited pair to loud), and an unknown word still reads `normal` but is
+now said on the step. Left for the owner with the quiet fallback: whether a
+member's inflections fold (`whispered` -> whisper, "pitched low, only for
+Hinami" -> pitched).

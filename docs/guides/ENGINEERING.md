@@ -794,9 +794,14 @@ Narrator — hides the defect and creates a second one.
 ## 13. Working on it
 
 ```bash
-make check      # compile + map freshness + structure + full tests
-make check-fast # the same, minus database-backed slow tests
+make stack      # which interpreter and pinned versions a verdict is about
+make check      # stack + compile + map (regenerated) + structure + full tests
+make check-fast # stack + compile + structure (the map only verified) + full tests
 ```
+
+Both tiers run every test, on the checkout's `.venv` when there is one
+(`docs/guides/TESTING.md`); `check-fast` no longer skips the database-backed
+suites, which are the persistence and firewall tests.
 
 `make check` treats a stale `CODE_MAP.md`, a duplicated top-level symbol, or
 leftover patch-debris markers as hard failures. Reproduce a bug with a focused

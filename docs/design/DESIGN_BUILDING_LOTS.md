@@ -12,7 +12,9 @@ What is left is `UNBUILT_WORLD.md` §2.43 (the lots bullet).
 One planned room standing for a whole building nobody has been inside yet:
 a row of the registry like any planned room, carrying a `lot` record
 (`world/lots.py`, `normalize_lot`) -- `storeys` above the ground (1 to
-`LOT_STOREYS_MAX`, 4; left out for the architect to choose) and `cellar`.
+`LOT_STOREYS_MAX`, 4; left out for the architect to choose, and since
+2026-11-01 its answer is held to the same 4) and `cellar` (a lot with none
+refuses a room at level -1).
 The rest of the lot is the plan's ordinary fields: its name is the
 building's, its purpose says what the building is and who keeps it, its
 `far_look` how it reads from outside, its `extent` its footprint in paces,
@@ -59,8 +61,8 @@ sleep in each room people sleep in.
 
 Code holds the answer (`planned_rooms_of`): at most `LOT_ROOMS_MAX` (14)
 rooms; one entry on the ground storey; a join to a room the answer does not
-hold, a stair past a neighbouring storey and a room no join reaches are set
-aside and said. The entry keeps the lot's uid, name, far look, fixtures and
+hold, a stair past a neighbouring storey, a room no join reaches and (since
+2026-11-01) a room on a storey the lot does not have are set aside and said. The entry keeps the lot's uid, name, far look, fixtures and
 ways onto the ground, and takes its own purpose; the lot's purpose and
 footprint move onto its record (`building`, `footprint`) with the turn it was
 expanded. Every other room is a new planned room of the lot's part of the map,
@@ -135,7 +137,7 @@ beat invented the places the plan held (`UNBUILT_WORLD.md` §2.43).
 
 | Constant | Value | What it bounds |
 |---|---|---|
-| `world.lots.LOT_STOREYS_MAX` | 4 | storeys a lot may ask for |
+| `world.lots.LOT_STOREYS_MAX` | 4 | storeys a lot may ask for, and the architect's answer for a lot that asked for none (2026-11-01) |
 | `world.lots.LOT_ROOMS_MAX` | 14 | rooms one expansion plants |
 | `agents.director_lots.LOTS_PER_RUN` | 1 | lots expanded per run of the rooms-in-view job |
 

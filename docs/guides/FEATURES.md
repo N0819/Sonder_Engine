@@ -633,8 +633,11 @@ legitimately perceive, learn, remember or infer.
   longer copies it. The story reads the library, and what it changes about an
   entry (an edit made from inside the story, a lock) is kept as the story's
   own reading, shown with a `story edit` badge and revertible; an entry added
-  from inside a story lands in the story's canon book. Every existing copy is
-  converted once at start-up.
+  from inside a story with "+ Entry" lands in the story's canon book. Every
+  other write to a library book made with a story open -- generated entries,
+  the book's own fields, a move, a link, an applied plan -- still changes the
+  LIBRARY, read by every story that attaches it, and the workspace now asks
+  first and says so. Every existing copy is converted once at start-up.
 - **Canon lock** — Lock an entry so nothing may rewrite it; entries settle into
   locked canon on their own once they are old enough. *(partial)*
 - **Books that follow a thing** — A book pinned to a ship or building reports

@@ -62,7 +62,7 @@ One row in `memories` (`core/db.py`). The fields that do work:
 | `embedding`, `cue_embedding` | Two float32 blobs (§4). |
 | `embedding_model`, `embedding_dim` | Which model made them. A mismatch scores 0.0 forever (§9). |
 | `archived` | Folded into a summary and retired from RECENT-buffer and consolidation reads. Still retrievable: `search_memories` passes `include_archived=True`, so archiving removes a row from the rolling window, never from recall. |
-| `event_key` | Idempotency key. Re-minting the same key UPDATEs instead of inserting. |
+| `event_key` | Idempotency key. Re-minting the same key UPDATEs instead of inserting, and keeps what the mind made of the memory that the new mint does not state -- its importance, disputes, feelings, `about` and `supersedes` (2026-11-01: a re-mint had wiped them, `mind_memory` F7). |
 
 `access_count` / `last_accessed` are written by `search_memories` and read by
 nothing in the ranking. They are instrumentation.
@@ -565,6 +565,13 @@ a `TypeError` rather than a leak.
 The remaining arguments (`since_turn_idx`, `require_turn_idx`) only ever
 *narrow*. None can readmit a row the filters excluded, which is what keeps this
 a seam rather than a configurable query builder.
+
+**Summaries obey the same frame rule** (2026-11-01, `mind_memory` F1: they
+had none, so a past era's native read a window of a city falling ten years
+before it fell). `memory.visible_summary_rows` gates every window by
+`frames.is_memory_visible` after the turn cutoff and the couple-frame
+resolution `visible_memory_rows` applies; `get_memory_summary`,
+`search_memory_summaries` and the origin lane read through it.
 
 **The turn cutoff (audit F1).** `search_memories` drops every row with
 `turn_idx >= current_turn_idx` before scoring. A mind deciding turn N must never

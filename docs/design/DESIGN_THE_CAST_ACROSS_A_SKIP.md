@@ -376,9 +376,13 @@ clipped to the span (the farm daughter's overrun).
 - A stretch that cannot happen fails with a typed reason: no route, a shut way
   the mind cannot pass, or a thing it needs and does not hold.
 
-**Company.** Two minds in the same room, or at the same off-map label, over
-overlapping time each receive the other's `doing`, never their `why`. This is
-a per-observer log, the firewall's shape.
+**Company.** Two minds in the same room, or at the same off-map label where
+each names the other in its own `with`, over overlapping time each receive
+the other's `doing`, never their `why`. This is a per-observer log, the
+firewall's shape. (The label clause changed 2026-11-01, `world_offscreen_time`
+F1: two minds each "home" -- one label, two different homes -- were told each
+other's doings; off the map nothing says two bodies at one word are in one
+place, so only their own `with` does.)
 
 **The player** is placed only where the account places them (the interpret's
 typed events).
@@ -414,10 +418,11 @@ applied at the far end beside the placements, in time order across minds,
 through the beat's own floors (the transfer floor, the merge's containment
 rules, and a reach floor of its own: a thing where the row was spent, on the
 mind, or used by its stretch, never a body), under the beat's own diff. A
-`failed`, `not_known`, off-map or asleep row changes nothing; no body is
-placed by it; the memories read the same rows. What a mind's work makes,
-destroys or consumes, and a `not_known` row's own part, are not built
-(`docs/UNBUILT_LIVING_WORLD.md` § 1.99d).*
+`failed`, off-map or asleep row changes nothing; a `not_known` row lays the
+mind's own part as far as it went (1342bbde, 2026-10-22); no body is placed by
+it; the memories read the same rows. What a mind's work makes, destroys or
+consumes is not built, and the memory of a `not_known` row's own part can
+still deny it (`docs/UNBUILT_LIVING_WORLD.md` § 1.99d).*
 
 **Weather.** Each stretch carries the sky where the mind stood, from the
 weather model stepped once per drift window (F20's fix).
@@ -542,8 +547,9 @@ the past. What it leaves is `docs/UNBUILT_LIVING_WORLD.md`
   - the town charter (case (a)): per-body `simulate_bound`, the itinerary its
     planners yield to, the hand-back;
   - things moved in a skip -- built 2026-10-22 for a mind's own completed work on
-    the map (`agents/skip_work.py`, § 4.4's "Things"); what work makes,
-    destroys or consumes, and a `not_known` row's own part, remain;
+    the map (`agents/skip_work.py`, § 4.4's "Things"), and a `not_known` row's
+    own part on 2026-10-22 (1342bbde); what work makes, destroys or consumes
+    remains;
   - crediting projects and intentions;
   - dormant cast at every skip;
   - bubbles.
