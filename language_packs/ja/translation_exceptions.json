@@ -23,7 +23,6 @@
   "${loreBookTypeIcon(book.book_type)} ${book.name}": "placeholders and punctuation only — no prose to translate",
   "${loreBookTypeIcon(lb.book_type)} ${lb.name}": "placeholders and punctuation only — no prose to translate",
   "${loreBookTypeIcon(state.selected.book_type)}": "placeholders and punctuation only — no prose to translate",
-  "${mems.length}": "placeholders and punctuation only — no prose to translate",
   "${n.name} — ${openHint}": "a room name and an already-translated hint joined by punctuation",
   "${name} (${id})": "placeholders and punctuation only — no prose to translate",
   "${name} — ${n.name}": "a body's name and a room's name joined by punctuation",
@@ -93,7 +92,6 @@
   "LCARS": "brand, unit, or protocol name, identical in every language",
   "MB": "brand, unit, or protocol name, identical in every language",
   "no location is being designed right now, and these tools work only inside a launch's location pass. A place asked for anywhere else is laid out as a package: `plan_rooms` under a mandate that permits it (a grant the player's own line can carry), drafted with `new_package` and `draft_operation`, then validated and published": "engine refusal text for the Writers' Room's location-designer tools, raised in story/room_tools.py and returned to the Story Planner inside the tool result; nothing on that path reads the catalog, so a Japanese value would be inert -- docs/UNBUILT_PIPELINE.md § 1.165",
-  "NSFW:": "brand, unit, or protocol name, identical in every language",
   "OK": "brand, unit, or protocol name, identical in every language",
   "PATCH": "brand, unit, or protocol name, identical in every language",
   "POST": "brand, unit, or protocol name, identical in every language",
@@ -128,7 +126,6 @@
   "border-color:${swatches[2] || \"#888\"}": "CSS declarations handed to a style attribute",
   "character-${index + 1}": "browser-only character key kept identical for payload routing",
   "character_bg / character_mid / character_major": "canonical engine identifier",
-  "chat-${S.chatId}-debug.json": "download filename — the placeholder and the .json extension must survive verbatim",
   "css": "canonical engine identifier",
   "cursor:pointer;font-size:12px": "CSS declarations handed to a style attribute",
   "dim wb-map-hint": "a CSS class list",
@@ -336,5 +333,6 @@
   "wb-exit wb-window": "CSS class names -- no prose to translate",
   "wb-exit wb-window small": "CSS class names -- no prose to translate",
   "wb-legend-mark wb-plan-swatch planned": "CSS class names -- no prose to translate",
-  "wb-map-svg wb-room-map wb-room-plan": "CSS class names -- no prose to translate"
+  "wb-map-svg wb-room-map wb-room-plan": "CSS class names -- no prose to translate",
+  "Tab": "keyboard key name, matched against KeyboardEvent.key"
 }
