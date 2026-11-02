@@ -33,6 +33,7 @@ import agents.mapping as mapping
 from agents.common import rooms_in_view
 from agents.mapping import rulebook_rows
 from core.db import wset
+from tests.helpers import patch_seam
 from world.charter_model import normalize_charter
 from world.charter_runtime import save_registry
 
@@ -130,8 +131,9 @@ class TestTheCharterIsWalkedOncePerAperture:
 
         walks = []
         real = common.present_charter_figures
-        monkeypatch.setattr(common, "present_charter_figures",
-                            lambda *a, **k: walks.append(a) or real(*a, **k))
+        patch_seam(monkeypatch, "agents.common_figures",
+                   "present_charter_figures",
+                   lambda *a, **k: walks.append(a) or real(*a, **k))
         assert common.figures_in_view(ctx, {}, {"room_02"}) == first
         assert walks == [], "the same aperture is one walk"
         common.figures_in_view(ctx, {}, {"room_29"})
@@ -163,8 +165,9 @@ class TestTheCharterIsWalkedOncePerAperture:
     def test_an_empty_aperture_asks_nothing(self, temp_db, monkeypatch):
         import agents.common as common
         cid = _chat(temp_db)
-        monkeypatch.setattr(common, "present_charter_figures",
-                            lambda *a, **k: pytest.fail("walked an empty set"))
+        patch_seam(monkeypatch, "agents.common_figures",
+                   "present_charter_figures",
+                   lambda *a, **k: pytest.fail("walked an empty set"))
         assert common.figures_in_view(self._Ctx(cid), {}, set()) == []
 
 

@@ -467,13 +467,14 @@ def test_a_line_nobody_stood_to_hear_is_recorded_not_alarmed(temp_db, monkeypatc
     were a character's own lines with no one else in the frame -- nothing
     refused them and nothing was at fault. With the listener unplaced, the
     line had no audience, and that is a decision, not a warning."""
-    import agents.common as common
+    from tests.helpers import patch_seam
     ctx = _beat(temp_db)
     scene = json.loads(json.dumps(BEFORE))
     scene["positions"].pop("Hinami")
     scene["stations"].pop("Hinami")
     temp_db.wset(ctx.chat.id, "scene", scene)
-    monkeypatch.setattr(common, "_resolve_player_room", lambda *a, **k: None)
+    patch_seam(monkeypatch, "agents.common_figures", "_resolve_player_room",
+               lambda *a, **k: None)
     perception_outcome(ctx, "n0")
     assert not [w for w in (ctx.warnings or []) if "reached no view" in w], (
         ctx.warnings)

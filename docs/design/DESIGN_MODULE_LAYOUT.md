@@ -10,7 +10,9 @@ Two jobs are described here, and the argument of this note is that they are
 1. **Split the three monoliths** (`world/spatial.py`, `persist/commit.py`,
    `agents/director.py` — 24,783 lines between them) behind re-export facades,
    so no import path anywhere changes. A FOURTH followed on 2026-08-19,
-   `mind/memory.py` at 5,676 lines (`docs/design/SPLIT_MEMORY.md`) — not one of
+   `mind/memory.py` at 5,676 lines (`docs/design/SPLIT_MEMORY.md`), and a FIFTH
+   on 2026-11-01, `agents/common.py` at 12,971 lines into sixteen siblings
+   (`docs/design/SPLIT_COMMON.md`, applied by a tool rather than by hand) — not one of
    the three this note sized, and the argument applied to it unchanged.
 2. **Group the tree** into subsystem packages, so the repository root stops
    being 55 `.py` files, and rewrite the 2,544 import statements that names

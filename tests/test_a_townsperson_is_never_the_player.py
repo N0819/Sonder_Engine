@@ -9,6 +9,7 @@ over the run, none in the round before.
 import json
 
 import agents.common as common
+import agents.common_figures as common_figures
 from story.character_schema import default_character_data
 
 
@@ -27,7 +28,7 @@ CAST = [{"id": 1, "sheet": json.dumps(default_character_data("Sal Weatherby"))}]
 
 
 def test_two_townspeople_in_two_rooms_ask_no_model(monkeypatch):
-    monkeypatch.setattr(common, "_llm_resolve_player_room",
+    monkeypatch.setattr(common_figures, "_llm_resolve_player_room",
                         lambda *a, **k: (_ for _ in ()).throw(
                             AssertionError("asked a model to place a townsperson")))
     sc = _scene(("Walrice Ironforder", "smithy"), ("Robelon Wateringer", "weir"))

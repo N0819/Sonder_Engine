@@ -21,6 +21,12 @@ Each file owns one clear part of the turn pipeline:
 - `loops.py` — physical reactions, dialogue rounds, and deterministic micro-perception.
 - `narration.py` — player-facing prose.
 - `common.py` — shared normalization, delivery, lore, and validation helpers.
+  Since 2026-11-01 a FACADE over sixteen `common_*.py` siblings
+  (`docs/design/SPLIT_COMMON.md`): it keeps its import block and re-exports
+  every former name, so `from agents.common import X` still works everywhere.
+  A test that monkeypatches must patch the sibling that DEFINES the reader,
+  never the facade -- `tools/project_check.py` enforces the half of that rule
+  it can see.
 - `storage.py` — step and active-variant persistence.
 - `runtime.py` — plans, streaming, cancellation, resume, reruns, and dispatch.
 - `__init__.py` — compatibility facade for existing `from agents import ...` imports.

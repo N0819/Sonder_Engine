@@ -35,7 +35,7 @@ def test_one_person_among_things_needs_no_model_call(monkeypatch):
     name -- that is the only reason this resolver runs at all -- and the
     things stand in three different rooms."""
     called = []
-    monkeypatch.setattr("agents.common._llm_resolve_player_room",
+    monkeypatch.setattr("agents.common_figures._llm_resolve_player_room",
                         lambda *a, **k: called.append(1))
     scene = _scene(
         {"The Doctor": "quay", "The Moon": "sky",
@@ -58,7 +58,7 @@ def test_two_bodies_in_two_rooms_still_asks(monkeypatch):
         asked.append(sorted((sc.get("positions") or {}).keys()))
         return "hold"
 
-    monkeypatch.setattr("agents.common._llm_resolve_player_room", _fake)
+    monkeypatch.setattr("agents.common_figures._llm_resolve_player_room", _fake)
     scene = _scene(
         {"The Doctor": "quay", "Watchkeeper": "hold", "The Moon": "sky"},
         {"The Doctor": {"kind": "person"}, "Watchkeeper": {"kind": "person"},
@@ -79,8 +79,8 @@ def test_the_resolver_is_offered_bodies_only(monkeypatch):
         seen.update(json.loads(user))
         return '{"key": "Watchkeeper"}'
 
-    monkeypatch.setattr("agents.common.chat_complete", _capture)
-    monkeypatch.setattr("agents.common.get_prompt", lambda *a, **k: "sys")
+    monkeypatch.setattr("agents.common_figures.chat_complete", _capture)
+    monkeypatch.setattr("agents.common_figures.get_prompt", lambda *a, **k: "sys")
     from agents.common import _llm_resolve_player_room
     scene = _scene(
         {"The Doctor": "quay", "Watchkeeper": "hold",
@@ -99,7 +99,7 @@ def test_a_scene_of_only_things_guesses_as_it_always_did(monkeypatch):
     that path has always given -- narrowing it to zero candidates would have
     turned a free guess into a model call, which is backwards."""
     called = []
-    monkeypatch.setattr("agents.common._llm_resolve_player_room",
+    monkeypatch.setattr("agents.common_figures._llm_resolve_player_room",
                         lambda *a, **k: called.append(1))
     scene = _scene({"Cast-Iron Stove": "galley"},
                    {"Cast-Iron Stove": {"kind": "fixture"}})
@@ -111,7 +111,7 @@ def test_the_committed_position_still_wins(monkeypatch):
     """The ladder above this is untouched: a scene that places the player by
     name never reaches the candidate set at all."""
     called = []
-    monkeypatch.setattr("agents.common._llm_resolve_player_room",
+    monkeypatch.setattr("agents.common_figures._llm_resolve_player_room",
                         lambda *a, **k: called.append(1))
     scene = _scene({"Hinami": "quay", "Watchkeeper": "hold"},
                    {"Hinami": {"kind": "person"},

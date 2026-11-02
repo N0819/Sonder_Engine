@@ -18,6 +18,9 @@ asked.
 """
 
 import agents.common as common
+# The resolver is read from the module that DEFINES both it and the
+# ladder calling it; the `agents.common` facade only re-exports them.
+import agents.common_figures as common_figures
 
 
 def _no_call(*_a, **_k):
@@ -27,7 +30,7 @@ def _no_call(*_a, **_k):
 
 
 def test_a_cast_only_scene_resolves_to_none_without_a_call(monkeypatch):
-    monkeypatch.setattr(common, "_llm_resolve_player_room", _no_call)
+    monkeypatch.setattr(common_figures, "_llm_resolve_player_room", _no_call)
     scene = {
         "positions": {"Emory Vane": "mill_floor"},
         "entities": {"char_emory_vane": {"name": "Emory Vane",
@@ -49,7 +52,7 @@ def test_two_candidate_bodies_still_reach_the_resolver(monkeypatch):
         asked.append(True)
         return "study"
 
-    monkeypatch.setattr(common, "_llm_resolve_player_room", _spy)
+    monkeypatch.setattr(common_figures, "_llm_resolve_player_room", _spy)
     scene = {
         "positions": {"Emory Vane": "mill_floor", "stove": "kitchen",
                       "boat": "study"},

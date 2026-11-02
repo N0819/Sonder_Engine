@@ -1733,6 +1733,7 @@ def facade_siblings(home: Path, stem: str) -> set:
 #: block, never off a filename glob, which is why `world/spatial_frames.py`
 #: (prefix match, not behind the facade) is correctly outside `world.spatial`.
 FACADE_FAMILIES = {
+    "agents.common": (ROOT / "agents", "common"),
     "agents.director": (ROOT / "agents", "director"),
     "commit": (ROOT / "persist", "commit"),
     "mind.memory": (ROOT / "mind", "memory"),

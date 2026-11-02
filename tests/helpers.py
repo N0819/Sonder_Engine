@@ -110,7 +110,7 @@ def remove_scratch_db(path):
 #: uses; `complete_validated_json` is what it calls; `chat_complete` is the
 #: provider call under both.
 MODEL_SEAMS = (
-    ("agents.common", "_agent_json"),
+    ("agents.common_llm", "_agent_json"),
     ("llm.llm_quality", "complete_validated_json"),
     ("llm.providers", "chat_complete"),
 )

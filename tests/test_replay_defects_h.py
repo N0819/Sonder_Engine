@@ -26,6 +26,7 @@ import time
 import pytest
 
 from core.pipeline_context import ChatData, PipelineContext, TurnData
+from tests.helpers import patch_seam
 
 
 # ---------------------------------------------------------------------------
@@ -298,16 +299,16 @@ class TestAMintStandsWhereThePlayerArrived:
                                                    monkeypatch):
         """Harrowmere t0: "The Gatekeeper" minted at the gate the town's own
         watch stands; `director_establish` ran no floor at all."""
-        import agents.common as common
         from agents.director import _establish_identity_floor
-        monkeypatch.setattr(common, "present_charter_figures",
-                            lambda cid, sc, rooms, frame_id=None: [
-                                {"name": "Householder Irmerwell Fenfordton",
-                                 "role": "gatekeeper", "posts": ["gate_watch"],
-                                 "room": "upland_gate",
-                                 "charter": "reeves_hall",
-                                 "body": "watchman:0003"}]
-                            if "upland_gate" in rooms else [])
+        patch_seam(monkeypatch, "agents.common_figures",
+                   "present_charter_figures",
+                   lambda cid, sc, rooms, frame_id=None: [
+                       {"name": "Householder Irmerwell Fenfordton",
+                        "role": "gatekeeper", "posts": ["gate_watch"],
+                        "room": "upland_gate",
+                        "charter": "reeves_hall",
+                        "body": "watchman:0003"}]
+                   if "upland_gate" in rooms else [])
         ctx = _mk_ctx(temp_db, turn_idx=0)
         out = {"state_diff": {
                    "entities": {"gatekeeper": {
@@ -324,10 +325,9 @@ class TestAMintStandsWhereThePlayerArrived:
 
     def test_the_opening_floor_is_silent_without_a_charter(self, temp_db,
                                                            monkeypatch):
-        import agents.common as common
         from agents.director import _establish_identity_floor
-        monkeypatch.setattr(common, "present_charter_figures",
-                            lambda *a, **k: [])
+        patch_seam(monkeypatch, "agents.common_figures",
+                   "present_charter_figures", lambda *a, **k: [])
         ctx = _mk_ctx(temp_db, turn_idx=0)
         out = {"state_diff": {"entities": {"g": {"name": "The Gatekeeper",
                                                   "kind": "person"}},

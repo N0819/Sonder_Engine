@@ -283,6 +283,9 @@ as the argument for why:
 - [`SPLIT_DIRECTOR.md`](design/SPLIT_DIRECTOR.md) — the module split of
   `agents/director*.py`: import direction, monkeypatch targets, execution
   order. Structure, not contract.
+- [`SPLIT_COMMON.md`](design/SPLIT_COMMON.md) — the 2026-11-01 split of
+  `agents/common.py` into sixteen `common_*` siblings behind the facade: the
+  module table, the cycle-breaking moves, the repoint table.
 
 ## `experiments/` — records of runs that cannot be repeated
 

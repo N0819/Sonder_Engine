@@ -756,7 +756,7 @@ def test_a_bubble_has_no_player_to_look_for(temp_db, monkeypatch):
     beside the miller for nine beats."""
     import time
     from types import SimpleNamespace
-    from agents import common
+    from agents import common, common_figures
     from core.frames import create_frame
     cid = temp_db.qi("INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
                      ("Aldermill", "", time.time()))
@@ -768,7 +768,7 @@ def test_a_bubble_has_no_player_to_look_for(temp_db, monkeypatch):
              "entities": {}}
     temp_db.wset_for_frame(cid, "scene", scene, bubble)
     asked = []
-    monkeypatch.setattr(common, "_llm_resolve_player_room",
+    monkeypatch.setattr(common_figures, "_llm_resolve_player_room",
                         lambda *a, **k: asked.append(a) or "mill_floor")
 
     class _Ctx(dict):
@@ -782,8 +782,8 @@ def test_a_bubble_has_no_player_to_look_for(temp_db, monkeypatch):
 
 
 def test_one_room_named_twice_is_one_answer(monkeypatch):
-    from agents import common
-    monkeypatch.setattr(common, "_llm_resolve_player_room",
+    from agents import common, common_figures
+    monkeypatch.setattr(common_figures, "_llm_resolve_player_room",
                         lambda *a, **k: (_ for _ in ()).throw(AssertionError("asked")))
     scene = {"positions": {"tallow tub": "wheelhouse", "horn paddle": "wheelhouse"},
              "entities": {}}

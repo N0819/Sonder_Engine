@@ -40,7 +40,7 @@ MODEL_DOORS = (
     ("llm.providers", "embed_texts"),
     ("llm.providers", "embed_texts_meta"),
     ("llm.llm_quality", "complete_validated_json"),
-    ("agents.common", "_agent_json"),
+    ("agents.common_llm", "_agent_json"),
 )
 
 #: Only engine packages are swept for import-time aliases. A test module or a

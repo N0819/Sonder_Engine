@@ -29,16 +29,21 @@ def test_an_import_time_alias_is_shut_too(monkeypatch):
     """The engine binds these at import time -- `from llm.providers import
     chat_complete` -- so patching only the defining module would leave every
     real caller holding the original. Identity is what finds them."""
-    import agents.common as common
+    # `agents.common_figures` is a real caller (the player-room resolver calls
+    # `chat_complete` by the name it imported); `agents.common` is a facade
+    # that calls nothing, so planting there proved nothing about a caller.
+    import agents.common_figures as common_figures
     import llm.providers as providers
 
     original = providers.chat_complete
-    holders = [m for m in (common,) if getattr(m, "chat_complete", None) is original]
-    monkeypatch.setattr(common, "chat_complete", original, raising=False)
+    holders = [m for m in (common_figures,)
+               if getattr(m, "chat_complete", None) is original]
+    monkeypatch.setattr(common_figures, "chat_complete", original,
+                        raising=False)
 
     seal_model_seams(monkeypatch)
     with pytest.raises(AssertionError):
-        common.chat_complete()
+        common_figures.chat_complete()
     assert holders is not None  # the sweep found it or the setattr planted it
 
 

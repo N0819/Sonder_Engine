@@ -12,7 +12,23 @@
 | `agents/character_bare.py` | 1172 |  | `agents.common`, `llm.prompts`, `mind` |
 | `agents/character_evidence.py` | 146 |  | — |
 | `agents/character_tools.py` | 732 |  | `core.db` |
-| `agents/common.py` | 12971 | Shared normalization, lore, delivery, and perception helpers. | `core.db`, `core.pipeline_context`, `llm.llm_quality`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `mind.theory_of_mind`, `persist.commit`, `story`, `story.character_schema`, `story.provenance_text`, `story.scene`, `world`, `world.spatial` |
+| `agents/common.py` | 471 | Facade over the agents/common_* siblings (split 2026-11-01): shared normalization, lore, delivery, and perception helpers. | `agents.common_acts`, `agents.common_authority`, `agents.common_base`, `agents.common_beat`, `agents.common_bodies`, `agents.common_cast`, `agents.common_fidelity`, `agents.common_figures`, `agents.common_identity`, `agents.common_llm`, `agents.common_names`, `agents.common_narration`, `agents.common_rooms`, `agents.common_scrubs`, `agents.common_sequence`, `agents.common_views`, `core.db`, `core.pipeline_context`, `llm.llm_quality`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `mind.theory_of_mind`, `story`, `story.character_schema`, `story.provenance_text`, `story.scene`, `world`, `world.spatial` |
+| `agents/common_acts.py` | 1242 | What a declared element is: act classification, communicative-act vocabulary, claim dispositions, target binding, the reaction/resolution gates. | `agents.common_base`, `agents.common_cast`, `agents.common_names`, `story.character_schema` |
+| `agents/common_authority.py` | 859 | Director/player authority checks on resolved prose and contacts, the presence-knowledge floor, the player-authority ladder on claims. | `agents.common_base`, `agents.common_names`, `agents.common_scrubs`, `story.character_schema`, `story.scene`, `world.spatial` |
+| `agents/common_base.py` | 170 | Leaf of the common family: the 'agents.common' pack lookup, coercion, quote/typography folding, markup stripping, English third-person morphology. | — |
+| `agents/common_beat.py` | 943 | The beat's bookkeeping around its minds: the plan invariant, micro-round merging, who speaks and reacts next, declared goals, asserted state. | `agents.common_acts`, `agents.common_base`, `agents.common_cast`, `core.db`, `persist.commit`, `story.character_schema`, `story.scene`, `world.spatial` |
+| `agents/common_bodies.py` | 810 | What one observer perceives of a body: attire views, exposure, extra parts, per-region visibility, containment spelling, the delivery gate. | `agents.common_base`, `core.db`, `story`, `story.character_schema`, `story.scene`, `world.spatial` |
+| `agents/common_cast.py` | 667 | The registered cast inside the scene: identity keys, rooms, spelling policy, entity reconciliation, position canonicalisation, exclusion lists. | `core.pipeline_context`, `story.character_schema`, `world.spatial` |
+| `agents/common_fidelity.py` | 1102 | The narrator page against its records: event order, quote/action attribution, position/portal/attire fidelity, _check_narrator_fidelity. | `agents.common_base`, `agents.common_names`, `agents.common_narration`, `story.character_schema` |
+| `agents/common_figures.py` | 1129 | Who stands where this beat: charter and presence figures, creature stances, planned figures, the player's room ladder and resolver, the aperture. | `agents.common_base`, `agents.common_llm`, `agents.common_rooms`, `core.db`, `core.pipeline_context`, `llm.prompts`, `llm.providers`, `story.character_schema`, `story.scene`, `world.spatial` |
+| `agents/common_identity.py` | 765 | The identity floor on payloads and views: observer label functions, the name scrub, act-surface admission, the last-pass identity scrub. | `agents.common_base`, `agents.common_cast`, `agents.common_figures`, `agents.common_names`, `core.db`, `core.pipeline_context`, `story.character_schema`, `story.scene`, `world.spatial` |
+| `agents/common_llm.py` | 195 | The model-call seam (_agent_json) and JSON recovery (jparse, the miscounted-closer mender). | `llm.llm_quality` |
+| `agents/common_names.py` | 1123 | Names in any script: name tokens and recognition, sentence splitting, subject/pronoun tracking, the stranger-label grammar. | `agents.common_base`, `story.character_schema` |
+| `agents/common_narration.py` | 827 | The narrator's own voice, measured: tics, rhythm, recycled shingles, person/tense counts, the pronoun-fidelity check. | `agents.common_base`, `agents.common_names`, `story.character_schema` |
+| `agents/common_rooms.py` | 860 | What a room holds for a perceiver: crowds, chatter, couriers and notices, the room's prose, the Director's lore slice, the payload room set. | `agents.common_names`, `core.db`, `mind.memory`, `story.character_schema`, `story.provenance_text`, `story.scene`, `world`, `world.spatial` |
+| `agents/common_scrubs.py` | 583 | Prose repair passes: the repeated-quote cap, dangling-speech healing, the player-echo strip, the invented-dialogue scrub, sentence dedupe. | `agents.common_base` |
+| `agents/common_sequence.py` | 1253 | A declared beat as the engine holds it: speech provenance, stage-direction excision, norm_sequence, duplicate collapse, event ids, the player token. | `agents.common_acts`, `agents.common_base`, `llm.schemas` |
+| `agents/common_views.py` | 779 | Deterministic sentences composed into a view: muffling, tone, self-reference and second-person rewriting, observable predicates, the residue view. | `agents.common_base`, `agents.common_names`, `story.character_schema`, `world.spatial` |
 | `agents/composer.py` | 7691 |  | `agents.common`, `core.pipeline_context`, `story.provenance_text`, `story.scene`, `world.spatial` |
 | `agents/director.py` | 7999 | Scene establishment, player interpretation, and objective resolution. | `agents`, `agents.common`, `agents.director_contact`, `agents.director_evidence`, `agents.director_fanout`, `agents.director_floors`, `agents.director_lingua`, `agents.director_movement`, `agents.director_reconcile`, `agents.director_scopes`, `agents.director_views`, `core.db`, `llm`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `story`, `story.attire`, `story.character_schema`, `story.scene`, `world.causality`, `world.mechanics`, `world.paradox`, `world.spatial`, `world.survival` |
 | `agents/director_contact.py` | 611 |  | `agents.common`, `story.character_schema`, `world.spatial` |
@@ -328,18 +344,209 @@
 | `tools_enabled()` | 69 | 5 lines |
 | `_order()` | 136 | 4 lines |
 
-### `agents/common.py`
+### `agents/common_acts.py`
 
 | Function | Start | Size |
 |---|---:|---:|
-| `norm_sequence()` | 4778 | 309 lines |
-| `presence_figures_for_room()` | 2276 | 284 lines |
-| `_check_narrator_fidelity()` | 12140 | 258 lines |
-| `_scrub_unknown_identities()` | 6642 | 219 lines |
-| `_summary_label()` | 6097 | 181 lines |
-| `_scrub_invented_dialogue()` | 10548 | 151 lines |
-| `observer_body_regions()` | 1750 | 140 lines |
-| `_check_quote_attribution()` | 11712 | 131 lines |
+| `_extract_authority_claims()` | 1123 | 120 lines |
+| `authored_other_subject()` | 786 | 90 lines |
+| `prune_blocked_phase_changes()` | 596 | 80 lines |
+| `observable_action_onset_text()` | 678 | 69 lines |
+| `settle_sequence_dispositions()` | 503 | 61 lines |
+| `_requires_reaction_phase()` | 924 | 53 lines |
+| `_scene_has_subject()` | 430 | 46 lines |
+| `resolve_action_referents()` | 291 | 44 lines |
+
+### `agents/common_authority.py`
+
+| Function | Start | Size |
+|---|---:|---:|
+| `_check_player_contact_authority()` | 756 | 104 lines |
+| `_check_presence_knowledge_channel()` | 298 | 100 lines |
+| `_check_player_interiority_authority()` | 400 | 82 lines |
+| `_check_player_act_authority()` | 673 | 81 lines |
+| `_check_character_act_authority()` | 95 | 73 lines |
+| `_check_prose_quote_authority()` | 175 | 69 lines |
+| `apply_player_authority()` | 607 | 64 lines |
+| `_check_character_speech_authority()` | 39 | 54 lines |
+
+### `agents/common_base.py`
+
+| Function | Start | Size |
+|---|---:|---:|
+| `_text_piece()` | 65 | 18 lines |
+| `_contains_quote()` | 136 | 17 lines |
+| `_dangling_speech()` | 25 | 16 lines |
+| `strip_prose_markup()` | 122 | 12 lines |
+| `_base_from_third_person_s()` | 159 | 12 lines |
+| `_append_once()` | 89 | 9 lines |
+| `_stem_token()` | 48 | 6 lines |
+| `_join_text()` | 84 | 4 lines |
+
+### `agents/common_beat.py`
+
+| Function | Start | Size |
+|---|---:|---:|
+| `acted_upon_cast()` | 650 | 65 lines |
+| `_asks_player()` | 335 | 64 lines |
+| `validated_player_state_assertions()` | 806 | 63 lines |
+| `widen_reactors_to_engaged()` | 584 | 57 lines |
+| `_assert_plan_materialized()` | 32 | 55 lines |
+| `_merge_character_results()` | 247 | 53 lines |
+| `widen_reactors_to_hearers()` | 457 | 46 lines |
+| `widen_reactors_to_acted_upon()` | 717 | 45 lines |
+
+### `agents/common_bodies.py`
+
+| Function | Start | Size |
+|---|---:|---:|
+| `observer_body_regions()` | 395 | 140 lines |
+| `_perceptible_entities()` | 609 | 109 lines |
+| `region_visibility()` | 293 | 100 lines |
+| `_delivery_ok()` | 719 | 92 lines |
+| `attire_view()` | 65 | 45 lines |
+| `extra_part_phrase()` | 214 | 35 lines |
+| `scene_extra_parts()` | 261 | 30 lines |
+| `_subject_spellings()` | 537 | 29 lines |
+
+### `agents/common_cast.py`
+
+| Function | Start | Size |
+|---|---:|---:|
+| `cast_spelling_policy()` | 281 | 120 lines |
+| `reconcile_cast_entity_names()` | 503 | 59 lines |
+| `entity_room_by_name()` | 223 | 57 lines |
+| `_conceal_from_targets_observer()` | 23 | 49 lines |
+| `stamp_authored_interiors()` | 452 | 49 lines |
+| `_cast_entity_claims()` | 403 | 47 lines |
+| `ensure_cast_entities()` | 564 | 43 lines |
+| `_present_cast_bodies()` | 156 | 40 lines |
+
+### `agents/common_fidelity.py`
+
+| Function | Start | Size |
+|---|---:|---:|
+| `_check_narrator_fidelity()` | 845 | 258 lines |
+| `_check_quote_attribution()` | 417 | 131 lines |
+| `_check_action_attribution()` | 55 | 71 lines |
+| `_check_position_fidelity()` | 554 | 71 lines |
+| `_check_event_order()` | 157 | 60 lines |
+| `_check_speech_marking()` | 753 | 45 lines |
+| `_check_action_direction()` | 219 | 43 lines |
+| `_introducing_subject()` | 372 | 43 lines |
+
+### `agents/common_figures.py`
+
+| Function | Start | Size |
+|---|---:|---:|
+| `presence_figures_for_room()` | 55 | 284 lines |
+| `present_charter_figures()` | 545 | 115 lines |
+| `player_room_in()` | 876 | 90 lines |
+| `rooms_in_view()` | 968 | 86 lines |
+| `_resolve_player_room()` | 786 | 77 lines |
+| `lay_charter_figures()` | 371 | 57 lines |
+| `beat_people_rows()` | 430 | 56 lines |
+| `_creature_stance()` | 488 | 55 lines |
+
+### `agents/common_identity.py`
+
+| Function | Start | Size |
+|---|---:|---:|
+| `_scrub_unknown_identities()` | 547 | 219 lines |
+| `observer_label_fn()` | 117 | 98 lines |
+| `observer_name_scrub()` | 217 | 89 lines |
+| `_act_surface_admission()` | 456 | 89 lines |
+| `_other_peoples_names()` | 308 | 51 lines |
+| `observer_view_label_fn()` | 51 | 49 lines |
+| `scene_figures()` | 393 | 45 lines |
+| `scrub_names_deep()` | 361 | 30 lines |
+
+### `agents/common_llm.py`
+
+| Function | Start | Size |
+|---|---:|---:|
+| `jparse()` | 139 | 57 lines |
+| `_agent_json()` | 15 | 48 lines |
+| `_mend_closers()` | 94 | 43 lines |
+| `_closer_runs()` | 69 | 23 lines |
+
+### `agents/common_names.py`
+
+| Function | Start | Size |
+|---|---:|---:|
+| `_summary_label()` | 402 | 181 lines |
+| `_cap_phrase()` | 275 | 125 lines |
+| `_sentence_subjects()` | 940 | 83 lines |
+| `_unknown_actor_label()` | 190 | 57 lines |
+| `_label_features()` | 603 | 56 lines |
+| `_subject_opener()` | 836 | 50 lines |
+| `split_sentences()` | 899 | 39 lines |
+| `_predicate_heads()` | 1028 | 35 lines |
+
+### `agents/common_narration.py`
+
+| Function | Start | Size |
+|---|---:|---:|
+| `_check_pronoun_fidelity()` | 462 | 115 lines |
+| `_overused_phrases()` | 95 | 78 lines |
+| `_rhythm_report()` | 208 | 70 lines |
+| `_check_narration_person_match()` | 665 | 58 lines |
+| `_check_player_person()` | 579 | 46 lines |
+| `_check_narration_tense_match()` | 787 | 41 lines |
+| `_narration_tense_counts()` | 749 | 36 lines |
+| `_person_marker_counts()` | 425 | 35 lines |
+
+### `agents/common_rooms.py`
+
+| Function | Start | Size |
+|---|---:|---:|
+| `chatter_for_room()` | 484 | 124 lines |
+| `crowds_for_room()` | 79 | 114 lines |
+| `charter_ground_for_room()` | 296 | 79 lines |
+| `chatter_inputs()` | 195 | 76 lines |
+| `couriers_for_room()` | 610 | 53 lines |
+| `_contextual_rooms()` | 28 | 46 lines |
+| `attending_this_room()` | 436 | 46 lines |
+| `_ambient_blocked_slugs()` | 721 | 27 lines |
+
+### `agents/common_scrubs.py`
+
+| Function | Start | Size |
+|---|---:|---:|
+| `_scrub_invented_dialogue()` | 310 | 151 lines |
+| `_strip_player_echo()` | 171 | 101 lines |
+| `_dedupe_view_sentences()` | 511 | 73 lines |
+| `_cap_repeated_quotes()` | 17 | 44 lines |
+| `_heal_dangling_verb()` | 81 | 22 lines |
+| `_protected_view_quotes()` | 128 | 20 lines |
+| `_mask_quoted_spans()` | 489 | 14 lines |
+| `_scrub_undeclared_player_speech()` | 463 | 12 lines |
+
+### `agents/common_sequence.py`
+
+| Function | Start | Size |
+|---|---:|---:|
+| `norm_sequence()` | 606 | 309 lines |
+| `collapse_duplicate_events()` | 256 | 103 lines |
+| `fuse_speech_run()` | 1003 | 66 lines |
+| `split_stage_directions()` | 166 | 59 lines |
+| `cut_short_speech()` | 405 | 51 lines |
+| `repair_narrated_speech()` | 1137 | 40 lines |
+| `_covered_by_spans()` | 53 | 37 lines |
+| `player_communicated()` | 916 | 37 lines |
+
+### `agents/common_views.py`
+
+| Function | Start | Size |
+|---|---:|---:|
+| `self_reference_forms()` | 268 | 80 lines |
+| `_observable_predicate()` | 452 | 61 lines |
+| `_self_second_person()` | 350 | 56 lines |
+| `_compose_residue_view()` | 681 | 45 lines |
+| `_inject_dialogue()` | 177 | 41 lines |
+| `_action_already_rendered()` | 515 | 40 lines |
+| `_inject_visible_actor()` | 612 | 39 lines |
+| `_muffled_fragment()` | 95 | 37 lines |
 
 ### `agents/composer.py`
 

@@ -18,7 +18,7 @@ realized.
 
 import pytest
 
-from agents import common
+from agents import common_acts
 from agents.common import (
     adjudicated_player_action_text,
     claim_disposition_rows,
@@ -96,8 +96,8 @@ def test_both_readers_go_through_the_one_scan(monkeypatch):
     neither.
     """
     monkeypatch.setattr(
-        common, "scan_claims_for",
-        lambda elem, resolved: common.ClaimScan([], [], True))
+        common_acts, "scan_claims_for",
+        lambda elem, resolved: common_acts.ClaimScan([], [], True))
     realized_everything = {"state_diff": {"claim_dispositions": [
         {"claim_id": "claim:0:intent:0", "status": "rejected"}]}}
 

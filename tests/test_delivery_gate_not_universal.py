@@ -23,7 +23,7 @@ import pathlib
 AGENTS_DIR = pathlib.Path(__file__).resolve().parents[1] / "agents"
 
 # The module that DEFINES the gate; its `def` line is not a call site.
-DEFINING_MODULE = "common.py"
+DEFINING_MODULE = "common_bodies.py"
 
 # Measured 2026-09-07: `agents/loops.py`'s two micro-round deliveries (the
 # speech branch and the action branch) are the only production callers.

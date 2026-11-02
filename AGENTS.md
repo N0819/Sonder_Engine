@@ -962,6 +962,16 @@ files are local state or private diagnostics and are ignored deliberately.
 - `persist/chat_archive.py`: typed, atomic portable chat export/import service and routes
 - `persist/pipeline_trace.py`: privacy-conscious export, validation, and offline replay
   of persisted step/variant history
+- `agents/common.py`: since 2026-11-01 a facade over sixteen `common_*` siblings
+  (`common_base`, `common_llm`, `common_names`, `common_cast`, `common_bodies`,
+  `common_rooms`, `common_figures`, `common_identity`, `common_acts`,
+  `common_sequence`, `common_beat`, `common_scrubs`, `common_authority`,
+  `common_views`, `common_narration`, `common_fidelity`; plan and repoint table
+  in `docs/design/SPLIT_COMMON.md`). It keeps its import block byte-for-byte and
+  re-exports every former name, so every routing row above that names
+  `agents/common.py` still imports as written; a test that monkeypatches must
+  patch the sibling that DEFINES the reader (`tools/project_check.py` covers the
+  family's import direction and the half of the patch rule it can see).
 - `world/spatial.py`: a pure re-export facade over the `spatial_*` modules (its import list is the roster; the count has drifted in every document that stated one)
   (nineteen as of 2026-09-07: identity, barriers, transit, containment,
   contacts, contact_migration, substance, geometry, light, routing, senses,

@@ -139,13 +139,20 @@ def test_every_facade_family_is_checked():
     them had failed -- they stub an embedding provider, and an uninstalled stub
     falls back silently -- so this check is what found them.
 
+    `agents.common` is the fifth (2026-11-01, `docs/design/SPLIT_COMMON.md`):
+    sixteen siblings, and twenty-one patch sites that went inert on the move,
+    ten of which the check below cannot see (string-form patches, and readers
+    that DEFINE the patched name in their own sibling) and were found by the
+    splitter's own repoint table instead.
+
     The set is asserted whole, and deliberately. A family that is split but not
     registered is invisible exactly the way `world.spatial` was.
     """
     from project_check import FACADE_FAMILIES, facade_siblings
 
     assert set(FACADE_FAMILIES) == {
-        "agents.director", "commit", "mind.memory", "world.spatial"}
+        "agents.common", "agents.director", "commit", "mind.memory",
+        "world.spatial"}
     for facade, (home, stem) in FACADE_FAMILIES.items():
         assert facade_siblings(home, stem), facade
 

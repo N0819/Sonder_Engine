@@ -20,8 +20,8 @@ says so where it reads the cache.
 
 import inspect
 
-import agents.common as common
 from agents.common import player_room_in
+from tests.helpers import patch_seam
 
 
 class _Ctx:
@@ -47,7 +47,8 @@ def _no_resolver(monkeypatch):
         calls.append(a)
         return "resolver_room"
 
-    monkeypatch.setattr(common, "_resolve_player_room", _record)
+    patch_seam(monkeypatch, "agents.common_figures", "_resolve_player_room",
+               _record)
     return calls
 
 
@@ -118,7 +119,8 @@ def test_background_react_reads_the_ladder(monkeypatch):
     import agents.background as background
 
     _no_resolver(monkeypatch)
-    monkeypatch.setattr(common, "persona_of", lambda chat: PERS)
+    patch_seam(monkeypatch, "agents.common_figures", "persona_of",
+               lambda chat: PERS)
     ctx = _Ctx(cached="room_a")
 
     assert background._player_room(ctx, {"positions": {}}) == "room_a"
